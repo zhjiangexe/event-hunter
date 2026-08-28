@@ -1,11 +1,12 @@
 # Event Hunter Current Architecture
 
-- 更新日期：2026-08-27
+- 更新日期：2026-08-28
 - 適用範圍：目前本機 Compose、Go backend、React frontend、正式 ClickHouse-first ingestion、OpenTelemetry 與 Phase 1.1 UI
 - 不包含：尚未實作的 Event／Topic Registry、Temporal workflow、Projection Rebuild、Sandbox Replay、Production Redrive
 
-本文件只描述 repository 與 Compose 中目前可執行、可測試的系統。未來構想保留在 Phase 2／3 規劃，
-不混入目前 runtime 主圖。
+本文件是 Event Hunter 目前架構的主要入口，只描述 repository 與 Compose 中可執行、可測試的系統。
+README 刻意只保留產品介紹與快速操作；元件責任、資料流、ingestion、observability、資料所有權與
+backend dependency 都集中在本文件。未來構想保留在 Phase 2／3 規劃，不混入目前 runtime 主圖。
 
 ## 1. 系統全貌
 
