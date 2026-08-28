@@ -1,6 +1,6 @@
 schema_version: 1
 project: event-hunter
-source: ui-prototype.html
+source: requirements/ui-prototype.html
 policy:
   prototype_is_ux_reference_not_contract: true
   phase_1_blocking_requires_requirement_mapping: true

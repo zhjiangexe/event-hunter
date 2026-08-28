@@ -682,7 +682,7 @@ def main() -> int:
     openapi = yaml_documents[PROJECT_ROOT / "openapi.yaml"]
     asyncapi = yaml_documents[PROJECT_ROOT / "contracts" / "asyncapi.yaml"]
     traceability = yaml_documents[PROJECT_ROOT / "requirements" / "traceability.yaml"]
-    project_scope = yaml_documents[PROJECT_ROOT / "project-scope.yaml"]
+    project_scope = yaml_documents[PROJECT_ROOT / "requirements" / "project-scope.yaml"]
     implementation_plan = yaml_documents[PROJECT_ROOT / "requirements" / "implementation-plan.yaml"]
     system_openapis = [
         yaml_documents[path]

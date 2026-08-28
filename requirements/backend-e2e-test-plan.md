@@ -41,7 +41,19 @@ PostgreSQL、ClickHouse、Kafka 與外部 observability service 的可觀察結�
 | 真實事件管線 | `event-pipeline.feature` | Order API → Outbox → Debezium → Kafka → ClickHouse → Timeline |
 | 擴充事件情境 | `event-scenarios.feature`、`scenario-lab.feature` | S1～S14 actual result、causation、sequence、retry、failure；S12～S14 必須走 live outbox path |
 | Alert 與品質 | `grafana-alert-webhook.feature`、`grafana-auto-case.feature`、`quality-metrics.feature` | HMAC、dedup、resolved semantics、真實 Grafana 自動建案、quality aggregation |
-| Observability | `observability-deep-links.feature`、`event-scenarios.feature` | Grafana asset UID、Tempo trace、Loki logs |
+| Observability | `observability-deep-links.feature`、`event-scenarios.feature` | Grafana asset UID、Tempo trace、Loki synthetic logs 與 trusted link contract |
+
+Live service observability 不在 Karate 內重複啟動另一筆完整訂單；它由
+`scripts/test-live-observability.sh` 負責跨 ClickHouse／Tempo／Loki 驗收。腳本必須確認：
+
+- `OrderCreated`、`PaymentCompleted`、`ShipmentCreated` 在 ClickHouse 共用一個 trace ID。
+- Tempo 的同一條 trace 包含 order／payment／shipping 三個 service resources。
+- Loki 三個服務都有 canonical event、Kafka 與 trace fields。
+- 三個 producer event 都有具名 `PREPARING`／`COMMITTED` lifecycle pair，且 log body 明確包含 event type。
+- 未加 `--skip-restart` 時，重啟後仍能查回同一批 telemetry。
+
+失敗 phase 與訊息格式由 Go unit test 保護；完整語意見
+[Live Event Observability Contract](live-event-observability-contract.md)。
 
 ClickHouse-first optional profile 另由 `e2e/poc/clickhouse-mv-ingestion.feature` 驗證 store-all admission
 classification 與真實 technical DLQ projector；它不加入預設 18-feature suite。故障／恢復與有界 purge 分別由

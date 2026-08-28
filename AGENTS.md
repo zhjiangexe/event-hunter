@@ -4,10 +4,10 @@
 
 When artifacts conflict, use this order:
 
-1. `project-scope.yaml` and `requirements/traceability.yaml`
+1. `requirements/project-scope.yaml` and `requirements/traceability.yaml`
 2. `openapi.yaml`, `contracts/asyncapi.yaml`, and contracts under `contracts/events`, `contracts/platform`, `contracts/quality`, `contracts/integrations`, `contracts/telemetry`, and `contracts/demo-services`
 3. `backend/migrations/**` and `e2e/**/*.feature`
-4. Markdown documents and `ui-prototype.html`
+4. Markdown documents and `requirements/ui-prototype.html`
 
 Do not silently reconcile a conflict. Update the lower-precedence artifact in the same change.
 

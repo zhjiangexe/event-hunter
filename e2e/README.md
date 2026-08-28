@@ -87,6 +87,12 @@ Infrastructure scenarios：
 - `ingestion-issues.feature` 以唯一 topic 建立 contract、admission、technical 三類安全摘要，驗證 filter、keyset pagination、7 天上限與回應中沒有 raw payload、exception message 或 stack trace。
 - `investigation-boundaries.feature` 驗證 cursor 分頁、query 邊界、案件狀態機、Viewer 全 mutation surface 唯讀與一致 404；自行建立的 OPEN 案件會在 scenario 尾端透過正式 API 結案。
 
+Live OTel vertical slice 由 `bash scripts/test-live-observability.sh --skip-restart` 執行；它不只確認三服務
+共用 trace 與 Loki canonical fields，也要求 `OrderCreated`、`PaymentCompleted`、`ShipmentCreated` 各有
+具名 `PREPARING`／`COMMITTED` lifecycle pair。移除 `--skip-restart` 時會再驗證 telemetry restart
+persistence。規格見
+[Live Event Observability Contract](../requirements/live-event-observability-contract.md)。
+
 `e2e/poc/clickhouse-mv-ingestion.feature` 與 `clickhouse-mv-processing-attempt.feature` 不屬於預設 API backend suite。它們由
 `bash scripts/test-clickhouse-mv-poc.sh` 明確啟動正式 ingestion dependencies，驗證八筆 admission 輸入的全量
 raw landing、4 筆 promotion、4 筆 quarantine（包含已知事件缺少 required payload keys 的

@@ -78,6 +78,17 @@ bash scripts/dev-up.sh       # 再次啟動並補齊 migration、topics 與 conn
 `S1`、`S12`～`S14` 會呼叫真實的 Order／Payment／Shipping demo services；`S2`～`S11` 使用隔離的
 synthetic topic 模擬缺少事件、重複、亂序、DLQ、配送與退貨等情境。
 
+### 從事件深入調查
+
+在 Business Timeline 展開事件後，可直接把目前事件的識別碼與時間範圍帶到 Grafana：
+
+![Event detail observability links](artifacts/screenshots/event-detail-grafana-links-annotated.png)
+
+- **Grafana Explore**：查詢 ClickHouse 保存的事件資料。
+- **Loki logs**：用 `Correlation ID` 查看相關服務執行過的動作與事件發布紀錄。
+- **Tempo trace**：用 `Trace ID` 查看同一次請求的跨服務呼叫路徑。
+- **Quality Dashboard**：查看該時段的事件品質、admission 與失敗統計。
+
 ## 外部系統如何接入
 
 接入 Event Hunter 的系統需要提供兩類資訊：
@@ -125,7 +136,7 @@ README 只保留產品入口與快速操作。詳細設計集中在以下文件�
 | [Operations Runbook](requirements/operations-runbook.md) | 啟停、readiness、故障恢復、備份與 release 操作 |
 | [Requirements Index](requirements/README.md) | Phase 1／1.1 規劃、產品契約與 traceability |
 | [Application Architecture](requirements/application-screaming-architecture.md) | Investigation context 的 DDD 與 screaming architecture |
-| [Data Model](data-model.md) | PostgreSQL、ClickHouse 與資料所有權 |
+| [Data Model](requirements/data-model.md) | PostgreSQL、ClickHouse 與資料所有權 |
 | [HTTP OpenAPI](openapi.yaml) | Event Hunter API 的唯一 HTTP 契約 |
 | [Event Contracts](contracts/asyncapi.yaml) | Kafka channels、事件格式與整合契約 |
 | [Frontend README](frontend/README.md) | React 開發、API client、測試與登入模式 |
@@ -133,8 +144,8 @@ README 只保留產品入口與快速操作。詳細設計集中在以下文件�
 
 架構圖原始檔也保存在 repository：
 
-- [System Architecture PlantUML](event-hunter-architecture.puml)
-- [Activity Diagram PlantUML](event-hunter-activity.puml)
+- [System Architecture PlantUML](requirements/event-hunter-architecture.puml)
+- [Activity Diagram PlantUML](requirements/event-hunter-activity.puml)
 
 ## 專案邊界
 

@@ -20,7 +20,7 @@
 | `e2e/frontend/` | 真實 browser interaction 的 Karate features | `.feature` |
 | `e2e/helpers/` | Karate 共用 JavaScript helper；不得放執行報告 | `.js` |
 | `scripts/` | 啟停、migration、fixture、驗證與 E2E entry points | shell／Python scripts |
-| `requirements/` | 需求追蹤、產品階段、架構與維運決策 | Markdown、YAML |
+| `requirements/` | 需求追蹤、產品階段、架構、資料模型、原型與維運決策 | Markdown、YAML、PlantUML、審查用 HTML／PNG |
 | `artifacts/e2e/karate/` | 最新完整 E2E 報告 | 僅保留 `backend/`、`frontend/` 兩個 canonical report |
 
 ## 程式碼邊界
@@ -68,7 +68,7 @@ target/karate-temp/                # reproducible temporary output
 
 設定發生衝突時，依下列來源判定並同步修正：
 
-1. `project-scope.yaml` 與 `contracts/platform/*.yaml`：產品決策、port、topic、failure policy、identity/time 等正式契約。
+1. `requirements/project-scope.yaml` 與 `contracts/platform/*.yaml`：產品決策、port、topic、failure policy、identity/time 等正式契約。
 2. `openapi.yaml`、`contracts/asyncapi.yaml` 與 schemas：HTTP／Kafka payload 的正式介面。
 3. `.env.example`：所有 Compose 可調環境變數與本機安全預設的完整清單；真實 secret 只放未提交的 `.env`。
 4. `compose.yaml`：container wiring、environment injection、health check、port mapping 與 persistent volume。

@@ -682,10 +682,17 @@ tasks:
       - transactional outbox in each service boundary
       - createDemoOrder operation from contracts/demo-services/order-api.openapi.yaml
       - correlationId causationId traceId and aggregate sequence propagation
+      - live event lifecycle logs defined by requirements/live-event-observability-contract.md
+    completed_progress:
+      - producer logs name each event before the configured delay and after the local outbox transaction commits
+      - failed prepared events expose PRE_EMISSION_DELAY OUTBOX_APPEND or TRANSACTION_COMMIT without copying payloads
+      - Kafka consumer completion logs name the processed event and include real topic partition and offset coordinates
+      - otelslog injects the active trace_id and span_id so Timeline Loki and Tempo use the same trace identity
     acceptance:
       - service domain and outbox write commit in one database transaction
       - Idempotency-Key reuses the original accepted result
       - services do not read another service database
+      - event lifecycle unit test protects message phase failure-stage correlation and delay metadata
       - go test ./...
 
   - id: EH-MVP-012
@@ -852,6 +859,7 @@ tasks:
       - outbox traceparent and tracestate fields are persisted and mapped by Debezium into Kafka headers to continue one distributed trace
       - a live order vertical slice verifies one trace ID across three ClickHouse events three Tempo service resources and three Loki service logs
       - live service logs use canonical event and Kafka attributes and the E2E requires their trace IDs to match Tempo and ClickHouse
+      - Timeline Loki deep links reveal named starting committed-to-outbox and processed-domain-event actions for the selected correlation
       - synthetic fixture streams use a dedicated service namespace instance and source marker so replay does not collide with live service streams
       - documentation separates live SDK synthetic fixture and disabled optional otelc profiles and forbids duplicate instrumentation on one surface
       - Grafana 13 Tempo deep links use TraceQL mode so a trace ID opens the rendered trace instead of an unsupported legacy query mode
@@ -964,6 +972,7 @@ tasks:
       - post-Scenario-Lab full disruptive local Phase 1 exit gate passes and records build/reports/phase-1-exit-summary.json
       - deterministic quality fixtures use reserved synthetic partition 99 so product demo events cannot alter the fixed-window aggregate
       - Loki WAL and graceful shutdown flush preserve freshly accepted canonical service logs across the restart persistence gate
+      - live observability verification requires PREPARING and COMMITTED lifecycle pairs for OrderCreated PaymentCompleted and ShipmentCreated
       - P1-02 Timeline advanced contract is closed with OpenAPI generated client PostgreSQL qualifier and ClickHouse E2E coverage
       - .github/workflows/phase-1-ci.yml defines unit contract and full vertical-slice jobs with report artifact upload
       - task completion已改為以本機 `test-phase-1-exit.sh` 成功為主，hosted CI 先不列為本輪阻擋條件

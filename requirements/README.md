@@ -16,6 +16,28 @@
 
 ## 目錄內的文件
 
+### `project-scope.yaml`
+
+產品範圍與全域決策的最高層來源，定義正式 `REQ-EH-*` 集合、Temporal 邊界、身份模式及明確排除項目。
+`traceability.yaml` 與 `implementation-plan.yaml` 的 requirement 集合不得和它分歧。
+
+### `current-architecture.md` 與圖表
+
+目前可執行系統的主要架構入口。PlantUML 原始檔與渲染 PNG 一併放在本目錄：
+
+- `event-hunter-architecture.puml`／`event-hunter-architecture.png`
+- `event-hunter-activity.puml`／`event-hunter-activity.png`
+
+### `data-model.md` 與 `investigation-summary.md`
+
+前者記錄 PostgreSQL／ClickHouse 資料模型及 ownership；後者記錄 Investigation Summary read model、
+來源組合與 partial failure 語意。精確 HTTP schema 仍以 repository root 的 `openapi.yaml` 為準。
+
+### `ui-prototype.html`
+
+早期產品原型，只用於需求與 Phase 對照，不是正式前端 runtime。正式實作狀態以
+`prototype-phase-matrix.yaml`、React routes 與 acceptance tests 為準。
+
 ### `traceability.yaml`
 
 需求追蹤矩陣。每個 `REQ-EH-*` 必須明確連到：
@@ -58,7 +80,7 @@ Intake、品質聚合／Grafana assets，以及示範 Outbox-to-Timeline pipelin
 
 ### `phase-1-delivery-plan.md`
 
-Phase 1 收尾清單與 `ui-prototype.html` 對照表。它把原型內容分成 Phase 1 必須完成、Phase 1
+Phase 1 收尾清單與 `requirements/ui-prototype.html` 對照表。它把原型內容分成 Phase 1 必須完成、Phase 1
 非阻擋項目、Phase 2 Projection Rebuild、Phase 3 Sandbox Replay 與永久排除項目，並列出最終
 驗收命令。後續 Agent 在處理 `EH-MVP-009` 或 `EH-MVP-016` 前必須先閱讀此文件。
 
@@ -79,7 +101,7 @@ contract 與 acceptance tests。
 
 ### `prototype-phase-matrix.yaml`
 
-`ui-prototype.html` 的機器可讀功能索引。每個 `PROTO-EH-*` 都標示 phase、是否阻擋 Phase 1、目前
+`requirements/ui-prototype.html` 的機器可讀功能索引。每個 `PROTO-EH-*` 都標示 phase、是否阻擋 Phase 1、目前
 實作狀態、需求 ID、route／external UI 與剩餘工作，供 Agent 不需重新猜測原型內容。
 
 ### `repository-layout-and-maintenance.md`
@@ -100,11 +122,17 @@ Karate／recovery 驗收與仍延後的 production governance。
 toolchain／package、因 24 小時供應鏈政策或 peer range 保留的版本，以及 stateful infrastructure
 不可直接追 latest 的 migration 與 restart-persistence gate。
 
+### `live-event-observability-contract.md`
+
+三個 live demo services 的事件生命週期 log 契約。它定義發布前、outbox commit 後、失敗與 Kafka
+consumer completed 的訊息與欄位，並明確區分「outbox 已提交」和「Kafka 已送達」。Timeline 的 Loki
+deep link、OTel trace correlation、隱私邊界及可執行驗收都以此文件為準。
+
 ## 與其他文件的分工
 
 | 文件 | 回答的問題 |
 |---|---|
-| `project-scope.yaml` | MVP 做什麼、不做什麼，以及已接受的全域決策 |
+| `requirements/project-scope.yaml` | MVP 做什麼、不做什麼，以及已接受的全域決策 |
 | `requirements/current-architecture.md` | 目前實際可執行的元件、資料流、Scenario Lab、使用者活動與 backend dependency；不混入 Phase 2／3 |
 | `requirements/traceability.yaml` | 每項需求落到哪些 API、資料、UI 與驗收測試 |
 | `requirements/implementation-plan.yaml` | 工程任務的依賴順序與完成條件 |
@@ -119,6 +147,7 @@ toolchain／package、因 24 小時供應鏈政策或 peer range 保留的版本
 | `requirements/repository-layout-and-maintenance.md` | 程式碼、測試、設定、報告與生成物應放在哪裡，以及完成變更前的檢查 |
 | `requirements/clickhouse-mv-ingestion-poc.md` | ClickHouse-first ingestion POC 的隔離方式、最低契約、驗收與未決策邊界 |
 | `requirements/dependency-upgrade-audit.md` | 本輪套件升級、latest 差異、延後原因與 infrastructure 升級驗收門檻 |
+| `requirements/live-event-observability-contract.md` | Live Domain Event 發布前後／失敗 logs、OTel 欄位、outbox/Kafka 語意與 Loki 驗收 |
 | `openapi.yaml`／`contracts/asyncapi.yaml` | HTTP／Kafka 的精確介面 |
 | `backend/migrations/**` | 實際資料庫結構 |
 | `e2e/**/*.feature` | 從外部觀察時，功能應如何表現 |

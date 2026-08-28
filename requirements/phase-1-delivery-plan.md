@@ -11,7 +11,7 @@
 - 只能在 Phase 2／3 開發的隔離重建與 Replay 能力。
 - 明確不屬於 Event Hunter 的功能。
 
-範圍仍以 `project-scope.yaml` 為準；需求映射以 `requirements/traceability.yaml` 為準；工程依賴與完成狀態以 `requirements/implementation-plan.yaml` 為準；原型功能索引位於 `requirements/prototype-phase-matrix.yaml`。本文件負責把它們轉成 Phase 1 可執行的收尾順序。
+範圍仍以 `requirements/project-scope.yaml` 為準；需求映射以 `requirements/traceability.yaml` 為準；工程依賴與完成狀態以 `requirements/implementation-plan.yaml` 為準；原型功能索引位於 `requirements/prototype-phase-matrix.yaml`。本文件負責把它們轉成 Phase 1 可執行的收尾順序。
 
 ## 2. Phase 1 完成定義
 
@@ -41,6 +41,7 @@ Temporal adapter `EH-MVP-010` 是選用項，不阻擋 Phase 1 完成。
 - PostgreSQL／ClickHouse migrations、fixture loader 與三個 Demo domain services。
 - 34 筆可重播 Domain Event fixture，涵蓋正常、付款失敗、配送完成、派車重試與退貨退款，並以 JSON Schema、Timeline Karate 與 Tempo／Loki E2E 驗證。
 - 三個 Demo services 的 OpenTelemetry SDK、HTTP／Kafka instrumentation、W3C outbox context propagation，及真實 Order → Payment → Shipping telemetry vertical-slice／restart test；live SDK、synthetic fixture 與未啟用的 optional `otelc` profile 已明確分流。
+- 三個 Demo services 依 [Live Event Observability Contract](live-event-observability-contract.md) 記錄具名的事件發布前、outbox commit 後、失敗與 consumer completed logs；Timeline 跳到 Loki 後可直接辨識每個 event type 與執行階段。
 - Debezium、Redpanda broker、ClickHouse Kafka Connect Sink、domain／processing-attempt admission pipeline 與 Compose 設定。
 - Quality Worker、Grafana datasource、Dashboard 與 Alert rules provisioning。
 - Grafana signed webhook intake、replay protection、去重、建案、Evidence receipt 與 Alerting detail deep link；
@@ -72,7 +73,7 @@ Temporal adapter `EH-MVP-010` 是選用項，不阻擋 Phase 1 完成。
 |---|---|---|---|
 | P1-01 | 規格與任務 DAG | 已完成 | Scope、traceability、implementation plan、原型矩陣與 sign-off 已同步核定。 |
 | P1-02 | Timeline Search | 已完成 | 四種基本 key、from/to、完整進階 allowlist、masked payload、空結果與 truncated 狀態已完成；Pattern／Alert fingerprint／最低案件 severity 契約已由 OpenAPI、application boundary、component test 與 Karate E2E 驗證。 |
-| P1-03 | Timeline Event Detail | 已完成 | Event metadata、processing summary、masked payload、trusted Grafana／Tempo／Loki links 與 backend／frontend E2E 均已完成；固定 fixture 以獨立 synthetic resource identity 載入 OTLP traces／logs，真實服務則以 OTel SDK、`otelhttp`、`otelslog` 與 franz-go `kotel` 產生 telemetry，並經 outbox／Kafka W3C context 延續同一條 trace。Live E2E 會比對 ClickHouse／Tempo／Loki trace ID、canonical log attributes 與 restart persistence；`otelc` 僅列為未啟用的後續 profile。 |
+| P1-03 | Timeline Event Detail | 已完成 | Event metadata、processing summary、masked payload、trusted Grafana／Tempo／Loki links 與 backend／frontend E2E 均已完成；固定 fixture 以獨立 synthetic resource identity 載入 OTLP traces／logs，真實服務則以 OTel SDK、`otelhttp`、`otelslog` 與 franz-go `kotel` 產生 telemetry，並經 outbox／Kafka W3C context 延續同一條 trace。Live E2E 會比對 ClickHouse／Tempo／Loki trace ID、canonical log attributes、具名 `PREPARING`／`COMMITTED` lifecycle pairs 與 restart persistence；`COMMITTED` 僅代表 outbox transaction 成功，Kafka delivery 另由 consumer coordinates 證明。`otelc` 僅列為未啟用的後續 profile。 |
 | P1-04 | Investigation Console | 已完成 | Drawer 內 Summary／Timeline／Patterns／Evidence／Audit、來源狀態、partial warning、操作錯誤回饋與 E2E 均已完成。 |
 | P1-05 | Pattern Library | 已完成 | `contracts/patterns/*.yaml` 是唯一規則來源，generator 產生唯讀 Go registry，契約驗證會阻擋 drift；分析器依 `occurred_at` 執行 trigger-relative PT5M window、maturity 與 exclusion 判斷，未知／停用 Pattern 回 422。`/patterns?pattern_id=...` 可定位並醒目顯示規則，POST 以 405 拒絕。 |
 | P1-06 | Evidence References | 已完成 | 分析流程保存 Event／Trace／Finding reference 與 checksum；manifest、source status、partial warning、allowlisted source actions、component／Karate E2E 均已完成。 |
@@ -202,7 +203,7 @@ bash scripts/verify-restart-persistence.sh
 
 ## 8. 後續 Agent 工作規則
 
-1. 開始工作前先讀 `project-scope.yaml`、本文件與對應 `EH-MVP-*`。
+1. 開始工作前先讀 `requirements/project-scope.yaml`、本文件與對應 `EH-MVP-*`。
 2. 原型是 UX 意圖，不是 API 或狀態真相；原型的 mock data 與 Temporal 假狀態不可直接搬進正式 UI。
 3. 新增欄位前先確認 OpenAPI／Query allowlist；不存在的查詢能力先改契約與測試。
 4. 完成一個工作包時，同步更新 implementation plan、traceability、component test 與 Karate feature。

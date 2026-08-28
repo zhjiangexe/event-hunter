@@ -50,6 +50,11 @@ OIDC／SSO／RBAC 與 RTO／RPO 演練。
   Redpanda Connect ETL workers／設定／ports 已移除。Redpanda broker 與 Debezium 仍保留。Backend
   108/108、Scenario Lab 16/16、Grafana auto-case 1/1、POC 3/3 與雙路線 outage/backlog recovery 通過；
   load/soak/capacity 與正式 raw-data governance 依決策列為非阻擋後續。
+- 2026-08-28 補強 live event lifecycle logging：三個服務會在事件發布前、local outbox transaction commit
+  後與失敗時留下具名 structured log，consumer completed log 也直接顯示 event type。Focused Go tests 通過，
+  並以 S1 `ORDER-5142B16E6C050DE8` 驗證 OrderCreated → PaymentCompleted → ShipmentCreated 的 Loki
+  lifecycle／consumer logs 與 ClickHouse／Tempo 共用 trace。規格與後續可重現 gate 見
+  [Live Event Observability Contract](live-event-observability-contract.md)；本補強不改變原始 sign-off 日期。
 
 ## 驗收證據
 

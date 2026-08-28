@@ -14,7 +14,7 @@ Webhook 交給 Event Hunter 建立或補充案件。
 摘要中以來源狀態、告警參照或必要的調查線索呈現；不提供獨立 Runtime Quality Console。Schema／
 Topic 管理與 Replay／Production Redrive 不屬於本 UI 或 MVP API。
 
-正式 endpoint、request／response schema 以 [openapi.yaml](openapi.yaml) 為準；本文件補充 Query
+正式 endpoint、request／response schema 以 [openapi.yaml](../openapi.yaml) 為準；本文件補充 Query
 Service、來源失敗與組合行為。
 
 ## 1. 使用情境

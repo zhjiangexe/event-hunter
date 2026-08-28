@@ -176,6 +176,7 @@ requirements:
       - contracts/platform/outbox-routing.yaml
       - contracts/platform/ingestion-mapping.yaml
       - contracts/asyncapi.yaml
+      - requirements/live-event-observability-contract.md
     stores:
       - demo-order-postgres.orders
       - demo-order-postgres.outbox_events
@@ -188,6 +189,8 @@ requirements:
       - /timeline
     acceptance_features:
       - e2e/backend/event-pipeline.feature
+    verification_scripts:
+      - scripts/test-live-observability.sh
 
   - id: REQ-EH-010
     title: Investigation Overview and Source Health

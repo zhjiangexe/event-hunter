@@ -5,7 +5,7 @@ decision_date: 2026-08-20
 phase: mvp
 
 sources_of_truth:
-  scope: project-scope.yaml
+  scope: requirements/project-scope.yaml
   http_api: openapi.yaml
   event_api: contracts/asyncapi.yaml
   event_schemas: contracts/events

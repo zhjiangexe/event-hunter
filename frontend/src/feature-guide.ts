@@ -430,7 +430,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
             "寫清楚 Correlation、Aggregate、Event、Causation、Trace ID 由誰產生及其生命週期。",
           ],
           sourceFiles: [
-            "project-scope.yaml",
+            "requirements/project-scope.yaml",
             "contracts/platform/topic-topology.yaml",
             "contracts/platform/identity-time-policy.yaml",
           ],

@@ -400,8 +400,8 @@ Go Repository 使用 `pgx`／`sqlc` 將 `WHERE id = $1 AND lock_version = $2` �
 
 ## 6. Migration 與開發順序
 
-1. 依檔名執行 [`backend/migrations/postgres`](backend/migrations/postgres)：control plane baseline 與 Grafana receipt idempotency。
-2. 執行 [`backend/migrations/clickhouse`](backend/migrations/clickhouse) 內的 DDL：`MergeTree`、partition、排序鍵與 TTL；唯讀查詢帳號由部署設定建立。
+1. 依檔名執行 [`backend/migrations/postgres`](../backend/migrations/postgres)：control plane baseline 與 Grafana receipt idempotency。
+2. 執行 [`backend/migrations/clickhouse`](../backend/migrations/clickhouse) 內的 DDL：`MergeTree`、partition、排序鍵與 TTL；唯讀查詢帳號由部署設定建立。
 3. 建立 canonical event fixture，驗證 Kafka Sink 寫入 `forensics_events` 的欄位映射。
 4. 為每個 Repository 補 Integration Test：交易提交、版本衝突、查詢時間範圍與 PII 遮罩。
 5. migration 只能透過 CI／部署流程執行，不在應用程式啟動時偷偷修改 Schema。

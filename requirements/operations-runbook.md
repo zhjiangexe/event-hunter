@@ -96,6 +96,27 @@ bash scripts/verify-operations-runbook.sh --restart --yes
 | Scenario Lab `TIMED_OUT` | run checks、event pipeline readiness、ClickHouse failures | 先修 ingestion，再重跑；不可直接把 run status 改成 PASSED |
 | Ingestion Issues 出現 `TECHNICAL_DLQ` | issue drawer 的 source/DLQ coordinates、connector/task/stage/class | 先修 converter／Sink 或 ClickHouse；以 SHA-256 和受控原始來源核對，不把 raw payload 複製到一般案件或 Grafana |
 
+### 用事件 lifecycle logs 判斷卡點
+
+從 Timeline event detail 開啟 `Loki logs`，或在 Grafana Explore 使用：
+
+```logql
+{service_name=~"order-service|payment-service|shipping-service"}
+  | correlation_id="<CORRELATION_ID>"
+  |~ "domain event"
+```
+
+| 看到的最後證據 | 判讀與下一步 |
+|---|---|
+| 只有 `domain event emission starting` | 查同一 `event_id` 是否有 `FAILED` 與 `event_emission_failure_stage`；優先檢查 request cancellation、outbox DB 與 transaction commit |
+| 有 `committed to outbox`，沒有下游 `processed domain event` | Local transaction 已成功；檢查 Debezium connector、Kafka topic、consumer group lag，不要誤判為服務沒有產生事件 |
+| 有下游 `processed domain event`，Timeline 仍無事件 | Kafka delivery 已成立；檢查 ClickHouse Sink、raw admission、quarantine 與 canonical views |
+| Timeline 與 Loki 都有資料，Tempo 無 trace | 核對同一 `trace_id` 後檢查 OTel Collector trace exporter 與 Tempo；不要改用新的 correlation ID 掩蓋 context propagation 問題 |
+
+Producer-side `kafka_partition=-1`／`kafka_offset=-1` 且 `kafka_position_known=false` 是正確狀態，因為
+Debezium 尚未為 committed outbox row 配置 Kafka 位置。完整語意見
+[Live Event Observability Contract](live-event-observability-contract.md)。
+
 故障注入只在允許中斷時執行：
 
 ```bash

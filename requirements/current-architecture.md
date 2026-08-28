@@ -168,18 +168,22 @@ sequenceDiagram
     participant OTel as OTel Collector
 
     Client->>Order: POST /api/v1/orders
+    Order-->>OTel: PREPARING OrderCreated log + business span event
+    Note over Order: DEMO_EVENT_EMISSION_DELAY（local default 2s）
     Order->>ODB: transaction: order + OrderCreated outbox
-    Order-->>OTel: HTTP / business span and log
+    Order-->>OTel: COMMITTED OrderCreated log
     ODB->>CDC: CDC outbox row
     CDC->>Kafka: order.events + traceparent
     Kafka->>Payment: OrderCreated
+    Payment-->>OTel: consumer span + PREPARING PaymentCompleted/Failed log
     Payment->>PDB: transaction: payment + PaymentCompleted/Failed outbox
-    Payment-->>OTel: consumer / business span and log
+    Payment-->>OTel: COMMITTED + processed OrderCreated logs
     PDB->>CDC: CDC outbox row
     CDC->>Kafka: payment.events + continued trace context
     Kafka->>Shipping: PaymentCompleted
+    Shipping-->>OTel: consumer span + PREPARING shipping event log
     Shipping->>SDB: transaction: shipment + shipping outbox events
-    Shipping-->>OTel: consumer / business span and log
+    Shipping-->>OTel: COMMITTED + processed PaymentCompleted logs
     SDB->>CDC: CDC outbox row
     CDC->>Kafka: shipping.events + continued trace context
     Kafka->>Sink: canonical domain events
@@ -190,6 +194,12 @@ sequenceDiagram
 三個服務使用顯式 OpenTelemetry SDK、`otelhttp`、`otelslog` 與 franz-go `kotel`。Outbox 保存
 `trace_parent`／`trace_state`，Debezium 轉成 Kafka `traceparent`／`tracestate` headers，所以下游
 consumer 能延續同一條 trace，而不是只靠相同的 correlation ID 拼接畫面。
+
+事件 lifecycle logs 使用 `PREPARING`、`COMMITTED`、`FAILED` 三個 phase。`COMMITTED` 只代表 business
+state 與 outbox row 已完成 local transaction，不代表 Debezium 已發布到 Kafka；Kafka delivery 必須再由
+connector、processing attempt、consumer 的真實 partition／offset 與 `processed domain event` log 證明。
+Producer-side Kafka coordinates 固定標示 unknown，不建立假的 broker 位置。完整訊息、欄位、安全邊界及
+驗收見 [Live Event Observability Contract](live-event-observability-contract.md)。
 
 ## 3. Ingestion 活動圖
 
@@ -358,5 +368,5 @@ adapter。Domain 不依賴 HTTP、PostgreSQL、ClickHouse、Grafana 或 OTel 套
 - Journey authoring：[contracts/journeys](../contracts/journeys)
 - Pattern authoring：[contracts/patterns](../contracts/patterns)
 - Backend capability boundaries：[application-screaming-architecture.md](application-screaming-architecture.md)
-- Current architecture PlantUML：[event-hunter-architecture.puml](../event-hunter-architecture.puml)
-- Current activity diagram source：[event-hunter-activity.puml](../event-hunter-activity.puml)
+- Current architecture PlantUML：[event-hunter-architecture.puml](event-hunter-architecture.puml)
+- Current activity diagram source：[event-hunter-activity.puml](event-hunter-activity.puml)

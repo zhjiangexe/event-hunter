@@ -9,7 +9,7 @@
   本次不使用 hosted CI；若未來改採 GitHub 自動化，會以本文件附加「Hosted CI 補驗」為附加 gate。
 - 目的：在不啟動 Phase 2 Projection Rebuild 或 Phase 3 Sandbox Behavioral Replay 的前提下，
   將 Phase 1 從可用的事件調查工具提升成日常營運與工程團隊可共同使用的調查工作台。
-- Scope 規則：本文件目前是候選開發計畫，不會自行擴張 `project-scope.yaml` 的正式需求。
+- Scope 規則：本文件目前是候選開發計畫，不會自行擴張 `requirements/project-scope.yaml` 的正式需求。
   開始任一新增使用者能力前，必須先核准範圍，再新增穩定的 `REQ-EH-*`，並同步更新
   `requirements/traceability.yaml`、`requirements/implementation-plan.yaml`、OpenAPI、資料契約與
   Karate acceptance feature。
@@ -347,6 +347,8 @@ EH-P1.1-007～012 修正並於同日完成 sign-off。
 - Backend Karate 16 features／92 scenarios 與 Frontend Karate 17/17 通過。
 - Live OTel 驗證 order／payment／shipping 共用同一 trace，Tempo、Loki 與 ClickHouse 可交叉核對；
   ingestion outage/recovery、sink acknowledgement、quality failure mode 與 restart persistence 均通過。
+  2026-08-28 再以 [Live Event Observability Contract](live-event-observability-contract.md) 固定事件發布前、
+  outbox commit 後、失敗與 consumer completed 的具名 log 語意及可執行驗收。
 - 10 萬 canonical events 效能資料集的 200 次查詢零 HTTP error；Timeline p95 25.89ms、
   Investigation Summary p95 72.20ms，均低於 gate 門檻。
 - Gate 結束後清除本輪 `[E2E]` 案件、Scenario runs、Grafana receipts 與相關資料，再還原互動式 fixtures；
