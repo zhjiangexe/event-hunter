@@ -1,0 +1,97 @@
+schema_version: 1
+project: event-hunter
+
+# 三個示範服務是 Event Hunter MVP 的可部署事件來源；它們不是 Event Hunter API 的子模組，
+# 也不得直接讀取彼此的資料庫。每個服務只透過 Domain Event 與必要的同步命令協作。
+services:
+  - id: order-service
+    purpose: accept_demo_orders_and_publish_order_events
+    implementation_language: go
+    http:
+      listen_address: :28335
+      contract: order-api.openapi.yaml
+    database:
+      local_postgres_service: demo-order-postgres
+      database: demo_order
+      credentials_owner: order-service
+      owned_tables: [orders, outbox_events, idempotency_keys]
+      cross_database_access: forbidden
+    publishes:
+      - event_type: OrderCreated
+        topic: order.events
+      - event_type: OrderCancelled
+        topic: order.events
+    consumes:
+      - topic: payment.events
+        event_types: [PaymentFailed]
+    event_publication: transactional_outbox
+
+  - id: payment-service
+    purpose: simulate_payment_completion_and_payment_exceptions
+    implementation_language: go
+    http:
+      listen_address: :28336
+      contract: null
+    database:
+      local_postgres_service: demo-payment-postgres
+      database: demo_payment
+      credentials_owner: payment-service
+      owned_tables: [payments, outbox_events]
+      cross_database_access: forbidden
+    publishes:
+      - event_type: PaymentCompleted
+        topic: payment.events
+      - event_type: PaymentRefunded
+        topic: payment.events
+      - event_type: PaymentVoided
+        topic: payment.events
+      - event_type: PaymentFailed
+        topic: payment.events
+    consumes:
+      - topic: order.events
+        event_types: [OrderCreated, OrderCancelled]
+      - topic: shipping.events
+        event_types: [ReturnReceived]
+    event_publication: transactional_outbox
+
+  - id: shipping-service
+    purpose: simulate_shipment_creation_and_shipping_exceptions
+    implementation_language: go
+    http:
+      listen_address: :28337
+      contract: null
+    database:
+      local_postgres_service: demo-shipping-postgres
+      database: demo_shipping
+      credentials_owner: shipping-service
+      owned_tables: [shipments, returns, outbox_events]
+      cross_database_access: forbidden
+    publishes:
+      - event_type: ShipmentCreated
+        topic: shipping.events
+      - event_type: ShipmentDispatched
+        topic: shipping.events
+      - event_type: ShipmentInTransit
+        topic: shipping.events
+      - event_type: ShipmentDelivered
+        topic: shipping.events
+      - event_type: ShipmentDispatchFailed
+        topic: shipping.events
+      - event_type: ReturnRequested
+        topic: shipping.events
+      - event_type: ReturnReceived
+        topic: shipping.events
+    consumes:
+      - topic: payment.events
+        event_types: [PaymentCompleted, PaymentRefunded, PaymentVoided]
+      - topic: order.events
+        event_types: [OrderCancelled]
+    event_publication: transactional_outbox
+
+invariants:
+  - each service writes its business state and outbox row in one local transaction
+  - services never read another service database
+  - every published event uses the canonical event envelope
+  - kafka key is correlationId
+  - sequence is monotonic only within aggregateType and aggregateId
+  - Debezium is the only publisher from outbox_events to domain topics

@@ -1,0 +1,49 @@
+{
+  "receiver": "event-hunter-business-investigation",
+  "status": "firing",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "PaymentCompletedWithoutShipment",
+        "event_hunter": "investigate",
+        "correlation_id": "ORDER-2001",
+        "severity": "HIGH",
+        "service": "shipping-service"
+      },
+      "annotations": {
+        "summary": "付款完成五分鐘後仍沒有 ShipmentCreated",
+        "description": "Domain Pattern payment-completed-without-shipment matched"
+      },
+      "startsAt": "2026-08-20T11:06:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://localhost:28332/alerting/grafana/event-quality-delay/view",
+      "fingerprint": "eh2001firing",
+      "silenceURL": "http://localhost:28332/alerting/silence/new",
+      "dashboardURL": "http://localhost:28332/d/event-quality",
+      "panelURL": "http://localhost:28332/d/event-quality?viewPanel=1",
+      "values": {
+        "A": 1
+      }
+    }
+  ],
+  "groupLabels": {
+    "alertname": "PaymentCompletedWithoutShipment"
+  },
+  "commonLabels": {
+    "event_hunter": "investigate",
+    "correlation_id": "ORDER-2001",
+    "severity": "HIGH"
+  },
+  "commonAnnotations": {
+    "summary": "付款完成五分鐘後仍沒有 ShipmentCreated"
+  },
+  "externalURL": "http://localhost:28332/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"PaymentCompletedWithoutShipment\"}",
+  "truncatedAlerts": 0,
+  "title": "[FIRING:1] PaymentCompletedWithoutShipment",
+  "state": "alerting",
+  "message": "ORDER-2001 requires business investigation"
+}

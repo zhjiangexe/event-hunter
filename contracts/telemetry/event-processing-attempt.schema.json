@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/event-processing-attempt.schema.json",
+  "title": "EventProcessingAttempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attemptId",
+    "eventId",
+    "eventType",
+    "correlationId",
+    "traceId",
+    "consumerGroupId",
+    "consumerService",
+    "attempt",
+    "processingStatus",
+    "retryReason",
+    "retryTopic",
+    "kafkaTopic",
+    "kafkaPartition",
+    "kafkaOffset",
+    "startedAt",
+    "completedAt",
+    "observedAt"
+  ],
+  "properties": {
+    "attemptId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "eventType": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "correlationId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "traceId": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
+    "consumerGroupId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "consumerService": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "processingStatus": {
+      "type": "string",
+      "enum": ["STARTED", "FAILED", "RETRY_SCHEDULED", "SUCCEEDED", "DLQ"]
+    },
+    "retryReason": { "type": ["string", "null"], "maxLength": 1000 },
+    "retryTopic": { "type": ["string", "null"], "maxLength": 249 },
+    "kafkaTopic": { "type": "string", "minLength": 1, "maxLength": 249 },
+    "kafkaPartition": { "type": "integer", "minimum": 0 },
+    "kafkaOffset": { "type": "integer", "minimum": 0 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": ["string", "null"], "format": "date-time" },
+    "observedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "processingStatus": { "enum": ["FAILED", "RETRY_SCHEDULED", "DLQ"] }
+        }
+      },
+      "then": {
+        "properties": {
+          "retryReason": { "type": "string", "minLength": 1 },
+          "completedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "processingStatus": { "const": "SUCCEEDED" }
+        }
+      },
+      "then": {
+        "properties": {
+          "completedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  ]
+}

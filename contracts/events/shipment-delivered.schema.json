@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/shipment-delivered.schema.json",
+  "title": "ShipmentDelivered",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "ShipmentDelivered" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Shipment" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shipmentId", "orderId", "deliveredAt", "recipient", "status"],
+          "properties": {
+            "shipmentId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "deliveredAt": { "type": "string", "format": "date-time" },
+            "recipient": { "type": "string", "minLength": 1 },
+            "status": { "const": "DELIVERED" }
+          }
+        }
+      }
+    }
+  ]
+}

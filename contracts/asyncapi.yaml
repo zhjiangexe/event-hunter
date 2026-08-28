@@ -1,0 +1,253 @@
+asyncapi: 3.0.0
+info:
+  title: Event Hunter Domain Event Contract
+  version: 0.1.0
+  description: Kafka Domain Events consumed by the Event Hunter ClickHouse ingestion pipeline.
+defaultContentType: application/json
+
+servers:
+  localKafka:
+    host: localhost:28319
+    protocol: kafka
+    description: Local development Kafka broker；Compose network 內部使用 redpanda:9092。
+
+channels:
+  orderEvents:
+    address: order.events
+    messages:
+      OrderCreated:
+        $ref: '#/components/messages/OrderCreated'
+      OrderCancelled:
+        $ref: '#/components/messages/OrderCancelled'
+  paymentEvents:
+    address: payment.events
+    messages:
+      PaymentCompleted:
+        $ref: '#/components/messages/PaymentCompleted'
+      PaymentRefunded:
+        $ref: '#/components/messages/PaymentRefunded'
+      PaymentVoided:
+        $ref: '#/components/messages/PaymentVoided'
+      PaymentFailed:
+        $ref: '#/components/messages/PaymentFailed'
+  shippingEvents:
+    address: shipping.events
+    messages:
+      ShipmentCreated:
+        $ref: '#/components/messages/ShipmentCreated'
+      ShipmentDispatched:
+        $ref: '#/components/messages/ShipmentDispatched'
+      ShipmentInTransit:
+        $ref: '#/components/messages/ShipmentInTransit'
+      ShipmentDelivered:
+        $ref: '#/components/messages/ShipmentDelivered'
+      ShipmentDispatchFailed:
+        $ref: '#/components/messages/ShipmentDispatchFailed'
+      ReturnRequested:
+        $ref: '#/components/messages/ReturnRequested'
+      ReturnReceived:
+        $ref: '#/components/messages/ReturnReceived'
+  eventLabEvents:
+    address: event-lab.events
+    description: Scenario Lab 專用隔離 topic；不得被正式 demo business services 消費。
+    messages:
+      OrderCreated:
+        $ref: '#/components/messages/OrderCreated'
+      OrderCancelled:
+        $ref: '#/components/messages/OrderCancelled'
+      PaymentCompleted:
+        $ref: '#/components/messages/PaymentCompleted'
+      PaymentRefunded:
+        $ref: '#/components/messages/PaymentRefunded'
+      PaymentVoided:
+        $ref: '#/components/messages/PaymentVoided'
+      PaymentFailed:
+        $ref: '#/components/messages/PaymentFailed'
+      ShipmentCreated:
+        $ref: '#/components/messages/ShipmentCreated'
+      ShipmentDispatched:
+        $ref: '#/components/messages/ShipmentDispatched'
+      ShipmentInTransit:
+        $ref: '#/components/messages/ShipmentInTransit'
+      ShipmentDelivered:
+        $ref: '#/components/messages/ShipmentDelivered'
+      ShipmentDispatchFailed:
+        $ref: '#/components/messages/ShipmentDispatchFailed'
+      ReturnRequested:
+        $ref: '#/components/messages/ReturnRequested'
+      ReturnReceived:
+        $ref: '#/components/messages/ReturnReceived'
+  processingAttempts:
+    address: event-hunter.processing-attempts
+    messages:
+      EventProcessingAttempt:
+        $ref: '#/components/messages/EventProcessingAttempt'
+
+operations:
+  ingestOrderEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/orderEvents'
+    messages:
+      - $ref: '#/channels/orderEvents/messages/OrderCreated'
+      - $ref: '#/channels/orderEvents/messages/OrderCancelled'
+  ingestPaymentEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/paymentEvents'
+    messages:
+      - $ref: '#/channels/paymentEvents/messages/PaymentCompleted'
+      - $ref: '#/channels/paymentEvents/messages/PaymentRefunded'
+      - $ref: '#/channels/paymentEvents/messages/PaymentVoided'
+      - $ref: '#/channels/paymentEvents/messages/PaymentFailed'
+  ingestShippingEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/shippingEvents'
+    messages:
+      - $ref: '#/channels/shippingEvents/messages/ShipmentCreated'
+      - $ref: '#/channels/shippingEvents/messages/ShipmentDispatched'
+      - $ref: '#/channels/shippingEvents/messages/ShipmentInTransit'
+      - $ref: '#/channels/shippingEvents/messages/ShipmentDelivered'
+      - $ref: '#/channels/shippingEvents/messages/ShipmentDispatchFailed'
+      - $ref: '#/channels/shippingEvents/messages/ReturnRequested'
+      - $ref: '#/channels/shippingEvents/messages/ReturnReceived'
+  ingestEventLabEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/eventLabEvents'
+    messages:
+      - $ref: '#/channels/eventLabEvents/messages/OrderCreated'
+      - $ref: '#/channels/eventLabEvents/messages/OrderCancelled'
+      - $ref: '#/channels/eventLabEvents/messages/PaymentCompleted'
+      - $ref: '#/channels/eventLabEvents/messages/PaymentRefunded'
+      - $ref: '#/channels/eventLabEvents/messages/PaymentVoided'
+      - $ref: '#/channels/eventLabEvents/messages/PaymentFailed'
+      - $ref: '#/channels/eventLabEvents/messages/ShipmentCreated'
+      - $ref: '#/channels/eventLabEvents/messages/ShipmentDispatched'
+      - $ref: '#/channels/eventLabEvents/messages/ShipmentInTransit'
+      - $ref: '#/channels/eventLabEvents/messages/ShipmentDelivered'
+      - $ref: '#/channels/eventLabEvents/messages/ShipmentDispatchFailed'
+      - $ref: '#/channels/eventLabEvents/messages/ReturnRequested'
+      - $ref: '#/channels/eventLabEvents/messages/ReturnReceived'
+  ingestProcessingAttempts:
+    action: receive
+    channel:
+      $ref: '#/channels/processingAttempts'
+    messages:
+      - $ref: '#/channels/processingAttempts/messages/EventProcessingAttempt'
+
+components:
+  messages:
+    OrderCreated:
+      name: OrderCreated
+      title: Order created
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/order-created.schema.json'
+    OrderCancelled:
+      name: OrderCancelled
+      title: Order cancelled
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/order-cancelled.schema.json'
+    PaymentCompleted:
+      name: PaymentCompleted
+      title: Payment completed
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/payment-completed.schema.json'
+    PaymentRefunded:
+      name: PaymentRefunded
+      title: Payment refunded
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/payment-refunded.schema.json'
+    PaymentVoided:
+      name: PaymentVoided
+      title: Payment voided
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/payment-voided.schema.json'
+    PaymentFailed:
+      name: PaymentFailed
+      title: Payment failed
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/payment-failed.schema.json'
+    ShipmentCreated:
+      name: ShipmentCreated
+      title: Shipment created
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/shipment-created.schema.json'
+    ShipmentDispatched:
+      name: ShipmentDispatched
+      title: Shipment dispatched
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/shipment-dispatched.schema.json'
+    ShipmentInTransit:
+      name: ShipmentInTransit
+      title: Shipment in transit
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/shipment-in-transit.schema.json'
+    ShipmentDelivered:
+      name: ShipmentDelivered
+      title: Shipment delivered
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/shipment-delivered.schema.json'
+    ShipmentDispatchFailed:
+      name: ShipmentDispatchFailed
+      title: Shipment dispatch failed
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/shipment-dispatch-failed.schema.json'
+    ReturnRequested:
+      name: ReturnRequested
+      title: Return requested
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/return-requested.schema.json'
+    ReturnReceived:
+      name: ReturnReceived
+      title: Return received
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './events/return-received.schema.json'
+    EventProcessingAttempt:
+      name: EventProcessingAttempt
+      title: Event processing attempt telemetry
+      contentType: application/json
+      correlationId:
+        location: '$message.payload#/correlationId'
+      payload:
+        $ref: './telemetry/event-processing-attempt.schema.json'

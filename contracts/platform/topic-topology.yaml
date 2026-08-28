@@ -1,0 +1,126 @@
+schema_version: 1
+project: event-hunter
+environment: local
+
+bootstrap_servers:
+  external:
+    - localhost:28319
+  compose_network:
+    - redpanda:9092
+
+defaults:
+  partitions: 3
+  replication_factor: 1
+  retention_ms: 604800000
+  cleanup_policy: delete
+  compression_type: producer
+
+# Domain Event 以 correlationId 當 Kafka key，讓同一筆業務流程落在同一 partition。
+# sequence 仍只在 aggregateType + aggregateId 內比較，不是跨 Aggregate 的全域序號。
+topics:
+  - name: order.events
+    asyncapi_channel: orderEvents
+    owner: order-service
+    logical_source: order-service
+    key:
+      source: payload
+      json_pointer: /correlationId
+      type: string
+    accepted_event_types: [OrderCreated, OrderCancelled]
+    classification: CONFIDENTIAL
+
+  - name: payment.events
+    asyncapi_channel: paymentEvents
+    owner: payment-service
+    logical_source: payment-service
+    key:
+      source: payload
+      json_pointer: /correlationId
+      type: string
+    accepted_event_types: [PaymentCompleted, PaymentRefunded, PaymentVoided, PaymentFailed]
+    classification: CONFIDENTIAL
+
+  - name: shipping.events
+    asyncapi_channel: shippingEvents
+    owner: shipping-service
+    logical_source: shipping-service
+    key:
+      source: payload
+      json_pointer: /correlationId
+      type: string
+    accepted_event_types:
+      - ShipmentCreated
+      - ShipmentDispatched
+      - ShipmentInTransit
+      - ShipmentDelivered
+      - ShipmentDispatchFailed
+      - ReturnRequested
+      - ReturnReceived
+    classification: CONFIDENTIAL
+
+  - name: event-lab.events
+    asyncapi_channel: eventLabEvents
+    owner: event-lab
+    logical_source: scenario-lab
+    key:
+      source: payload
+      json_pointer: /correlationId
+      type: string
+    accepted_event_types:
+      - OrderCreated
+      - OrderCancelled
+      - PaymentCompleted
+      - PaymentRefunded
+      - PaymentVoided
+      - PaymentFailed
+      - ShipmentCreated
+      - ShipmentDispatched
+      - ShipmentInTransit
+      - ShipmentDelivered
+      - ShipmentDispatchFailed
+      - ReturnRequested
+      - ReturnReceived
+    classification: INTERNAL
+
+  - name: event-hunter.processing-attempts
+    asyncapi_channel: processingAttempts
+    owner: event-hunter-platform
+    mvp_producer: event-lab
+    key:
+      source: composite
+      fields: [eventId, consumerGroupId]
+      separator: "|"
+      type: string
+    accepted_event_types: [EventProcessingAttempt]
+    classification: INTERNAL
+
+  - name: event-hunter.ingestion-failures.dlq
+    owner: event-hunter-platform
+    partitions: 3
+    retention_ms: 604800000
+    key:
+      source: kafka_metadata
+      fields: [sourceTopic, sourcePartition, sourceOffset]
+      separator: ":"
+      type: string
+    accepted_event_types: [EventIngestionFailure]
+    classification: RESTRICTED
+
+ordering:
+  guarantee: PER_PARTITION
+  business_interpretation:
+    - same correlationId is ordered by Kafka offset within one topic partition
+    - sequence is monotonic only within aggregateType and aggregateId
+    - timestamps do not establish delivery order
+
+producer_requirements:
+  required_headers:
+    - content-type
+  content_type: application/json
+  idempotency_field: eventId
+  forbidden_payload_fields:
+    - cardNumber
+    - cvv
+    - password
+    - accessToken
+    - refreshToken

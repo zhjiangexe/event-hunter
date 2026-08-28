@@ -1,0 +1,68 @@
+schema_version: 1
+project: event-hunter
+
+profiles:
+  ci:
+    purpose: regression
+    dataset:
+      valid_events: 100000
+      correlation_ids: 20000
+      processing_attempts: 10000
+      quality_windows: 1440
+      random_seed: 20260820
+    clients:
+      concurrent_investigators: 10
+    warmup_requests: 20
+    measured_requests: 200
+    thresholds:
+      timeline_p95_ms: 2000
+      investigation_summary_p95_ms: 5000
+      http_error_rate_max: 0.01
+
+  mvp_capacity:
+    purpose: release-gate-on-dedicated-runner
+    dataset:
+      valid_events: 1000000
+      correlation_ids: 200000
+      processing_attempts: 100000
+      quality_windows: 10080
+      random_seed: 20260820
+    clients:
+      concurrent_investigators: 20
+    warmup_requests: 100
+    measured_requests: 1000
+    thresholds:
+      timeline_p95_ms: 2000
+      investigation_summary_p95_ms: 5000
+      http_error_rate_max: 0.01
+
+query_mix:
+  - operation_id: getBusinessTimeline
+    weight: 50
+    query_window: PT24H
+    result_limit: 1000
+  - operation_id: searchForensicsEvents
+    weight: 20
+    query_window: PT1H
+    result_limit: 100
+  - operation_id: getInvestigationSummary
+    weight: 20
+    query_window: PT24H
+    result_limit: 1000
+  - operation_id: listInvestigations
+    weight: 10
+    page_size: 50
+
+execution:
+  clock: monotonic
+  percentile_method: nearest_rank
+  exclude_warmup: true
+  record_environment:
+    - git_revision
+    - cpu_model
+    - cpu_count
+    - memory_bytes
+    - docker_version
+    - clickhouse_version
+    - postgres_version
+  output: build/reports/performance-summary.json

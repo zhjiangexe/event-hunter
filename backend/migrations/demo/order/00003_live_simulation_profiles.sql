@@ -1,0 +1,10 @@
+-- +goose Up
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS status VARCHAR(30) NOT NULL DEFAULT 'ACCEPTED';
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_chk;
+ALTER TABLE orders
+    ADD CONSTRAINT orders_status_chk CHECK (status IN ('ACCEPTED', 'CANCELLED'));
+
+-- +goose Down
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_chk;
+ALTER TABLE orders DROP COLUMN IF EXISTS status;

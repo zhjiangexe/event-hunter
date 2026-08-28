@@ -1,0 +1,111 @@
+schema_version: 1
+project: event-hunter
+
+pipelines:
+  - id: domain-events-to-clickhouse-v1
+    runtime: clickhouse-kafka-connect-sink-plus-materialized-views
+    input:
+      component: redpanda
+      topics: [order.events, payment.events, shipping.events, event-lab.events]
+      consumer_group: connect-event-hunter-poc-raw-landing
+      start_from_oldest: true
+    validation:
+      transport_policy: store_raw_before_admission
+      admission_profile: minimum-envelope-v1
+      registry_contract: ../asyncapi.yaml
+      known_event_payload_required_keys: enforce
+      unknown_event_type: searchable_with_warning
+      unknown_event_version: searchable_with_warning
+    mapping:
+      raw_table: event_hunter_poc.poc_event_landing_raw
+      target_table: poc_forensics_events
+      columns:
+        event_id: $.eventId
+        event_type: $.eventType
+        event_version: $.eventVersion
+        occurred_at: $.occurredAt
+        producer: $.producer
+        correlation_id: $.correlationId
+        causation_id: $.causationId
+        trace_id: $.traceId
+        aggregate_type: $.aggregateType
+        aggregate_id: $.aggregateId
+        sequence: $.sequence
+        kafka_topic: meta:kafka_topic
+        kafka_partition: meta:kafka_partition
+        kafka_offset: meta:kafka_offset
+        service_version: header:x-service-version
+        payload: json_encode($.payload)
+        ingested_at: function:utc_now
+    delivery_identity:
+      fields: [kafka_topic, kafka_partition, kafka_offset]
+      query_policy: select_one_row_per_delivery_identity
+      rationale: Kafka Connect Sink may redeliver an uncommitted offset after failure; sink redelivery is not a business duplicate.
+    output:
+      component: clickhouse_materialized_view
+      connector_config: ../../infra/kafka-connect-clickhouse/connectors/poc-raw-landing.json
+      canonical_view: canonical_forensics_events
+    on_validation_failure:
+      clickhouse_table: poc_event_admission_failures
+      raw_payload_database: event_hunter_poc
+      expose_raw_payload_to_api_or_grafana: false
+      store_payload_sha256: true
+      error_type: SCHEMA_VIOLATION
+    commit_policy: commit_source_offset_only_after_output_success
+
+  - id: processing-attempts-to-clickhouse-v1
+    runtime: clickhouse-kafka-connect-sink-plus-materialized-views
+    input:
+      component: redpanda
+      topics: [event-hunter.processing-attempts]
+      consumer_group: connect-event-hunter-poc-processing-attempt-raw-landing
+      start_from_oldest: true
+    validation:
+      transport_policy: store_raw_before_admission
+      admission_profile: processing-attempt-contract-v1
+      schema: ../telemetry/event-processing-attempt.schema.json
+    mapping:
+      raw_table: event_hunter_poc.poc_processing_attempt_landing_raw
+      target_table: poc_event_processing_attempts
+      columns:
+        attempt_id: $.attemptId
+        event_id: $.eventId
+        event_type: $.eventType
+        correlation_id: $.correlationId
+        trace_id: $.traceId
+        consumer_group_id: $.consumerGroupId
+        consumer_service: $.consumerService
+        attempt: $.attempt
+        processing_status: $.processingStatus
+        retry_reason: $.retryReason
+        retry_topic: $.retryTopic
+        kafka_topic: $.kafkaTopic
+        kafka_partition: $.kafkaPartition
+        kafka_offset: $.kafkaOffset
+        started_at: $.startedAt
+        completed_at: $.completedAt
+        observed_at: $.observedAt
+    delivery_identity:
+      fields: [attempt_id]
+      query_policy: select_one_row_per_attempt_id
+    output:
+      component: clickhouse_materialized_view
+      connector_config: ../../infra/kafka-connect-clickhouse/connectors/poc-processing-attempt-raw-landing.json
+      canonical_view: canonical_event_processing_attempts
+    on_validation_failure:
+      clickhouse_table: poc_processing_attempt_admission_failures
+      raw_payload_database: event_hunter_poc
+      expose_raw_payload_to_api_or_grafana: false
+      store_payload_sha256: true
+    commit_policy: commit_source_offset_only_after_raw_output_success
+
+read_query_invariants:
+  - id: unique_transport_delivery
+    table: canonical_forensics_events
+    identity: [kafka_topic, kafka_partition, kafka_offset]
+  - id: business_duplicate_candidate
+    table: canonical_forensics_events
+    definition: same event_id appears at more than one distinct transport delivery identity
+  - id: processing_attempt_identity
+    table: canonical_event_processing_attempts
+    identity: [attempt_id]

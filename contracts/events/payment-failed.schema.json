@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/payment-failed.schema.json",
+  "title": "PaymentFailed",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "PaymentFailed" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Payment" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["paymentId", "orderId", "reasonCode", "retryable", "status"],
+          "properties": {
+            "paymentId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "reasonCode": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "retryable": { "type": "boolean" },
+            "status": { "const": "FAILED" }
+          }
+        }
+      }
+    }
+  ]
+}

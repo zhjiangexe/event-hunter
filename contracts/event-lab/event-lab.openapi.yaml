@@ -1,0 +1,161 @@
+openapi: 3.1.0
+info:
+  title: Event Hunter Scenario Lab API
+  version: 0.2.0
+  description: |
+    Scenario Lab 提供固定、可重播的 S1～S14 劇本。劇本與預期檢查由程式碼管理；
+    actual、checks 與最終狀態必須由真實服務、Kafka、ClickHouse、processing attempts
+    或 ingestion failure 回查產生，不得由前端寫死。
+servers:
+  - url: http://localhost:28343
+    description: 本機 Scenario Lab
+paths:
+  /api/v1/scenarios:
+    get:
+      operationId: listScenarios
+      summary: 取得固定 Scenario catalog
+      responses:
+        '200':
+          description: 依 S1～S14 排序的唯讀 catalog。
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ScenarioDefinition' }
+  /api/v1/scenario-runs:
+    post:
+      operationId: createScenarioRun
+      summary: 啟動一個固定劇本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateScenarioRunRequest' }
+      responses:
+        '202':
+          description: 劇本已接受並開始實際執行。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScenarioRun' }
+        '404': { description: 找不到 Scenario。 }
+        '409': { description: Scenario 所需執行引擎目前不可用。 }
+        '422': { description: 輸入不符合契約。 }
+  /api/v1/scenario-runs/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getScenarioRun
+      summary: 取得實際執行結果
+      responses:
+        '200':
+          description: 包含預期、實際觀察及逐項 check。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScenarioRun' }
+        '404': { description: 找不到 run。 }
+components:
+  schemas:
+    ScenarioName:
+      type: string
+      enum:
+        - NORMAL_ORDER_FLOW
+        - PAYMENT_WITHOUT_SHIPMENT
+        - DUPLICATE_EVENT
+        - OUT_OF_ORDER_EVENT
+        - RETRY_THEN_DLQ
+        - SCHEMA_VIOLATION
+        - HIGH_EVENT_DELAY
+        - PAYMENT_FAILED_AND_CANCELLED
+        - SHIPMENT_DELIVERED
+        - SHIPMENT_DISPATCH_RETRY
+        - RETURN_AND_REFUND
+        - LIVE_PAYMENT_FAILED_AND_CANCELLED
+        - LIVE_SHIPMENT_DELIVERED
+        - LIVE_RETURN_AND_REFUND
+    ExecutionMode:
+      type: string
+      enum: [LIVE_SERVICES, LAB_INJECTION]
+    ScenarioDefinition:
+      type: object
+      additionalProperties: false
+      required: [id, name, title, category, description, execution_mode, synthetic, expected_event_types, expected_results]
+      properties:
+        id: { type: string, pattern: '^S([1-9]|1[0-4])$' }
+        name: { $ref: '#/components/schemas/ScenarioName' }
+        title: { type: string }
+        category: { type: string, enum: [RELIABILITY, LOGISTICS] }
+        description: { type: string }
+        execution_mode: { $ref: '#/components/schemas/ExecutionMode' }
+        synthetic: { type: boolean }
+        expected_event_types:
+          type: array
+          items: { type: string }
+        expected_results:
+          type: array
+          items: { type: string }
+    CreateScenarioRunRequest:
+      type: object
+      additionalProperties: false
+      required: [scenario_id]
+      properties:
+        scenario_id: { type: string, pattern: '^S([1-9]|1[0-4])$' }
+    ScenarioCheck:
+      type: object
+      additionalProperties: false
+      required: [id, label, expected, actual, passed]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        expected: {}
+        actual: {}
+        passed: { type: boolean }
+    ScenarioActual:
+      type: object
+      additionalProperties: false
+      required: [trace_id, event_count, event_types, duplicate_event_ids, out_of_order, processing_statuses, ingestion_failure_count, ingestion_failure_types, max_event_delay_ms]
+      properties:
+        trace_id: { type: [string, 'null'], pattern: '^[0-9a-f]{32}$' }
+        event_count: { type: integer, minimum: 0 }
+        event_types: { type: array, items: { type: string } }
+        duplicate_event_ids: { type: array, items: { type: string } }
+        out_of_order: { type: boolean }
+        processing_statuses: { type: array, items: { type: string } }
+        ingestion_failure_count: { type: integer, minimum: 0 }
+        ingestion_failure_types: { type: array, items: { type: string } }
+        max_event_delay_ms: { type: integer, minimum: 0 }
+    ScenarioLinks:
+      type: object
+      additionalProperties: false
+      required: [timeline, grafana, tempo, loki]
+      properties:
+        timeline: { type: string }
+        grafana: { type: string }
+        tempo: { type: [string, 'null'] }
+        loki: { type: string }
+    ScenarioRun:
+      type: object
+      additionalProperties: false
+      required: [run_id, scenario, correlation_id, status, execution_mode, synthetic, expected_event_types, actual, checks, links, accepted_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        scenario: { $ref: '#/components/schemas/ScenarioDefinition' }
+        correlation_id: { type: string }
+        trace_id: { type: [string, 'null'], pattern: '^[0-9a-f]{32}$' }
+        status: { type: string, enum: [ACCEPTED, RUNNING, PASSED, FAILED, TIMED_OUT] }
+        execution_mode: { $ref: '#/components/schemas/ExecutionMode' }
+        synthetic: { type: boolean }
+        expected_event_types: { type: array, items: { type: string } }
+        actual: { $ref: '#/components/schemas/ScenarioActual' }
+        checks: { type: array, items: { $ref: '#/components/schemas/ScenarioCheck' } }
+        links: { $ref: '#/components/schemas/ScenarioLinks' }
+        error: { type: [string, 'null'] }
+        accepted_at: { type: string, format: date-time }
+        started_at: { type: [string, 'null'], format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }

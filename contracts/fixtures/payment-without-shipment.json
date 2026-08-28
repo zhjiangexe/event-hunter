@@ -1,0 +1,54 @@
+{
+  "fixtureId": "payment-without-shipment",
+  "evaluationTime": "2026-08-20T11:06:00Z",
+  "events": [
+    {
+      "eventId": "evt-order-2001-001",
+      "eventType": "OrderCreated",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T11:00:00Z",
+      "producer": "order-service",
+      "correlationId": "ORDER-2001",
+      "causationId": null,
+      "traceId": "44444444444444444444444444444444",
+      "aggregateType": "Order",
+      "aggregateId": "ORDER-2001",
+      "sequence": 1,
+      "payload": {
+        "orderId": "ORDER-2001",
+        "customerId": "CUSTOMER-DEMO-2",
+        "totalAmount": 2380,
+        "currency": "TWD"
+      }
+    },
+    {
+      "eventId": "evt-payment-2001-001",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T11:00:30Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-2001",
+      "causationId": "evt-order-2001-001",
+      "traceId": "55555555555555555555555555555555",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-2001",
+      "sequence": 1,
+      "payload": {
+        "paymentId": "PAYMENT-2001",
+        "orderId": "ORDER-2001",
+        "amount": 2380,
+        "currency": "TWD"
+      }
+    }
+  ],
+  "expected": {
+    "patternId": "payment-completed-without-shipment",
+    "matched": true,
+    "severity": "HIGH",
+    "conditionCodes": [
+      "PAYMENT_COMPLETED_EXISTS",
+      "SHIPMENT_CREATED_MISSING_WITHIN_5M"
+    ]
+  }
+}
+

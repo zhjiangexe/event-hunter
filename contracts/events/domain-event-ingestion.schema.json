@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/domain-event-ingestion.schema.json",
+  "title": "DomainEventIngestion",
+  "description": "Self-contained runtime validation schema for the Phase 1 domain-event ingestion pipeline.",
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventType",
+        "eventVersion",
+        "occurredAt",
+        "producer",
+        "correlationId",
+        "causationId",
+        "traceId",
+        "aggregateType",
+        "aggregateId",
+        "sequence",
+        "payload"
+      ],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "eventType": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z][A-Za-z0-9._-]*$" },
+        "eventVersion": { "type": "integer", "minimum": 1 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "correlationId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "causationId": { "type": ["string", "null"], "maxLength": 200 },
+        "traceId": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
+        "aggregateType": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "aggregateId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "payload": { "type": "object" }
+      }
+    },
+    "orderCancelled": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "OrderCancelled" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Order" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["orderId", "reason"],
+              "properties": {
+                "orderId": { "type": "string", "minLength": 1 },
+                "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "orderCreated": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "OrderCreated" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Order" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["orderId", "customerId", "totalAmount", "currency"],
+              "properties": {
+                "orderId": { "type": "string", "minLength": 1 },
+                "customerId": { "type": "string", "minLength": 1 },
+                "totalAmount": { "type": "number", "minimum": 0 },
+                "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+                "simulationProfile": {
+                  "type": "string",
+                  "enum": ["NORMAL", "PAYMENT_FAILED", "SHIPMENT_DELIVERED", "RETURN_REFUND"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "paymentCompleted": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "PaymentCompleted" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Payment" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["paymentId", "orderId", "amount", "currency"],
+              "properties": {
+                "paymentId": { "type": "string", "minLength": 1 },
+                "orderId": { "type": "string", "minLength": 1 },
+                "amount": { "type": "number", "minimum": 0 },
+                "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+                "simulationProfile": {
+                  "type": "string",
+                  "enum": ["NORMAL", "PAYMENT_FAILED", "SHIPMENT_DELIVERED", "RETURN_REFUND"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "paymentRefunded": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "PaymentRefunded" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Payment" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["paymentId", "orderId", "amount", "reason"],
+              "properties": {
+                "paymentId": { "type": "string", "minLength": 1 },
+                "orderId": { "type": "string", "minLength": 1 },
+                "amount": { "type": "number", "minimum": 0 },
+                "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "paymentVoided": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "PaymentVoided" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Payment" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["paymentId", "orderId", "reason"],
+              "properties": {
+                "paymentId": { "type": "string", "minLength": 1 },
+                "orderId": { "type": "string", "minLength": 1 },
+                "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "paymentFailed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "PaymentFailed" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Payment" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["paymentId", "orderId", "reasonCode", "retryable", "status"],
+            "properties": {
+              "paymentId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "reasonCode": { "type": "string", "minLength": 1, "maxLength": 100 }, "retryable": { "type": "boolean" },
+              "status": { "const": "FAILED" }
+            }
+          }
+        } }
+      ]
+    },
+    "shipmentCreated": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "properties": {
+            "eventType": { "const": "ShipmentCreated" },
+            "eventVersion": { "const": 1 },
+            "aggregateType": { "const": "Shipment" },
+            "payload": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["shipmentId", "orderId", "provider", "status"],
+              "properties": {
+                "shipmentId": { "type": "string", "minLength": 1 },
+                "orderId": { "type": "string", "minLength": 1 },
+                "provider": { "type": "string", "minLength": 1 },
+                "status": { "type": "string", "enum": ["CREATED"] }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "shipmentDispatched": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ShipmentDispatched" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Shipment" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["shipmentId", "orderId", "provider", "trackingNumber", "status"],
+            "properties": {
+              "shipmentId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 }, "trackingNumber": { "type": "string", "minLength": 1 },
+              "status": { "const": "DISPATCHED" }
+            }
+          }
+        } }
+      ]
+    },
+    "shipmentInTransit": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ShipmentInTransit" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Shipment" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["shipmentId", "orderId", "location", "status"],
+            "properties": {
+              "shipmentId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "location": { "type": "string", "minLength": 1 }, "status": { "const": "IN_TRANSIT" }
+            }
+          }
+        } }
+      ]
+    },
+    "shipmentDelivered": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ShipmentDelivered" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Shipment" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["shipmentId", "orderId", "deliveredAt", "recipient", "status"],
+            "properties": {
+              "shipmentId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "deliveredAt": { "type": "string", "format": "date-time" }, "recipient": { "type": "string", "minLength": 1 },
+              "status": { "const": "DELIVERED" }
+            }
+          }
+        } }
+      ]
+    },
+    "shipmentDispatchFailed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ShipmentDispatchFailed" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Shipment" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["shipmentId", "orderId", "provider", "reasonCode", "retryable", "status"],
+            "properties": {
+              "shipmentId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "provider": { "type": "string", "minLength": 1 }, "reasonCode": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "retryable": { "type": "boolean" }, "status": { "const": "DISPATCH_FAILED" }
+            }
+          }
+        } }
+      ]
+    },
+    "returnRequested": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ReturnRequested" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Return" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["returnId", "orderId", "shipmentId", "reason", "status"],
+            "properties": {
+              "returnId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "shipmentId": { "type": "string", "minLength": 1 }, "reason": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "status": { "const": "REQUESTED" }
+            }
+          }
+        } }
+      ]
+    },
+    "returnReceived": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        { "properties": {
+          "eventType": { "const": "ReturnReceived" }, "eventVersion": { "const": 1 }, "aggregateType": { "const": "Return" },
+          "payload": { "type": "object", "additionalProperties": false,
+            "required": ["returnId", "orderId", "receivedAt", "condition", "status"],
+            "properties": {
+              "returnId": { "type": "string", "minLength": 1 }, "orderId": { "type": "string", "minLength": 1 },
+              "receivedAt": { "type": "string", "format": "date-time" }, "condition": { "type": "string", "minLength": 1, "maxLength": 100 },
+              "status": { "const": "RECEIVED" }
+            }
+          }
+        } }
+      ]
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/orderCancelled" },
+    { "$ref": "#/$defs/orderCreated" },
+    { "$ref": "#/$defs/paymentCompleted" },
+    { "$ref": "#/$defs/paymentRefunded" },
+    { "$ref": "#/$defs/paymentVoided" },
+    { "$ref": "#/$defs/paymentFailed" },
+    { "$ref": "#/$defs/shipmentCreated" },
+    { "$ref": "#/$defs/shipmentDispatched" },
+    { "$ref": "#/$defs/shipmentInTransit" },
+    { "$ref": "#/$defs/shipmentDelivered" },
+    { "$ref": "#/$defs/shipmentDispatchFailed" },
+    { "$ref": "#/$defs/returnRequested" },
+    { "$ref": "#/$defs/returnReceived" }
+  ]
+}

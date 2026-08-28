@@ -1,0 +1,249 @@
+schema_version: 1
+project: event-hunter
+decision_status: accepted
+decision_date: 2026-08-20
+
+policy:
+  host_port_namespace: 283xx
+  allocation_order: dependency_before_consumer
+  compose_internal_ports: keep_upstream_standard_ports
+  application_listen_ports: use_assigned_host_port
+  new_allocation_rule: use_the_next_free_port_in_the_matching_dependency_tier
+  excluded_host_ports:
+    - range: 28310-28312
+      reason: reserved_by_other_local_services_outside_event_hunter
+
+tiers:
+  - range: 28313-28322
+    purpose: stateful_data_and_broker_roots
+  - range: 28323-28332
+    purpose: ingestion_observability_and_operator_tools
+  - range: 28333-28340
+    purpose: application_services_and_development_tools
+  - range: 28341-28349
+    purpose: optional_services_and_workflow
+
+ports:
+  - id: event-hunter-postgres
+    host_port: 28313
+    container_port: 5432
+    env_var: POSTGRES_PORT
+    status: active
+    depends_on: []
+
+  - id: demo-order-postgres
+    host_port: 28314
+    container_port: 5432
+    env_var: DEMO_ORDER_POSTGRES_PORT
+    status: reserved
+    depends_on: []
+
+  - id: demo-payment-postgres
+    host_port: 28315
+    container_port: 5432
+    env_var: DEMO_PAYMENT_POSTGRES_PORT
+    status: reserved
+    depends_on: []
+
+  - id: demo-shipping-postgres
+    host_port: 28316
+    container_port: 5432
+    env_var: DEMO_SHIPPING_POSTGRES_PORT
+    status: reserved
+    depends_on: []
+
+  - id: clickhouse-http
+    host_port: 28317
+    container_port: 8123
+    env_var: CLICKHOUSE_HTTP_PORT
+    status: active
+    depends_on: []
+
+  - id: clickhouse-native
+    host_port: 28318
+    container_port: 9000
+    env_var: CLICKHOUSE_NATIVE_PORT
+    status: active
+    depends_on: []
+
+  - id: redpanda-kafka
+    host_port: 28319
+    container_port: 19092
+    env_var: KAFKA_PORT
+    status: active
+    depends_on: []
+
+  - id: redpanda-schema-registry
+    host_port: 28320
+    container_port: 18081
+    env_var: SCHEMA_REGISTRY_PORT
+    status: active
+    depends_on: [redpanda-kafka]
+
+  - id: redpanda-http-proxy
+    host_port: 28321
+    container_port: 18082
+    env_var: REDPANDA_HTTP_PROXY_PORT
+    status: active
+    depends_on: [redpanda-kafka]
+
+  - id: redpanda-admin
+    host_port: 28322
+    container_port: 9644
+    env_var: REDPANDA_ADMIN_PORT
+    status: active
+    depends_on: [redpanda-kafka]
+
+  - id: redpanda-console
+    host_port: 28323
+    container_port: 8080
+    env_var: REDPANDA_CONSOLE_PORT
+    status: active
+    depends_on: [redpanda-kafka, redpanda-schema-registry, redpanda-admin]
+
+  - id: kafka-connect-rest
+    host_port: 28324
+    container_port: 8083
+    env_var: KAFKA_CONNECT_REST_PORT
+    status: reserved
+    depends_on: [redpanda-kafka]
+
+  - id: prometheus
+    host_port: 28326
+    container_port: 9090
+    env_var: PROMETHEUS_PORT
+    status: active
+    depends_on: []
+
+  - id: loki
+    host_port: 28327
+    container_port: 3100
+    env_var: LOKI_PORT
+    status: active
+    depends_on: []
+
+  - id: tempo
+    host_port: 28328
+    container_port: 3200
+    env_var: TEMPO_PORT
+    status: active
+    depends_on: []
+
+  - id: otel-collector-grpc
+    host_port: 28329
+    container_port: 4317
+    env_var: OTEL_GRPC_PORT
+    status: active
+    depends_on: [tempo, loki]
+
+  - id: otel-collector-http
+    host_port: 28330
+    container_port: 4318
+    env_var: OTEL_HTTP_PORT
+    status: active
+    depends_on: [tempo, loki]
+
+  - id: otel-collector-health
+    host_port: 28331
+    container_port: 13133
+    env_var: OTEL_HEALTH_PORT
+    status: active
+    depends_on: [tempo, loki]
+
+  - id: grafana
+    host_port: 28332
+    container_port: 3000
+    env_var: GRAFANA_PORT
+    status: active
+    depends_on: [clickhouse-http, prometheus, loki, tempo]
+
+  - id: event-hunter-api
+    host_port: 28333
+    container_port: 28333
+    env_var: EVENT_HUNTER_API_PORT
+    status: reserved
+    depends_on: [event-hunter-postgres, clickhouse-http]
+
+  - id: event-hunter-frontend
+    host_port: 28334
+    container_port: 28334
+    env_var: EVENT_HUNTER_FRONTEND_PORT
+    status: reserved
+    depends_on: [event-hunter-api]
+
+  - id: demo-order-api
+    host_port: 28335
+    container_port: 28335
+    env_var: DEMO_ORDER_API_PORT
+    status: reserved
+    depends_on: [demo-order-postgres]
+
+  - id: demo-payment-service
+    host_port: 28336
+    container_port: 28336
+    env_var: DEMO_PAYMENT_SERVICE_PORT
+    status: reserved
+    depends_on: [demo-payment-postgres, redpanda-kafka]
+
+  - id: demo-shipping-service
+    host_port: 28337
+    container_port: 28337
+    env_var: DEMO_SHIPPING_SERVICE_PORT
+    status: reserved
+    depends_on: [demo-shipping-postgres, redpanda-kafka]
+
+  - id: quality-worker-health
+    host_port: 28338
+    container_port: 28338
+    env_var: QUALITY_WORKER_HEALTH_PORT
+    status: active
+    depends_on: [clickhouse-http]
+
+  - id: ui-prototype
+    host_port: 28339
+    container_port: 28339
+    env_var: UI_PROTOTYPE_PORT
+    status: development_tool
+    depends_on: []
+
+  - id: openapi-preview
+    host_port: 28340
+    container_port: 8080
+    env_var: OPENAPI_PREVIEW_PORT
+    status: development_tool
+    depends_on: []
+
+  - id: temporal-grpc
+    host_port: 28341
+    container_port: 7233
+    env_var: TEMPORAL_GRPC_PORT
+    status: optional
+    depends_on: []
+
+  - id: temporal-ui
+    host_port: 28342
+    container_port: 8233
+    env_var: TEMPORAL_UI_PORT
+    status: optional
+    depends_on: [temporal-grpc]
+
+  - id: event-lab-api
+    host_port: 28343
+    container_port: 28343
+    env_var: EVENT_LAB_PORT
+    status: active
+    depends_on: [event-hunter-postgres, redpanda-kafka, otel-collector-http]
+
+  - id: clickhouse-poc-connect-rest
+    host_port: 28345
+    container_port: 8083
+    env_var: CLICKHOUSE_POC_CONNECT_REST_PORT
+    status: active
+    depends_on: [redpanda-kafka, clickhouse-http]
+
+  - id: technical-dlq-projector-health
+    host_port: 28346
+    container_port: 8080
+    env_var: TECHNICAL_DLQ_PROJECTOR_HEALTH_PORT
+    status: active
+    depends_on: [redpanda-kafka, clickhouse-http]

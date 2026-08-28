@@ -1,0 +1,68 @@
+{
+  "fixtureId": "normal-order-flow",
+  "evaluationTime": "2026-08-20T10:06:00Z",
+  "events": [
+    {
+      "eventId": "evt-order-1001-001",
+      "eventType": "OrderCreated",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T10:00:00Z",
+      "producer": "order-service",
+      "correlationId": "ORDER-1001",
+      "causationId": null,
+      "traceId": "11111111111111111111111111111111",
+      "aggregateType": "Order",
+      "aggregateId": "ORDER-1001",
+      "sequence": 1,
+      "payload": {
+        "orderId": "ORDER-1001",
+        "customerId": "CUSTOMER-DEMO-1",
+        "totalAmount": 1280,
+        "currency": "TWD"
+      }
+    },
+    {
+      "eventId": "evt-payment-1001-001",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T10:00:30Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-1001",
+      "causationId": "evt-order-1001-001",
+      "traceId": "22222222222222222222222222222222",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-1001",
+      "sequence": 1,
+      "payload": {
+        "paymentId": "PAYMENT-1001",
+        "orderId": "ORDER-1001",
+        "amount": 1280,
+        "currency": "TWD"
+      }
+    },
+    {
+      "eventId": "evt-shipment-1001-001",
+      "eventType": "ShipmentCreated",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T10:03:00Z",
+      "producer": "shipping-service",
+      "correlationId": "ORDER-1001",
+      "causationId": "evt-payment-1001-001",
+      "traceId": "33333333333333333333333333333333",
+      "aggregateType": "Shipment",
+      "aggregateId": "SHIPMENT-1001",
+      "sequence": 1,
+      "payload": {
+        "shipmentId": "SHIPMENT-1001",
+        "orderId": "ORDER-1001",
+        "provider": "demo-logistics",
+        "status": "CREATED"
+      }
+    }
+  ],
+  "expected": {
+    "patternId": "payment-completed-without-shipment",
+    "matched": false
+  }
+}
+

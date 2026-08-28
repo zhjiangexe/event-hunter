@@ -1,0 +1,93 @@
+schema_version: 1
+project: event-hunter
+
+dependencies:
+  postgres:
+    required_for: [investigation_commands, investigation_queries, evidence_manifest, grafana_alert_intake]
+    readiness_when_unavailable: not_ready
+    api_behavior: 503
+    retry_owner: api_client_or_grafana_webhook_sender
+
+  clickhouse:
+    required_for: [business_timeline, event_search, pattern_evidence]
+    readiness_when_unavailable: not_ready
+    unavailable_behavior: 503
+    timeout_behavior: 504
+    retry_owner: api_client
+
+  redpanda:
+    required_for: [demo_event_pipeline]
+    readiness_when_unavailable: app_api_ready_but_demo_pipeline_degraded
+    producer_behavior: outbox_remains_unpublished_until_debezium_recovers
+    data_loss_allowed: false
+
+  redpanda_connect:
+    required_for: [clickhouse_event_ingestion]
+    failure_behavior: do_not_commit_source_offset
+    recovery_behavior: redeliver_and_deduplicate_by_transport_identity_at_query_time
+
+  grafana:
+    required_for: [technical_observability_ui, alert_delivery]
+    event_hunter_core_ready_when_unavailable: true
+    investigation_summary_behavior: partial_with_warning
+
+  tempo_loki_prometheus:
+    required_for: [technical_observations]
+    event_hunter_core_ready_when_unavailable: true
+    investigation_summary_behavior: partial_with_source_status
+
+  temporal:
+    required_for: []
+    enabled_by_default: false
+    core_ready_when_unavailable: true
+    requested_temporal_mode_behavior: 409_TEMPORAL_DISABLED
+
+webhook_delivery:
+  invalid_hmac:
+    http_status: 401
+    database_writes: 0
+  stale_timestamp:
+    http_status: 401
+    database_writes: 0
+  postgres_unavailable:
+    http_status: 503
+    expected_sender_behavior: retry
+  duplicate_notification:
+    http_status: 202
+    additional_cases_created: 0
+    additional_evidence_created: 0
+
+timeouts:
+  postgres_query: PT2S
+  clickhouse_timeline_query: PT3S
+  grafana_datasource_query: PT3S
+  http_request_total: PT5S
+  webhook_request_total: PT5S
+
+rate_limits:
+  api_by_remote_address:
+    window: PT1M
+    requests_per_window: 300
+    applies_to_path_prefix: /api/
+    excludes: [/health/live, /health/ready]
+    forwarded_address_headers_trusted: false
+    rejection_status: 429
+    response_headers: [RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After]
+
+query_budgets:
+  clickhouse_interactive:
+    readonly: 2
+    max_execution_time: PT3S
+    max_result_rows: 10000
+    max_result_bytes: 8388608
+    max_rows_to_read: 5000000
+    max_bytes_to_read: 536870912
+    result_overflow_mode: throw
+    max_threads: 4
+    application_context_cancellation_required: true
+
+cleanup:
+  cancelled_http_request: cancel_all_query_contexts
+  failed_quality_window: no_partial_metric_row
+  quality_scheduler_retry: keep_not_ready_and_retry_on_next_tick
+  failed_evidence_generation: no_manifest_receipt_and_write_audit_failure

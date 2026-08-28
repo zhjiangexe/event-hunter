@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/canonical-envelope.schema.json",
+  "title": "Canonical Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "occurredAt",
+    "producer",
+    "correlationId",
+    "causationId",
+    "traceId",
+    "aggregateType",
+    "aggregateId",
+    "sequence",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "eventType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+    },
+    "eventVersion": { "type": "integer", "minimum": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "correlationId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "causationId": { "type": ["string", "null"], "maxLength": 200 },
+    "traceId": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "aggregateType": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "aggregateId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "payload": { "type": "object" }
+  }
+}
+

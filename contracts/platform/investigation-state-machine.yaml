@@ -1,0 +1,54 @@
+schema_version: 1
+aggregate: InvestigationCase
+initial_state: OPEN
+terminal_states: [CLOSED]
+
+transitions:
+  - id: start-investigation
+    from: [OPEN]
+    to: INVESTIGATING
+    operation: updateInvestigation
+    roles: [INVESTIGATOR, ADMIN]
+
+  - id: wait-for-approval
+    from: [INVESTIGATING]
+    to: WAITING_APPROVAL
+    operation: updateInvestigation
+    roles: [INVESTIGATOR, ADMIN]
+
+  - id: resume-investigation
+    from: [WAITING_APPROVAL, RESOLVED]
+    to: INVESTIGATING
+    operation: updateInvestigation
+    roles: [INVESTIGATOR, ADMIN]
+
+  - id: resolve-investigation
+    from: [INVESTIGATING, WAITING_APPROVAL]
+    to: RESOLVED
+    operation: updateInvestigation
+    roles: [INVESTIGATOR, ADMIN]
+    required_fields: [root_cause, resolution_summary]
+
+  - id: close-investigation
+    from: [OPEN, INVESTIGATING, WAITING_APPROVAL, RESOLVED]
+    to: CLOSED
+    operation: closeInvestigation
+    roles: [INVESTIGATOR, ADMIN]
+    required_fields: [root_cause, resolution_summary]
+
+concurrency:
+  required_header: If-Match
+  version_field: lock_version
+  stale_version_http_status: 409
+  stale_version_error_code: OPTIMISTIC_LOCK_CONFLICT
+
+read_contract:
+  response_field: allowed_transitions
+  includes_dedicated_close_target: true
+  empty_for_terminal_state: CLOSED
+
+rules:
+  - CLOSED cannot be modified or reopened in MVP
+  - updateInvestigation cannot set status to CLOSED; closeInvestigation must be used
+  - WAITING_APPROVAL is a manual case state and does not require Temporal
+  - closing a case never changes an upstream order payment shipment or Kafka event

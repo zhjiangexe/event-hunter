@@ -1,0 +1,43 @@
+{
+  "receiver": "event-hunter-business-investigation",
+  "status": "resolved",
+  "orgId": 1,
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "PaymentCompletedWithoutShipment",
+        "event_hunter": "investigate",
+        "correlation_id": "ORDER-2001",
+        "severity": "HIGH",
+        "service": "shipping-service"
+      },
+      "annotations": {
+        "summary": "付款完成五分鐘後仍沒有 ShipmentCreated"
+      },
+      "startsAt": "2026-08-20T11:06:00Z",
+      "endsAt": "2026-08-20T11:10:00Z",
+      "generatorURL": "http://localhost:28332/alerting/grafana/event-quality-delay/view",
+      "fingerprint": "eh2001firing",
+      "values": {
+        "A": 0
+      }
+    }
+  ],
+  "groupLabels": {
+    "alertname": "PaymentCompletedWithoutShipment"
+  },
+  "commonLabels": {
+    "event_hunter": "investigate",
+    "correlation_id": "ORDER-2001",
+    "severity": "HIGH"
+  },
+  "commonAnnotations": {},
+  "externalURL": "http://localhost:28332/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"PaymentCompletedWithoutShipment\"}",
+  "truncatedAlerts": 0,
+  "title": "[RESOLVED] PaymentCompletedWithoutShipment",
+  "state": "ok",
+  "message": "Alert resolved; Event Hunter must not auto-close the investigation"
+}

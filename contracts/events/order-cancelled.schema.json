@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/order-cancelled.schema.json",
+  "title": "OrderCancelled",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "OrderCancelled" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Order" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["orderId", "reason"],
+          "properties": {
+            "orderId": { "type": "string", "minLength": 1 },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+          }
+        }
+      }
+    }
+  ]
+}
+

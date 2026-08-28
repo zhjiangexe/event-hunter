@@ -1,0 +1,475 @@
+{
+  "fixtureId": "extended-order-scenarios",
+  "cases": [
+    {
+      "fixtureId": "payment-failed-and-order-cancelled",
+      "scenario": "PAYMENT_FAILED_AND_CANCELLED",
+      "events": [
+        {
+          "eventId": "evt-order-4001-001",
+          "eventType": "OrderCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T15:00:00Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-4001",
+          "causationId": null,
+          "traceId": "40014001400140014001400140014001",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-4001",
+          "sequence": 1,
+          "payload": {
+            "orderId": "ORDER-4001",
+            "customerId": "CUSTOMER-4001",
+            "totalAmount": 890,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-4001-001",
+          "eventType": "PaymentFailed",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T15:00:10Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-4001",
+          "causationId": "evt-order-4001-001",
+          "traceId": "40014001400140014001400140014001",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-4001",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-4001",
+            "orderId": "ORDER-4001",
+            "reasonCode": "CARD_DECLINED",
+            "retryable": false,
+            "status": "FAILED"
+          }
+        },
+        {
+          "eventId": "evt-order-4001-002",
+          "eventType": "OrderCancelled",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T15:00:20Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-4001",
+          "causationId": "evt-payment-4001-001",
+          "traceId": "40014001400140014001400140014001",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-4001",
+          "sequence": 2,
+          "payload": {
+            "orderId": "ORDER-4001",
+            "reason": "Payment failed: CARD_DECLINED"
+          }
+        }
+      ]
+    },
+    {
+      "fixtureId": "shipment-delivered",
+      "scenario": "SHIPMENT_DELIVERED",
+      "events": [
+        {
+          "eventId": "evt-order-4002-001",
+          "eventType": "OrderCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:00:00Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-4002",
+          "causationId": null,
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-4002",
+          "sequence": 1,
+          "payload": {
+            "orderId": "ORDER-4002",
+            "customerId": "CUSTOMER-4002",
+            "totalAmount": 1280,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-4002-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:00:10Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-4002",
+          "causationId": "evt-order-4002-001",
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-4002",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-4002",
+            "orderId": "ORDER-4002",
+            "amount": 1280,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4002-001",
+          "eventType": "ShipmentCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:01:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4002",
+          "causationId": "evt-payment-4002-001",
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4002",
+          "sequence": 1,
+          "payload": {
+            "shipmentId": "SHIPMENT-4002",
+            "orderId": "ORDER-4002",
+            "provider": "demo-logistics",
+            "status": "CREATED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4002-002",
+          "eventType": "ShipmentDispatched",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:03:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4002",
+          "causationId": "evt-shipment-4002-001",
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4002",
+          "sequence": 2,
+          "payload": {
+            "shipmentId": "SHIPMENT-4002",
+            "orderId": "ORDER-4002",
+            "provider": "demo-logistics",
+            "trackingNumber": "TRACK-4002",
+            "status": "DISPATCHED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4002-003",
+          "eventType": "ShipmentInTransit",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:08:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4002",
+          "causationId": "evt-shipment-4002-002",
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4002",
+          "sequence": 3,
+          "payload": {
+            "shipmentId": "SHIPMENT-4002",
+            "orderId": "ORDER-4002",
+            "location": "TAIPEI-HUB",
+            "status": "IN_TRANSIT"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4002-004",
+          "eventType": "ShipmentDelivered",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T16:20:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4002",
+          "causationId": "evt-shipment-4002-003",
+          "traceId": "40024002400240024002400240024002",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4002",
+          "sequence": 4,
+          "payload": {
+            "shipmentId": "SHIPMENT-4002",
+            "orderId": "ORDER-4002",
+            "deliveredAt": "2026-08-20T16:20:00Z",
+            "recipient": "CUSTOMER",
+            "status": "DELIVERED"
+          }
+        }
+      ]
+    },
+    {
+      "fixtureId": "shipment-dispatch-retry",
+      "scenario": "SHIPMENT_DISPATCH_RETRY",
+      "events": [
+        {
+          "eventId": "evt-order-4003-001",
+          "eventType": "OrderCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:00:00Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-4003",
+          "causationId": null,
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-4003",
+          "sequence": 1,
+          "payload": {
+            "orderId": "ORDER-4003",
+            "customerId": "CUSTOMER-4003",
+            "totalAmount": 1560,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-4003-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:00:10Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-4003",
+          "causationId": "evt-order-4003-001",
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-4003",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-4003",
+            "orderId": "ORDER-4003",
+            "amount": 1560,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4003-001",
+          "eventType": "ShipmentCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:01:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4003",
+          "causationId": "evt-payment-4003-001",
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4003",
+          "sequence": 1,
+          "payload": {
+            "shipmentId": "SHIPMENT-4003",
+            "orderId": "ORDER-4003",
+            "provider": "demo-logistics",
+            "status": "CREATED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4003-002",
+          "eventType": "ShipmentDispatchFailed",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:02:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4003",
+          "causationId": "evt-shipment-4003-001",
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4003",
+          "sequence": 2,
+          "payload": {
+            "shipmentId": "SHIPMENT-4003",
+            "orderId": "ORDER-4003",
+            "provider": "demo-logistics",
+            "reasonCode": "PROVIDER_TIMEOUT",
+            "retryable": true,
+            "status": "DISPATCH_FAILED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4003-003",
+          "eventType": "ShipmentDispatched",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:04:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4003",
+          "causationId": "evt-shipment-4003-002",
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4003",
+          "sequence": 3,
+          "payload": {
+            "shipmentId": "SHIPMENT-4003",
+            "orderId": "ORDER-4003",
+            "provider": "demo-logistics",
+            "trackingNumber": "TRACK-4003",
+            "status": "DISPATCHED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4003-004",
+          "eventType": "ShipmentDelivered",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T17:12:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4003",
+          "causationId": "evt-shipment-4003-003",
+          "traceId": "40034003400340034003400340034003",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4003",
+          "sequence": 4,
+          "payload": {
+            "shipmentId": "SHIPMENT-4003",
+            "orderId": "ORDER-4003",
+            "deliveredAt": "2026-08-20T17:12:00Z",
+            "recipient": "CUSTOMER",
+            "status": "DELIVERED"
+          }
+        }
+      ]
+    },
+    {
+      "fixtureId": "return-received-and-refunded",
+      "scenario": "RETURN_AND_REFUND",
+      "events": [
+        {
+          "eventId": "evt-order-4004-001",
+          "eventType": "OrderCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:00:00Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-4004",
+          "causationId": null,
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-4004",
+          "sequence": 1,
+          "payload": {
+            "orderId": "ORDER-4004",
+            "customerId": "CUSTOMER-4004",
+            "totalAmount": 1680,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-4004-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:00:10Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-order-4004-001",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-4004",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-4004",
+            "orderId": "ORDER-4004",
+            "amount": 1680,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4004-001",
+          "eventType": "ShipmentCreated",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:01:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-payment-4004-001",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4004",
+          "sequence": 1,
+          "payload": {
+            "shipmentId": "SHIPMENT-4004",
+            "orderId": "ORDER-4004",
+            "provider": "demo-logistics",
+            "status": "CREATED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4004-002",
+          "eventType": "ShipmentDispatched",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:03:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-shipment-4004-001",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4004",
+          "sequence": 2,
+          "payload": {
+            "shipmentId": "SHIPMENT-4004",
+            "orderId": "ORDER-4004",
+            "provider": "demo-logistics",
+            "trackingNumber": "TRACK-4004",
+            "status": "DISPATCHED"
+          }
+        },
+        {
+          "eventId": "evt-shipment-4004-003",
+          "eventType": "ShipmentDelivered",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:20:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-shipment-4004-002",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Shipment",
+          "aggregateId": "SHIPMENT-4004",
+          "sequence": 3,
+          "payload": {
+            "shipmentId": "SHIPMENT-4004",
+            "orderId": "ORDER-4004",
+            "deliveredAt": "2026-08-20T18:20:00Z",
+            "recipient": "CUSTOMER",
+            "status": "DELIVERED"
+          }
+        },
+        {
+          "eventId": "evt-return-4004-001",
+          "eventType": "ReturnRequested",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:30:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-shipment-4004-003",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Return",
+          "aggregateId": "RETURN-4004",
+          "sequence": 1,
+          "payload": {
+            "returnId": "RETURN-4004",
+            "orderId": "ORDER-4004",
+            "shipmentId": "SHIPMENT-4004",
+            "reason": "ITEM_DAMAGED",
+            "status": "REQUESTED"
+          }
+        },
+        {
+          "eventId": "evt-return-4004-002",
+          "eventType": "ReturnReceived",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:45:00Z",
+          "producer": "shipping-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-return-4004-001",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Return",
+          "aggregateId": "RETURN-4004",
+          "sequence": 2,
+          "payload": {
+            "returnId": "RETURN-4004",
+            "orderId": "ORDER-4004",
+            "receivedAt": "2026-08-20T18:45:00Z",
+            "condition": "DAMAGED",
+            "status": "RECEIVED"
+          }
+        },
+        {
+          "eventId": "evt-payment-4004-002",
+          "eventType": "PaymentRefunded",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T18:46:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-4004",
+          "causationId": "evt-return-4004-002",
+          "traceId": "40044004400440044004400440044004",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-4004",
+          "sequence": 2,
+          "payload": {
+            "paymentId": "PAYMENT-4004",
+            "orderId": "ORDER-4004",
+            "amount": 1680,
+            "reason": "RETURN_RECEIVED"
+          }
+        }
+      ]
+    }
+  ]
+}

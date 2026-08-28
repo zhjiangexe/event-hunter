@@ -1,0 +1,98 @@
+schema_version: 1
+project: event-hunter
+runtime: kafka-connect-with-debezium-postgresql
+
+outbox_table:
+  qualified_name: public.outbox_events
+  write_model: insert_only
+  payload_semantics: complete_canonical_event_envelope
+  columns:
+    id: uuid_primary_key_same_as_event_id
+    aggregate_type: varchar_not_null
+    aggregate_id: varchar_not_null
+    event_type: varchar_not_null
+    topic_name: varchar_not_null
+    scenario_run_id: nullable_uuid_for_event_lab_only
+    correlation_id: varchar_not_null
+    trace_id: nullable_trace_id
+    trace_parent: nullable_w3c_traceparent
+    trace_state: nullable_w3c_tracestate
+    service_version: varchar_not_null
+    payload: jsonb_not_null
+    occurred_at: timestamptz_not_null
+    created_at: timestamptz_not_null
+  cleanup:
+    minimum_age: P7D
+    delete_only_after_connector_offset_has_advanced: true
+
+shared_connector_config:
+  connector.class: io.debezium.connector.postgresql.PostgresConnector
+  plugin.name: pgoutput
+  publication.autocreate.mode: filtered
+  table.include.list: public.outbox_events
+  snapshot.mode: initial
+  tombstones.on.delete: "false"
+  key.converter: org.apache.kafka.connect.storage.StringConverter
+  value.converter: org.apache.kafka.connect.json.JsonConverter
+  value.converter.schemas.enable: "false"
+  transforms: outbox
+  transforms.outbox.type: io.debezium.transforms.outbox.EventRouter
+  transforms.outbox.table.field.event.id: id
+  transforms.outbox.table.field.event.key: correlation_id
+  transforms.outbox.table.field.event.payload: payload
+  transforms.outbox.table.field.event.timestamp: occurred_at
+  transforms.outbox.table.expand.json.payload: "true"
+  transforms.outbox.table.json.payload.null.behavior: optional_bytes
+  transforms.outbox.table.op.invalid.behavior: fatal
+  transforms.outbox.route.by.field: topic_name
+  transforms.outbox.route.topic.regex: "(?<routedByValue>.*)"
+  transforms.outbox.route.topic.replacement: '${routedByValue}'
+  transforms.outbox.table.fields.additional.placement: event_type:header:eventType,service_version:header:x-service-version,trace_parent:header:traceparent,trace_state:header:tracestate
+
+connectors:
+  - id: demo-order-outbox-v1
+    service: order-service
+    output_topic: order.events
+    config_overrides:
+      database.hostname: demo-order-postgres
+      database.port: "5432"
+      database.dbname: demo_order
+      database.user: ${DEMO_ORDER_POSTGRES_USER}
+      database.password: ${DEMO_ORDER_POSTGRES_PASSWORD}
+      slot.name: event_hunter_demo_order_outbox_v1
+      topic.prefix: demo-order
+      transforms.outbox.route.topic.replacement: order.events
+
+  - id: demo-payment-outbox-v1
+    service: payment-service
+    output_topic: payment.events
+    config_overrides:
+      database.hostname: demo-payment-postgres
+      database.port: "5432"
+      database.dbname: demo_payment
+      database.user: ${DEMO_PAYMENT_POSTGRES_USER}
+      database.password: ${DEMO_PAYMENT_POSTGRES_PASSWORD}
+      slot.name: event_hunter_demo_payment_outbox_v1
+      topic.prefix: demo-payment
+      transforms.outbox.route.topic.replacement: payment.events
+
+  - id: demo-shipping-outbox-v1
+    service: shipping-service
+    output_topic: shipping.events
+    config_overrides:
+      database.hostname: demo-shipping-postgres
+      database.port: "5432"
+      database.dbname: demo_shipping
+      database.user: ${DEMO_SHIPPING_POSTGRES_USER}
+      database.password: ${DEMO_SHIPPING_POSTGRES_PASSWORD}
+      slot.name: event_hunter_demo_shipping_outbox_v1
+      topic.prefix: demo-shipping
+      transforms.outbox.route.topic.replacement: shipping.events
+
+invariants:
+  - scenario state and outbox rows commit in the same local PostgreSQL transaction
+  - Debezium is the only publisher of outbox rows to Domain Event topics
+  - Kafka message key is correlation_id
+  - downstream consumers deduplicate by eventId and consumerGroupId
+  - connector restart may redeliver and therefore exactly_once_delivery is not claimed
+  - W3C traceparent and tracestate are copied from the transactional outbox row to Kafka headers

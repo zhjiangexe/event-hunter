@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/shipment-in-transit.schema.json",
+  "title": "ShipmentInTransit",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "ShipmentInTransit" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Shipment" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shipmentId", "orderId", "location", "status"],
+          "properties": {
+            "shipmentId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "location": { "type": "string", "minLength": 1 },
+            "status": { "const": "IN_TRANSIT" }
+          }
+        }
+      }
+    }
+  ]
+}

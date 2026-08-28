@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/journey-profile.schema.json",
+  "title": "Event Hunter Journey Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "id",
+    "version",
+    "status",
+    "default",
+    "title",
+    "description",
+    "milestones",
+    "journey_state_rules",
+    "anomaly_rules",
+    "data_quality"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "contract_version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+    "version": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["active", "draft", "retired"] },
+    "default": { "type": "boolean" },
+    "title": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/milestone" }
+    },
+    "journey_state_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/stateRule" }
+    },
+    "anomaly_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/anomalyRule" }
+    },
+    "data_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detect_duplicate_event_ids"],
+      "properties": {
+        "detect_duplicate_event_ids": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "eventTypeList": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{1,127}$" }
+    },
+    "stateRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "when_any_event_types"],
+      "properties": {
+        "state": { "enum": ["IN_PROGRESS", "COMPLETED", "FAILED", "COMPENSATED"] },
+        "when_any_event_types": { "$ref": "#/$defs/eventTypeList" },
+        "unless_any_event_types": { "$ref": "#/$defs/eventTypeList" }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "expected_event_types", "state_rules"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,31}$" },
+        "label": { "type": "string", "minLength": 1 },
+        "expected_event_types": { "$ref": "#/$defs/eventTypeList" },
+        "state_rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/stateRule" }
+        }
+      }
+    },
+    "anomalyRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "trigger_event_types",
+        "required_any_event_types",
+        "evidence_event_types",
+        "grace_period_seconds"
+      ],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
+        "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "message": { "type": "string", "minLength": 1 },
+        "trigger_event_types": { "$ref": "#/$defs/eventTypeList" },
+        "required_any_event_types": { "$ref": "#/$defs/eventTypeList" },
+        "evidence_event_types": { "$ref": "#/$defs/eventTypeList" },
+        "grace_period_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 }
+      }
+    }
+  }
+}

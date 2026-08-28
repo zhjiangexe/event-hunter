@@ -1,0 +1,106 @@
+schema_version: 1
+project: event-hunter
+worker:
+  scheduler_command: quality-worker schedule
+  schedule: PT1M
+  window:
+    type: tumbling
+    duration: PT1M
+    timezone: UTC
+  late_arrival_grace: PT2M
+  health_endpoint: /health/ready
+  failure_behavior: remain_not_ready_and_retry_same_eligible_window_on_next_tick
+  backfill:
+    command: quality-worker aggregate
+    required_arguments: [from, to]
+    maximum_range: P31D
+    recalculation_storage: append_revision
+    consumer_rule: select_latest_calculated_at_for_each_window_and_dimension
+  temporal_used: false
+  output_table: event_quality_metrics
+  source_value: quality-worker-v1
+
+delivery_identity:
+  fields: [kafka_topic, kafka_partition, kafka_offset]
+  rule: multiple ClickHouse rows with the same delivery identity count as one transport delivery
+
+metrics:
+  - column: event_count
+    source: forensics_events
+    definition: count distinct delivery identities in the window
+
+  - column: duplicate_count
+    source: forensics_events
+    definition: count event_ids that occur at more than one distinct delivery identity in the window
+    excludes: repeated ClickHouse rows with the same delivery identity
+
+  - column: schema_violation_count
+    source: event_ingestion_failures
+    definition: count distinct delivery identities whose error_type is SCHEMA_VIOLATION
+
+  - column: out_of_order_count
+    source: forensics_events
+    definition: count new event_ids whose sequence is less than or equal to the prior maximum sequence for the same aggregate_type and aggregate_id in Kafka offset order
+    note: a sequence gap is a missing-sequence candidate and is not counted as out-of-order
+
+  - column: dlq_count
+    sources: [event_ingestion_failures, event_processing_attempts]
+    definition: ingestion DLQ deliveries plus distinct event_id and consumer_group_id pairs whose terminal processing_status is DLQ
+
+  - column: max_event_delay_ms
+    source: forensics_events
+    definition: maximum of non-negative ingested_at minus occurred_at in milliseconds
+
+  - column: consumer_lag_messages
+    source: redpanda_consumer_group_metrics
+    definition: broker log end offset minus consumer group committed offset sampled at window_end
+    unavailable_value: null
+
+  - column: max_processing_latency_ms
+    source: event_processing_attempts
+    definition: maximum completed_at minus started_at in milliseconds for completed attempts
+    unavailable_value: null
+
+alert_thresholds:
+  - id: duplicate-rate-warning
+    expression: duplicate_count / max(event_count, 1) > 0.001
+    for: PT5M
+    severity: MEDIUM
+  - id: duplicate-rate-critical
+    expression: duplicate_count / max(event_count, 1) > 0.01
+    for: PT5M
+    severity: HIGH
+  - id: schema-violation
+    expression: schema_violation_count > 0
+    for: PT1M
+    severity: HIGH
+  - id: dlq-detected
+    expression: dlq_count > 0
+    for: PT1M
+    severity: HIGH
+  - id: event-delay-warning
+    expression: max_event_delay_ms > 30000
+    for: PT5M
+    severity: MEDIUM
+  - id: consumer-lag-critical
+    expression: consumer_lag_messages > 10000
+    for: PT5M
+    severity: HIGH
+
+grafana_alert_intake_eligibility:
+  required_labels:
+    event_hunter: investigate
+    correlation_id: non_empty
+  allowed_severities: [HIGH, CRITICAL]
+  aggregate_alert_without_correlation_id: remain_in_grafana_only
+  business_alert_rules:
+    - id: dlq-business-investigation
+      source: event_processing_attempts
+      dimension: [event_id, consumer_group_id]
+      terminal_condition: latest_processing_status_is_DLQ
+      correlation_id_source: latest_attempt_correlation_id
+      grafana_rule_uid: event-hunter-dlq-investigation
+      labels:
+        event_hunter: investigate
+        severity: HIGH
+      route: event-hunter-investigation

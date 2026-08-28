@@ -1,0 +1,3825 @@
+openapi: 3.1.0
+info:
+  title: Event Hunter API
+  version: 0.1.0
+  summary: 事件驅動架構治理與業務事故鑑識 API 草案
+  description: |
+    Event Hunter 是建立在 Kafka、ClickHouse 與 OpenTelemetry 資料之上的
+    業務級事件鑑識平台。本文件保留完整的未來 API 草案；MVP 的 Event Hunter
+    使用者介面聚焦 Business Timeline、Investigation、固定 Domain Pattern 與
+    Evidence Bundle，另包含 Grafana 業務告警接入、事件品質聚合與可展示的
+    Outbox-to-Timeline 管線等 supporting capabilities。
+    Event Catalog、Topic Registry、Event Hunter 自建 Runtime Quality UI 與 Replay
+    是延後功能，先由 Schema Registry／Kafka tooling／Grafana OSS 等既有元件處理。
+    Grafana OSS 負責 Logs／Metrics／Traces、Dashboard、Explore、Correlations 與
+    Alerting；Event Hunter 只接收需要業務調查的 Grafana Alert Webhook，並保存參照。
+
+    ### 重要邊界
+
+    - 第一版 Pattern Engine 只做固定規則的唯讀調查，不直接修改正式業務資料。
+    - `forensics_events` 等事件資料位於 ClickHouse；案件、權限與設定位於 PostgreSQL。
+    - Temporal 是預設關閉的選用能力，只負責低頻、可重試、可能等待人工核准的案件流程；MVP 核心功能不依賴 Temporal。
+    - Kafka Consumer 的事件重試由 Consumer Framework／Retry Topic／DLQ 處理；Event Hunter 只有在來源提供 attempt 與錯誤資訊時才呈現重試摘要。
+    - Production Redrive（把歷史事件重新送回正式事件流）不在本 API 草案範圍內。
+  contact:
+    name: Event Hunter Team
+  license:
+    name: Proprietary / Internal Draft
+servers:
+  - url: http://localhost:28333
+    description: 本機開發環境
+  - url: https://event-hunter.example.com
+    description: 預留的部署環境（尚未實作）
+x-event-hunter-api-protection:
+  appliesToPathPrefix: /api/
+  rateLimitPolicy: contracts/platform/failure-policy.yaml#/rate_limits/api_by_remote_address
+  timeoutPolicy: contracts/platform/failure-policy.yaml#/timeouts/http_request_total
+  description: 所有 `/api/` 回應都可能依平台保護政策回傳 429；依賴來源逾時的查詢回傳 504。
+tags:
+  - name: Demo Auth
+    description: MVP 示範用角色 Session；不建立帳號、密碼或使用者資料表，正式環境改接外部 OIDC。
+    x-mvp-status: mvp
+  - name: Event Catalog
+    description: 【暫先不做】管理事件類型、Producer、Consumer 與 Schema 版本；MVP 使用既有 Schema Registry。
+    x-mvp-status: deferred
+  - name: Topic Registry
+    description: 【暫先不做】管理 Kafka Topic 的治理設定與訂閱關係；MVP 使用 Kafka／Redpanda tooling。
+    x-mvp-status: deferred
+  - name: Runtime Quality
+    description: 【暫先不做 Event Hunter API】事件延遲、重複、Schema 違規、亂序候選與 Consumer lag 由 ClickHouse + Grafana 處理。
+    x-mvp-status: deferred-for-event-hunter
+  - name: Grafana Alert Intake
+    description: 接收經 HMAC 驗證、具 correlationId 的選定 Grafana 業務告警；不取代 Grafana Alerting。
+    x-mvp-status: mvp
+  - name: Business Timeline
+    description: 依 correlationId 或事件條件重建唯讀的業務時間線。
+    x-mvp-status: mvp
+  - name: Ingestion Issues
+    description: 統一查詢 Schema 驗證、Admission quarantine 與 technical DLQ 的安全摘要；不回傳 raw payload 或 exception 細節。
+    x-mvp-status: phase-1.1
+  - name: Journey Profile Registry
+    description: 列出由 YAML contract 編譯進 API 的唯讀 Journey Profiles；執行期不提供編輯或發布。
+    x-mvp-status: phase-1.1
+  - name: Investigation
+    description: 建立、分析、指派、更新與結案的業務調查案件。
+    x-mvp-status: mvp
+  - name: Pattern Registry
+    description: 列出由 Go 程式碼註冊的確定性 Domain Pattern；MVP 不允許執行期修改。
+    x-mvp-status: mvp
+  - name: Replay
+    description: 【Phase 2／3】Projection Rebuild 與 Sandbox Behavioral Replay 的受控流程，MVP 不提供。
+    x-mvp-status: phase-2-3
+paths:
+  /api/v1/auth/demo-session:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    post:
+      tags: [Demo Auth]
+      operationId: createDemoSession
+      summary: 選擇示範角色並建立 Session
+      description: 只供本機與作品展示使用；伺服器簽署 HttpOnly Cookie，不建立使用者資料。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DemoSessionRequest'
+      responses:
+        '200':
+          description: Session 建立成功。
+          headers:
+            Set-Cookie:
+              description: 簽署的 `eh_demo_session` HttpOnly Cookie。
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPrincipal'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    delete:
+      tags: [Demo Auth]
+      operationId: deleteDemoSession
+      summary: 清除目前示範 Session
+      responses:
+        '204':
+          description: Session 已清除。
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/auth/me:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    get:
+      tags: [Demo Auth]
+      operationId: getCurrentPrincipal
+      summary: 取得目前角色與權限
+      responses:
+        '200':
+          description: 目前 Session 的角色與有效權限。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentPrincipal'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/patterns:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    get:
+      tags: [Pattern Registry]
+      operationId: listPatterns
+      summary: 列出可執行的確定性 Pattern
+      description: 回傳由 Go 程式碼註冊的 Pattern metadata；MVP 不提供新增、修改或刪除 API。
+      responses:
+        '200':
+          description: Pattern 清單。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PatternDefinition'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/patterns/effectiveness:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    get:
+      tags: [Pattern Registry]
+      operationId: getPatternEffectiveness
+      summary: 取得 Pattern 成效摘要
+      description: >-
+        由後端在固定 30 天窗口彙總 PostgreSQL pattern findings；資料來源失敗時回傳 503，
+        不以零值偽裝成沒有命中。Pattern definition 仍由 Git-managed YAML registry 提供。
+      responses:
+        '200':
+          description: 已啟用 Pattern 的成效摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatternEffectivenessSummary'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/events:
+    x-mvp-status: deferred
+    x-owner: schema-registry
+    get:
+      tags: [Event Catalog]
+      operationId: listEventDefinitions
+      summary: 列出事件定義
+      description: 查詢平台已登錄的事件類型。這不是從 ClickHouse 查詢原始事件，而是查詢 PostgreSQL 控制面中的事件目錄。
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageCursor'
+        - name: producer
+          in: query
+          description: 只回傳指定 Producer 的事件定義。
+          schema:
+            type: string
+        - name: lifecycle_status
+          in: query
+          description: 事件生命週期狀態。
+          schema:
+            $ref: '#/components/schemas/LifecycleStatus'
+      responses:
+        '200':
+          description: 事件定義清單。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDefinitionPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags: [Event Catalog]
+      operationId: createEventDefinition
+      summary: 建立事件定義
+      description: 建立一個事件類型的治理資料。事件本身仍由業務服務透過 Outbox 與 Kafka 發布。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventDefinitionRequest'
+      responses:
+        '201':
+          description: 建立成功。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDefinition'
+        '409':
+          description: 同一事件類型已存在，或版本衝突。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/events/{eventType}:
+    x-mvp-status: deferred
+    x-owner: schema-registry
+    parameters:
+      - $ref: '#/components/parameters/EventType'
+    get:
+      tags: [Event Catalog]
+      operationId: getEventDefinition
+      summary: 取得事件定義
+      description: 取得指定事件類型與其目前治理狀態。
+      responses:
+        '200':
+          description: 事件定義。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventDefinition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/events/{eventType}/schemas:
+    x-mvp-status: deferred
+    x-owner: schema-registry
+    parameters:
+      - $ref: '#/components/parameters/EventType'
+    post:
+      tags: [Event Catalog]
+      operationId: createEventSchemaVersion
+      summary: 登錄事件 Schema 版本
+      description: 建立事件 Schema 的不可變版本；Lifecycle metadata 可由後續控制面 API 更新。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventSchemaVersionRequest'
+      responses:
+        '201':
+          description: Schema 版本建立成功。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSchemaVersion'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 版本號已存在或不符合相容性政策。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/topics:
+    x-mvp-status: deferred
+    x-owner: kafka-tooling
+    get:
+      tags: [Topic Registry]
+      operationId: listTopics
+      summary: 列出 Kafka Topic
+      description: 查詢 Topic Registry。Topic 名稱中的 `/` 或特殊字元必須依 URL 規則編碼。
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageCursor'
+        - name: owner
+          in: query
+          description: 依負責團隊篩選。
+          schema:
+            type: string
+        - name: pii_classification
+          in: query
+          description: PII 分類。
+          schema:
+            $ref: '#/components/schemas/PiiClassification'
+      responses:
+        '200':
+          description: Topic 清單。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicPage'
+    post:
+      tags: [Topic Registry]
+      operationId: createTopic
+      summary: 登錄 Kafka Topic
+      description: 在控制面登錄一個已存在或即將建立的 Kafka Topic，不會由此 API 直接建立 Kafka 資源。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTopicRequest'
+      responses:
+        '201':
+          description: Topic 登錄成功。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicRegistration'
+        '409':
+          description: Topic 已登錄或版本衝突。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/topics/{topicName}:
+    x-mvp-status: deferred
+    x-owner: kafka-tooling
+    parameters:
+      - $ref: '#/components/parameters/TopicName'
+    get:
+      tags: [Topic Registry]
+      operationId: getTopic
+      summary: 取得 Topic 設定
+      description: 取得指定 Topic 的保留、排序、PII 與 Owner 設定。
+      responses:
+        '200':
+          description: Topic 設定。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicRegistration'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Topic Registry]
+      operationId: updateTopic
+      summary: 更新 Topic 治理設定
+      description: 使用樂觀鎖更新 Topic。請以 `If-Match` 傳入 GET 回應的 ETag，避免覆蓋其他人的修改。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTopicRequest'
+      responses:
+        '200':
+          description: 更新成功。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicRegistration'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Topic Registry]
+      operationId: deleteTopic
+      summary: 停用 Topic Registry 設定
+      description: 預設採軟刪除或標記為 `DEPRECATED`，不會刪除 Kafka 中的 Topic 與歷史訊息。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: 停用成功，沒有回應內容。
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/quality/summary:
+    x-mvp-status: deferred-for-event-hunter
+    x-owner: grafana-clickhouse
+    get:
+      tags: [Runtime Quality]
+      operationId: getQualitySummary
+      summary: 取得事件品質摘要
+      description: 回傳指定時間範圍內的 Consumer lag、延遲、重複、Schema 違規、亂序候選與 DLQ 統計。
+      parameters:
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - name: topic_name
+          in: query
+          description: 選填；只統計指定 Topic。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 品質摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualitySummary'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/quality/topics/{topicName}:
+    x-mvp-status: deferred-for-event-hunter
+    x-owner: grafana-clickhouse
+    parameters:
+      - $ref: '#/components/parameters/TopicName'
+    get:
+      tags: [Runtime Quality]
+      operationId: getTopicQuality
+      summary: 取得單一 Topic 品質
+      description: 查詢指定 Topic 的分區、Consumer group 與品質指標。
+      parameters:
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+      responses:
+        '200':
+          description: Topic 品質資料。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicQuality'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/quality/violations:
+    x-mvp-status: deferred-for-event-hunter
+    x-owner: grafana-clickhouse
+    get:
+      tags: [Runtime Quality]
+      operationId: listQualityViolations
+      summary: 列出事件品質違規
+      description: 列出可供調查的品質違規候選；重複或亂序本身不代表業務事故，仍需搭配 Domain Invariant 判斷。
+      parameters:
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - name: violation_type
+          in: query
+          description: 違規類型，例如 `DUPLICATE_EVENT`、`OUT_OF_ORDER_CANDIDATE`。
+          schema:
+            type: string
+        - name: severity
+          in: query
+          description: 最低嚴重度。
+          schema:
+            $ref: '#/components/schemas/Severity'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/PageCursor'
+      responses:
+        '200':
+          description: 違規清單。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityViolationPage'
+
+  /api/v1/integrations/grafana/alerts:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    post:
+      tags: [Grafana Alert Intake]
+      operationId: receiveGrafanaAlertWebhook
+      summary: 接收需要業務調查的 Grafana Alert Webhook
+      description: |
+        接收 Grafana 預設 webhook payload。伺服器必須先驗證 raw body 的 HMAC-SHA256：
+        `hex(HMAC(secret, timestamp + ":" + rawBody))`，並拒絕與伺服器時間相差超過 300 秒的 timestamp。
+
+        每個 alert 個別處理。只有 `status=firing`，且 labels 同時包含
+        `event_hunter=investigate`、非空 `correlation_id` 與 `HIGH`／`CRITICAL` severity 時，
+        才能建立或連結 Investigation Case。`resolved` 只新增 Evidence 與 receipt，絕不自動結案。
+        firing alert 會連結 correlation_id 完全相同且尚未 CLOSED 的最新案件；沒有時以
+        `Grafana: {alertname} [{correlation_id}]` 建立 OPEN 案件。resolved alert 只連結同一
+        orgId、fingerprint 與 correlation_id 的既有 firing receipt；沒有相符案件時記為 IGNORED。
+
+        dedup key 是下列陣列經 RFC 8785 JCS canonicalization 後的 SHA-256：
+        `[orgId, receiver, groupKey, fingerprint, status, startsAt, endsAt]`。重送相同 alert 仍回傳 202，
+        disposition 為 `DUPLICATE`，不可再次建立案件。
+      security:
+        - grafanaHmac: []
+      parameters:
+        - name: X-Grafana-Alerting-Timestamp
+          in: header
+          required: true
+          description: Grafana HMAC 設定加入簽章的 Unix timestamp（秒）。
+          schema:
+            type: string
+            pattern: '^[0-9]{10}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './contracts/integrations/grafana-alert-webhook.schema.json'
+      responses:
+        '202':
+          description: Payload 已驗證；每個 alert 的建立、連結、忽略或重複結果列於回應。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrafanaAlertIntakeResult'
+        '401':
+          description: 缺少簽章、簽章不符、timestamp 過期或 timestamp 位於未來。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/timelines/{correlationId}:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+    get:
+      tags: [Business Timeline]
+      operationId: getBusinessTimeline
+      summary: 依 correlationId 重建業務時間線
+      description: 從 ClickHouse 唯讀查詢相關事件、Trace 連結與服務版本，提供調查與證據呈現；不會重送事件或修改正式系統。
+      parameters:
+        - $ref: '#/components/parameters/FromTimeOptional'
+        - $ref: '#/components/parameters/ToTimeOptional'
+        - name: include_payload
+          in: query
+          description: 只有具 `payload:read_sensitive` 權限的 ADMIN 可設為 true；回應仍會套用遞迴遮罩政策。預設為 false。
+          schema:
+            type: boolean
+            default: false
+        - name: include_processing_attempts
+          in: query
+          description: 是否回傳來源已提供的 Consumer 處理重試摘要；沒有 attempt 遙測時不會自行推斷。預設為 `false`。
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          description: 最多回傳事件數，避免查詢無上限。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1000
+      responses:
+        '200':
+          description: 業務時間線。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessTimeline'
+        '404':
+          description: 找不到任何相關事件。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/business-journeys/{correlationId}:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+    get:
+      tags: [Business Timeline]
+      operationId: getBusinessJourney
+      summary: 依 correlationId 組織唯讀 Business Journey
+      description: |
+        將既有 canonical events 依物流業務 milestone 組織成 expected/actual、跨服務 duration
+        與確定性異常提示；目前物流 profile 只有出現 ShipmentDelivered 才標示 COMPLETED。
+        此操作只讀取 ClickHouse，不建立 projection、不重送事件，也不修改正式系統。
+      parameters:
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+      responses:
+        '200':
+          description: Business Journey；查無事件時 status 為 EMPTY，不以 404 混淆資料來源狀態。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessJourney'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/journey-profiles:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Journey Profile Registry]
+      operationId: listJourneyProfiles
+      summary: 列出目前 API build 內的 Journey Profiles
+      description: |
+        回傳由 `contracts/journeys/*.yaml` 產生並編譯進目前 API build 的 immutable registry。
+        `source_path` 與 `checksum` 用來辨識來源版本；此 endpoint 不代表已提供 runtime 編輯、
+        版本選擇或發布能力。
+      responses:
+        '200':
+          description: 目前服務實際載入的 Journey Profile catalog。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JourneyProfilePage'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/events/search:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    get:
+      tags: [Business Timeline]
+      operationId: searchForensicsEvents
+      summary: 搜尋已接入的事件
+      description: 使用 allowlist 條件查詢事件。Pattern 由固定 Registry 解析，Alert 與案件 Severity 由 PostgreSQL 控制面解析為 correlation ID，再以有界條件查詢 ClickHouse；API 不接受任意 SQL。
+      parameters:
+        - name: correlation_id
+          in: query
+          description: 業務流程關聯識別碼。
+          schema:
+            type: string
+        - name: event_type
+          in: query
+          description: 事件類型，例如 `PaymentCompleted`。
+          schema:
+            type: string
+        - name: aggregate_id
+          in: query
+          description: 業務聚合識別碼。
+          schema:
+            type: string
+        - name: trace_id
+          in: query
+          description: OpenTelemetry Trace ID。
+          schema:
+            type: string
+        - name: event_id
+          in: query
+          description: 精確查詢單一事件識別碼。
+          schema:
+            type: string
+        - name: producer
+          in: query
+          description: Producer 或服務名稱。
+          schema:
+            type: string
+        - name: event_version
+          in: query
+          description: 事件版本。
+          schema:
+            type: integer
+            minimum: 1
+        - name: causation_id
+          in: query
+          description: 因果來源事件識別碼。
+          schema:
+            type: string
+        - name: kafka_topic
+          in: query
+          description: Kafka Topic。
+          schema:
+            type: string
+        - name: kafka_partition
+          in: query
+          description: Kafka partition；需搭配 topic 或 offset 使用。
+          schema:
+            type: integer
+            minimum: 0
+        - name: kafka_offset
+          in: query
+          description: Kafka offset；需搭配 topic 與 partition 使用。
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: pattern_id
+          in: query
+          description: 只回傳指定 ACTIVE Pattern 定義中的 required、expected 與 exclusion 事件類型；未知或非 ACTIVE Pattern 回傳 422 UNKNOWN_PATTERN。
+          schema:
+            type: string
+        - name: alert_id
+          in: query
+          description: Grafana Alert receipt 的穩定 fingerprint；先解析其 correlation ID，再由 from/to 限定事件時間。
+          schema:
+            type: string
+        - name: severity
+          in: query
+          description: 最低案件嚴重度；只回傳具有相同 correlation ID 且 investigation_cases.severity 達門檻的事件。
+          schema:
+            $ref: '#/components/schemas/Severity'
+        - name: include_payload
+          in: query
+          description: 只有具 `payload:read_sensitive` 權限的 ADMIN 可設為 true；回應仍會套用遞迴遮罩政策。預設為 false。
+          schema:
+            type: boolean
+            default: false
+        - name: include_processing_attempts
+          in: query
+          description: 是否回傳來源已提供的 Consumer 處理重試摘要；沒有 attempt 遙測時不會自行推斷。預設為 false。
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/FromTime'
+        - $ref: '#/components/parameters/ToTime'
+        - name: limit
+          in: query
+          description: 最多回傳事件數。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 100
+      responses:
+        '200':
+          description: 事件搜尋結果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventSearchResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/ingestion-issues:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Ingestion Issues]
+      operationId: listIngestionIssues
+      summary: 查詢事件接入問題的安全摘要
+      description: |
+        合併既有 JSON Schema 驗證失敗、ClickHouse admission quarantine 與 Kafka Connect
+        technical DLQ 投影。此 API 永不回傳 raw payload、error summary、exception message
+        或 stack trace；需要敏感原始資料時須走受控 Kafka／raw landing 維運流程。
+        未傳時間時預設為最近 72 小時，單次查詢最多七天。
+      parameters:
+        - name: from
+          in: query
+          description: 起始時間；須與 `to` 同時提供，未提供時預設 now()-72h。
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: 結束時間；須與 `from` 同時提供，未提供時預設 now()。
+          schema:
+            type: string
+            format: date-time
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/IngestionIssueKind'
+        - name: error_code
+          in: query
+          schema:
+            type: string
+        - name: source_topic
+          in: query
+          schema:
+            type: string
+        - name: correlation_id
+          in: query
+          schema:
+            type: string
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: 上一頁回應的 opaque `next_cursor`。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 依時間倒序排列的接入問題。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionIssuePage'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/investigations/overview:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Investigation]
+      operationId: getInvestigationOverview
+      summary: 取得調查總覽聚合摘要
+      description: |
+        以伺服器端可追溯讀模型聚合最近 72 小時的案件、告警、Scenario 與事件摘要。
+        單一來源失敗時仍回傳 200，但 `partial=true`，失敗來源的資料區塊為 null，
+        不得以零假裝成完整結果。
+      responses:
+        '200':
+          description: 完整或部分可用的總覽摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationOverview'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/source-health:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Operations]
+      operationId: getSourceHealth
+      summary: 取得資料來源健康狀態
+      description: 統一回傳 fresh、stale、partial 或 unavailable，供全站解釋空結果與部分失敗。
+      responses:
+        '200':
+          description: 資料來源健康摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceHealthResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/search/identify:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    post:
+      tags: [Timeline]
+      operationId: identifySmartSearchInput
+      summary: 辨識 Smart Search 輸入
+      description: |
+        只進行確定性格式驗證與候選類型回傳，不查詢事件資料。
+        使用 `event:`、`trace:`、`correlation:`、`aggregate:` 或 `alert:` 前綴可明確指定類型；
+        未指定前綴的 opaque identifier 必須由使用者選擇候選，不得直接猜測查詢。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SmartSearchRequest'
+      responses:
+        '200':
+          description: 辨識、候選或失敗結果。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SmartSearchResult'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/saved-searches:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Timeline]
+      operationId: listSavedSearches
+      summary: 列出目前 principal 的個人 Saved Searches
+      description: 只回傳 session subject 自己保存的查詢；不提供角色共享或全域搜尋。
+      responses:
+        '200':
+          description: 個人 Saved Search 清單。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSearchList'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags: [Timeline]
+      operationId: createSavedSearch
+      summary: 保存目前 bounded query state
+      description: |
+        保存 allowlisted Timeline 或 Journey query state。ABSOLUTE 固定事件鑑識時間窗；
+        RELATIVE 在每次列出時依目前時間重建最近 1 小時／24 小時／72 小時／7 天等窗口。
+        窗口最多七天，且不接受 include_payload、任意 SQL、任意 path 或外部 URL。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedSearchRequest'
+      responses:
+        '201':
+          description: Saved Search 已建立。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedSearch'
+        '409':
+          description: 同一 principal 已有相同名稱。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/saved-searches/{savedSearchId}:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    parameters:
+      - name: savedSearchId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Timeline]
+      operationId: deleteSavedSearch
+      summary: 刪除目前 principal 自己的 Saved Search
+      responses:
+        '204':
+          description: 已刪除。
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/search-presets:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    get:
+      tags: [Timeline]
+      operationId: listSearchPresets
+      summary: 列出版本化唯讀常用情境
+      description: 回傳由程式碼管理、以伺服器目前時間建立最近 72 小時 bounded URL 的唯讀 presets。
+      responses:
+        '200':
+          description: 內建常用情境。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPresetList'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    get:
+      tags: [Investigation]
+      operationId: listInvestigations
+      summary: 列出調查案件
+      description: 依狀態、嚴重度、priority、owner、tag 或 correlationId 查詢 PostgreSQL 控制面案件。
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/InvestigationStatus'
+        - name: severity
+          in: query
+          schema:
+            $ref: '#/components/schemas/Severity'
+        - name: assignee
+          in: query
+          description: v1.1 的 owner 欄位；保留 assignee 名稱以相容既有契約。
+          schema:
+            type: string
+        - name: priority
+          in: query
+          schema:
+            $ref: '#/components/schemas/CasePriority'
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: correlation_id
+          in: query
+          schema:
+            type: string
+        - name: sort_by
+          in: query
+          description: 後端 keyset 排序欄位；cursor 會綁定此值，不能跨排序重用。
+          schema:
+            type: string
+            enum: [created_at, updated_at]
+            default: created_at
+        - name: sort_order
+          in: query
+          description: 後端穩定排序方向；相同時間以案件 UUID 同方向排序。
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - $ref: '#/components/parameters/PageSize'
+        - name: cursor
+          in: query
+          description: 上一頁回應的 `next_cursor`，第一次查詢不傳。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 案件清單。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationPage'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Investigation]
+      operationId: createInvestigation
+      summary: 建立調查案件
+      description: 建立案件。Temporal Case Workflow 是預設關閉的選項；案件建立本身不會執行 Replay。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvestigationRequest'
+      responses:
+        '201':
+          description: 案件建立成功。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCase'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: 要求啟動 Temporal，但伺服器未啟用此選用能力。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations/{investigationId}:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    get:
+      tags: [Investigation]
+      operationId: getInvestigation
+      summary: 取得調查案件
+      description: 取得案件狀態、Pattern findings、證據索引與 Temporal Workflow 關聯。
+      responses:
+        '200':
+          description: 調查案件。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    patch:
+      tags: [Investigation]
+      operationId: updateInvestigation
+      summary: 更新調查案件
+      description: 更新 owner、priority、tags、關聯識別碼、狀態或根因。必須使用 `If-Match`，伺服器會以 `lock_version` 防止遺失更新；筆記只能用 append-only notes operation。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInvestigationRequest'
+      responses:
+        '200':
+          description: 更新成功。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations/{investigationId}/notes:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    post:
+      tags: [Investigation]
+      operationId: addInvestigationNote
+      summary: 追加案件協作筆記
+      description: 筆記只能新增，不能覆寫或刪除；追加與案件 lock_version 遞增在同一個 PostgreSQL transaction 內完成。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddInvestigationNoteRequest'
+      responses:
+        '201':
+          description: 筆記已追加。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddInvestigationNoteResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations/{investigationId}/evidence/events:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    post:
+      tags: [Investigation]
+      operationId: attachInvestigationEvent
+      summary: 將 Timeline event 加入既有案件
+      description: |
+        以 bounded `from`/`to` 到 ClickHouse 精確驗證 event 後，只將 EVENT reference 與
+        checksum 附加到案件，不複製 event payload。同一案件重複附加同一 event 為
+        idempotent no-op；新 evidence、related correlation 與 lock_version 在同一個
+        PostgreSQL transaction 內完成。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachInvestigationEventRequest'
+      responses:
+        '200':
+          description: Event 已附加，或相同 reference 先前已存在。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachInvestigationEventResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/investigations/{investigationId}/analyze:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    post:
+      tags: [Investigation]
+      operationId: analyzeInvestigation
+      summary: 執行 Pattern 調查
+      description: |
+        預設同步執行 immutable Registry 中所有 ACTIVE Pattern；只有進階操作明確提供
+        `pattern_ids` 時才限制執行集合。伺服器會以 correlation 的最早 canonical event
+        建立最多七天且可重現的 event-time window；沒有事件時明確回傳 `NO_EVENTS`，事件跨度
+        超過上限時回傳 `ANALYSIS_WINDOW_EXCEEDS_LIMIT`，不會以 wall-clock rolling window
+        產生誤導性的 no-match。只有要求 `TEMPORAL` 且伺服器已啟用 Temporal 時，才排入低頻 Workflow。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeInvestigationRequest'
+      responses:
+        '200':
+          description: 同步 Pattern 分析完成。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+        '202':
+          description: 選用的調查工作已排入 Temporal。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowAccepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: 案件狀態不允許分析，或要求 Temporal 但功能未啟用。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Pattern ID 不存在、未啟用或不屬於 immutable Registry。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/investigations/{investigationId}/findings/{findingId}/feedback:
+    x-mvp-status: phase-1.1
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+      - name: findingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [Investigation]
+      operationId: classifyPatternFinding
+      summary: 記錄 Pattern finding 的人工判定
+      description: |
+        不修改 append-only finding；只更新獨立的人工判定 current state。必須以 finding feedback
+        的 `lock_version` 傳入 `If-Match`，更新與 `CLASSIFY_PATTERN_FINDING` audit 在同一個
+        PostgreSQL transaction 內完成。`UNREVIEWED` 是尚未判定的虛擬初始狀態，不能寫入。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassifyPatternFindingRequest'
+      responses:
+        '200':
+          description: 人工判定已更新。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatternFindingFeedback'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+
+  /api/v1/investigations/{investigationId}/summary:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    get:
+      tags: [Investigation]
+      operationId: getInvestigationSummary
+      summary: 取得案件整合摘要
+      description: 組合 PostgreSQL 案件資料、ClickHouse 業務時間線、Pattern finding 與技術觀測參照；非必要來源失敗時明確標記 partial。
+      parameters:
+        - $ref: '#/components/parameters/FromTimeOptional'
+        - $ref: '#/components/parameters/ToTimeOptional'
+        - name: include_technical
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - name: include_payload
+          in: query
+          description: 只有具 `payload:read_sensitive` 權限的 ADMIN 可設為 true；回應仍套用遞迴遮罩政策。
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          description: Summary 內 Timeline 的最大事件數。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 1000
+      responses:
+        '200':
+          description: 案件整合摘要。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          description: PostgreSQL 或 ClickHouse 必要來源無法使用。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/investigations/{investigationId}/evidence-bundle:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    get:
+      tags: [Investigation]
+      operationId: getEvidenceBundle
+      summary: 取得 Evidence Bundle JSON manifest
+      description: 產生含穩定參照與 SHA-256 的 JSON manifest；MVP 不輸出 ZIP、PDF、完整 Logs、完整 Traces 或未遮罩 PII。
+      parameters:
+        - $ref: '#/components/parameters/FromTimeOptional'
+        - $ref: '#/components/parameters/ToTimeOptional'
+      responses:
+        '200':
+          description: Evidence Bundle manifest。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceBundleManifest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations/{investigationId}/close:
+    x-mvp-status: mvp
+    x-owner: event-hunter
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    post:
+      tags: [Investigation]
+      operationId: closeInvestigation
+      summary: 結案
+      description: 將已完成調查的案件結案。結案仍需要樂觀鎖，避免同時更新造成狀態遺失。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseInvestigationRequest'
+      responses:
+        '200':
+          description: 案件已結案。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/replays:
+    x-mvp-status: phase-2-3
+    x-owner: temporal-sandbox
+    post:
+      tags: [Replay]
+      operationId: createReplay
+      summary: 建立隔離 Replay／Projection Rebuild 工作
+      description: 建立 Phase 2 Projection Rebuild 或 Phase 3 Sandbox Behavioral Replay。此 API 不會把事件重新送回正式 Kafka 或正式 Consumer。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReplayRequest'
+      responses:
+        '202':
+          description: Replay 工作建立，等待案件流程與人工核准。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplaySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: 案件狀態或環境不允許建立 Replay。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/replays/{replayId}:
+    x-mvp-status: phase-2-3
+    x-owner: temporal-sandbox
+    parameters:
+      - $ref: '#/components/parameters/ReplayId'
+    get:
+      tags: [Replay]
+      operationId: getReplay
+      summary: 取得 Replay 工作
+      description: 查詢隔離 Replay 的狀態、比較摘要、證據與 Temporal Workflow。
+      responses:
+        '200':
+          description: Replay 工作。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplaySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/replays/{replayId}/approve:
+    x-mvp-status: phase-2-3
+    x-owner: temporal-sandbox
+    parameters:
+      - $ref: '#/components/parameters/ReplayId'
+    post:
+      tags: [Replay]
+      operationId: approveReplay
+      summary: 核准隔離 Replay
+      description: 核准後只允許在指定隔離環境執行；不可將本 API 解讀為 Production Redrive 核准。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveReplayRequest'
+      responses:
+        '202':
+          description: 核准已送入 Temporal Workflow。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplaySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/replays/{replayId}/cancel:
+    x-mvp-status: phase-2-3
+    x-owner: temporal-sandbox
+    parameters:
+      - $ref: '#/components/parameters/ReplayId'
+    post:
+      tags: [Replay]
+      operationId: cancelReplay
+      summary: 取消隔離 Replay
+      description: 取消尚未完成的 Replay；若隔離工作已開始，Temporal Activity 必須執行清理與副作用攔截器關閉。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Replay 已取消或進入取消流程。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplaySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    demoSession:
+      type: apiKey
+      in: cookie
+      name: eh_demo_session
+      description: MVP 示範用的簽署 HttpOnly Cookie；不對應使用者資料表。
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 正式環境預留，由外部 OIDC／Identity Provider 核發；MVP 使用 `demoSession`。
+    grafanaHmac:
+      type: apiKey
+      in: header
+      name: X-Grafana-Alerting-Signature
+      description: |
+        Grafana Webhook Contact Point 產生的 hex HMAC-SHA256。伺服器必須搭配
+        `X-Grafana-Alerting-Timestamp` 與 raw request body 驗證，使用 constant-time comparison。
+  parameters:
+    EventType:
+      name: eventType
+      in: path
+      required: true
+      description: 事件類型，例如 `PaymentCompleted`。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+        pattern: '^[A-Za-z][A-Za-z0-9._-]*$'
+    TopicName:
+      name: topicName
+      in: path
+      required: true
+      description: Kafka Topic 名稱；特殊字元需 URL encode。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 249
+    CorrelationId:
+      name: correlationId
+      in: path
+      required: true
+      description: 串起同一筆跨服務業務流程的 correlation ID。
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 200
+    InvestigationId:
+      name: investigationId
+      in: path
+      required: true
+      description: 調查案件 UUID。
+      schema:
+        type: string
+        format: uuid
+    ReplayId:
+      name: replayId
+      in: path
+      required: true
+      description: Replay 工作 UUID。
+      schema:
+        type: string
+        format: uuid
+    PageSize:
+      name: page_size
+      in: query
+      description: 每頁筆數；伺服器仍會套用最大上限。
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    PageCursor:
+      name: page_cursor
+      in: query
+      description: 上一頁回應的 `next_cursor`，第一次查詢不傳。
+      schema:
+        type: string
+    FromTime:
+      name: from
+      in: query
+      required: true
+      description: 查詢起始時間（含）。所有分析查詢必須明確限定時間範圍。
+      schema:
+        type: string
+        format: date-time
+    ToTime:
+      name: to
+      in: query
+      required: true
+      description: 查詢結束時間（不含）。
+      schema:
+        type: string
+        format: date-time
+    FromTimeOptional:
+      name: from
+      in: query
+      description: 選填的查詢起始時間；未提供時由伺服器使用安全預設範圍。
+      schema:
+        type: string
+        format: date-time
+    ToTimeOptional:
+      name: to
+      in: query
+      description: 選填的查詢結束時間。
+      schema:
+        type: string
+        format: date-time
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: GET 回應的 ETag，例如 `W/"investigation-123-lock-v7"`。版本不符時回傳 `409 Conflict`。
+      schema:
+        type: string
+        minLength: 1
+  headers:
+    ETag:
+      description: 資源版本，用於下一次更新的 `If-Match` 樂觀鎖。
+      schema:
+        type: string
+        example: W/"investigation-123-lock-v7"
+    RateLimitLimit:
+      description: 目前固定窗口允許的最大請求數。
+      schema:
+        type: integer
+    RateLimitRemaining:
+      description: 目前固定窗口剩餘的請求數。
+      schema:
+        type: integer
+    RateLimitReset:
+      description: 距離目前窗口重設的秒數。
+      schema:
+        type: integer
+    RetryAfter:
+      description: 被限流後可重試前應等待的秒數。
+      schema:
+        type: integer
+  responses:
+    BadRequest:
+      description: 請求格式或查詢條件錯誤。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Request Schema 驗證失敗。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+    NotFound:
+      description: 找不到指定資源。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: 目前角色缺少執行此操作所需的權限。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: 樂觀鎖版本衝突或目前狀態不允許此操作。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
+    RateLimited:
+      description: 同一遠端位址在固定窗口內超過 API 請求上限。
+      headers:
+        RateLimit-Limit:
+          $ref: '#/components/headers/RateLimitLimit'
+        RateLimit-Remaining:
+          $ref: '#/components/headers/RateLimitRemaining'
+        RateLimit-Reset:
+          $ref: '#/components/headers/RateLimitReset'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DependencyUnavailable:
+      description: 必要的 PostgreSQL 或 ClickHouse 來源無法使用。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DependencyTimeout:
+      description: 必要來源超過伺服器端查詢期限。
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    DemoRole:
+      type: string
+      enum: [VIEWER, INVESTIGATOR, ADMIN]
+    DemoSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: '#/components/schemas/DemoRole'
+    CurrentPrincipal:
+      type: object
+      additionalProperties: false
+      required: [subject, role, permissions]
+      properties:
+        subject:
+          type: string
+          example: demo:investigator
+        role:
+          $ref: '#/components/schemas/DemoRole'
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          example: ['timeline:read', 'investigation:read', 'investigation:create', 'investigation:analyze']
+    GrafanaAlertDisposition:
+      type: string
+      enum: [CREATED_CASE, LINKED_CASE, IGNORED, RECORDED_RESOLUTION, DUPLICATE]
+    GrafanaAlertIntakeItem:
+      type: object
+      additionalProperties: false
+      required: [fingerprint, status, disposition, receipt_id]
+      properties:
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum: [firing, resolved]
+        disposition:
+          $ref: '#/components/schemas/GrafanaAlertDisposition'
+        receipt_id:
+          type: string
+          format: uuid
+          description: 新 receipt 或重複通知已存在的 receipt ID。
+        investigation_id:
+          type: [string, 'null']
+          format: uuid
+        reason_code:
+          type: [string, 'null']
+          enum:
+            - MISSING_CORRELATION_ID
+            - INELIGIBLE_SEVERITY
+            - NOT_MARKED_FOR_INVESTIGATION
+            - RESOLUTION_RECORDED
+            - NO_MATCHING_CASE
+            - DUPLICATE_NOTIFICATION
+            - null
+    GrafanaAlertIntakeResult:
+      type: object
+      additionalProperties: false
+      required: [received_alert_count, accepted_at, items]
+      properties:
+        received_alert_count:
+          type: integer
+          minimum: 1
+        accepted_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrafanaAlertIntakeItem'
+    PatternDefinition:
+      type: object
+      additionalProperties: false
+      required: [id, version, name, condition, severity, window, required_event_types, expected_event_types, exclusion_event_types, evidence_query_template_id, status, mutable_at_runtime, source_path, checksum, fixture_coverage]
+      properties:
+        id:
+          type: string
+          example: payment-completed-without-shipment
+        version:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          example: Payment completed without shipment
+        condition:
+          type: string
+          example: Detect a paid order that has no shipment within the fixed investigation window.
+        severity:
+          $ref: '#/components/schemas/Severity'
+        window:
+          type: string
+          format: duration
+          example: PT5M
+        required_event_types:
+          type: array
+          items:
+            type: string
+        expected_event_types:
+          type: array
+          items:
+            type: string
+        exclusion_event_types:
+          type: array
+          items:
+            type: string
+        evidence_query_template_id:
+          type: string
+          example: events.by_correlation.v1
+        status:
+          type: string
+          enum: [ACTIVE]
+          description: MVP registry 只公開目前程式碼已啟用的不可變 Pattern。
+        mutable_at_runtime:
+          type: boolean
+          const: false
+        source_path:
+          type: string
+          description: Pattern 定義在版本控制中的專案相對路徑。
+          example: contracts/patterns/payment-completed-without-shipment.yaml
+        checksum:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: 原始 YAML bytes 的 SHA-256，可用於驗證部署中的定義版本。
+        fixture_coverage:
+          $ref: '#/components/schemas/PatternFixtureCoverage'
+    PatternFixtureCoverage:
+      type: object
+      additionalProperties: false
+      required: [match_count, non_match_count, total]
+      properties:
+        match_count:
+          type: integer
+          minimum: 0
+        non_match_count:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+    PatternEffectivenessSummary:
+      type: object
+      additionalProperties: false
+      required: [generated_at, window, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window:
+          $ref: '#/components/schemas/OverviewWindow'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatternEffectivenessMetric'
+    PatternEffectivenessMetric:
+      type: object
+      additionalProperties: false
+      required: [pattern_id, hit_count, last_hit_at, investigation_count]
+      properties:
+        pattern_id:
+          type: string
+        hit_count:
+          type: integer
+          format: int64
+          minimum: 0
+        last_hit_at:
+          type: [string, 'null']
+          format: date-time
+        investigation_count:
+          type: integer
+          format: int64
+          minimum: 0
+    LifecycleStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, DEPRECATED]
+      description: 事件或 Schema 的生命週期。
+    PiiClassification:
+      type: string
+      enum: [NONE, INTERNAL, CONFIDENTIAL, RESTRICTED]
+      description: 事件可能包含的個資或敏感資料分類。
+    Severity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+      description: 案件或品質違規嚴重度。
+    SourceState:
+      type: string
+      enum: [fresh, stale, partial, unavailable]
+      description: 所有調查畫面共用的資料來源狀態。
+    SourceHealth:
+      type: object
+      additionalProperties: false
+      required: [name, state, last_success_at, lag_ms, reason]
+      properties:
+        name:
+          type: string
+          enum: [postgresql, clickhouse, tempo, loki, grafana]
+        state:
+          $ref: '#/components/schemas/SourceState'
+        last_success_at:
+          type: [string, 'null']
+          format: date-time
+        lag_ms:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        reason:
+          type: [string, 'null']
+    OverviewCountByKey:
+      type: object
+      additionalProperties: false
+      required: [key, count]
+      properties:
+        key:
+          type: string
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+    OverviewCaseCounts:
+      type: object
+      additionalProperties: false
+      required: [open, investigating, closed]
+      properties:
+        open: { type: integer, format: int64, minimum: 0 }
+        investigating: { type: integer, format: int64, minimum: 0 }
+        closed: { type: integer, format: int64, minimum: 0 }
+    OverviewSeverityCounts:
+      type: object
+      additionalProperties: false
+      required: [low, medium, high, critical]
+      properties:
+        low: { type: integer, format: int64, minimum: 0 }
+        medium: { type: integer, format: int64, minimum: 0 }
+        high: { type: integer, format: int64, minimum: 0 }
+        critical: { type: integer, format: int64, minimum: 0 }
+    OverviewRecentActivity:
+      type: object
+      additionalProperties: false
+      required: [cases_created, cases_closed, grafana_alerts, scenario_passed, scenario_failed, scenario_timed_out]
+      properties:
+        cases_created: { type: integer, format: int64, minimum: 0 }
+        cases_closed: { type: integer, format: int64, minimum: 0 }
+        grafana_alerts: { type: integer, format: int64, minimum: 0 }
+        scenario_passed: { type: integer, format: int64, minimum: 0 }
+        scenario_failed: { type: integer, format: int64, minimum: 0 }
+        scenario_timed_out: { type: integer, format: int64, minimum: 0 }
+    OverviewControlPlane:
+      type: object
+      additionalProperties: false
+      required: [cases, severity, activity, top_patterns]
+      properties:
+        cases:
+          $ref: '#/components/schemas/OverviewCaseCounts'
+        severity:
+          $ref: '#/components/schemas/OverviewSeverityCounts'
+        activity:
+          $ref: '#/components/schemas/OverviewRecentActivity'
+        top_patterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverviewCountByKey'
+    OverviewEvents:
+      type: object
+      additionalProperties: false
+      required: [event_count, latest_event_at, latest_processing_attempt_at, top_producers, top_event_types]
+      properties:
+        event_count:
+          type: integer
+          format: int64
+          minimum: 0
+        latest_event_at:
+          type: [string, 'null']
+          format: date-time
+        latest_processing_attempt_at:
+          type: [string, 'null']
+          format: date-time
+        top_producers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverviewCountByKey'
+        top_event_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverviewCountByKey'
+    OverviewWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+    InvestigationOverview:
+      type: object
+      additionalProperties: false
+      required: [generated_at, window, partial, warnings, control_plane, events, sources]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window:
+          $ref: '#/components/schemas/OverviewWindow'
+        partial:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        control_plane:
+          oneOf:
+            - $ref: '#/components/schemas/OverviewControlPlane'
+            - type: 'null'
+        events:
+          oneOf:
+            - $ref: '#/components/schemas/OverviewEvents'
+            - type: 'null'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceHealth'
+    SourceHealthResponse:
+      type: object
+      additionalProperties: false
+      required: [generated_at, partial, warnings, sources]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        partial:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceHealth'
+    SmartSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input:
+          type: string
+          maxLength: 220
+    SmartSearchStatus:
+      type: string
+      enum: [IDENTIFIED, AMBIGUOUS, INVALID]
+    SmartSearchIdentifierType:
+      type: string
+      enum: [EVENT_ID, TRACE_ID, CORRELATION_ID, AGGREGATE_ID, ALERT_FINGERPRINT]
+    SmartSearchCandidate:
+      type: object
+      additionalProperties: false
+      required: [identifier_type, query_parameter, certainty, reason]
+      properties:
+        identifier_type:
+          $ref: '#/components/schemas/SmartSearchIdentifierType'
+        query_parameter:
+          type: string
+          enum: [event_id, trace_id, correlation_id, aggregate_id, alert_id]
+        certainty:
+          type: string
+          enum: [EXACT, STRONG, CANDIDATE]
+        reason:
+          type: string
+          enum: [EXPLICIT_PREFIX, W3C_TRACE_ID_FORMAT, GRAFANA_FINGERPRINT_FORMAT, OPAQUE_IDENTIFIER_FORMAT]
+    SmartSearchResult:
+      type: object
+      additionalProperties: false
+      required: [input, normalized_input, status, candidates, message]
+      properties:
+        input:
+          type: string
+        normalized_input:
+          type: string
+        status:
+          $ref: '#/components/schemas/SmartSearchStatus'
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/SmartSearchCandidate'
+        message:
+          type: string
+          enum: [EMPTY_INPUT, INPUT_TOO_SHORT, INPUT_TOO_LONG, INVALID_EXPLICIT_IDENTIFIER, UNSUPPORTED_IDENTIFIER_FORMAT, IDENTIFIER_CONFIRMED, SELECT_IDENTIFIER_TYPE]
+    SavedSearchTarget:
+      type: string
+      enum: [TIMELINE, JOURNEY]
+    SavedSearchQuery:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        time_mode:
+          type: string
+          enum: [ABSOLUTE, RELATIVE]
+          description: 未提供時視為 ABSOLUTE，以相容既有 Saved Search。
+        relative_window_seconds:
+          type: integer
+          minimum: 60
+          maximum: 604800
+          description: time_mode=RELATIVE 時必填；每次讀取時以目前 UTC 時間重建 from/to。
+        from:
+          type: string
+          format: date-time
+          description: ABSOLUTE 的固定起點；RELATIVE 時保存建立當下的參考快照。
+        to:
+          type: string
+          format: date-time
+          description: ABSOLUTE 的固定終點；RELATIVE 時保存建立當下的參考快照。
+        correlation_id: { type: string, maxLength: 200 }
+        event_type: { type: string, maxLength: 200 }
+        aggregate_id: { type: string, maxLength: 200 }
+        trace_id: { type: string, maxLength: 200 }
+        event_id: { type: string, maxLength: 200 }
+        producer: { type: string, maxLength: 200 }
+        event_version: { type: integer, minimum: 1 }
+        causation_id: { type: string, maxLength: 200 }
+        kafka_topic: { type: string, maxLength: 200 }
+        kafka_partition: { type: integer, minimum: 0 }
+        kafka_offset: { type: integer, format: int64, minimum: 0 }
+        pattern_id: { type: string, maxLength: 200 }
+        alert_id: { type: string, maxLength: 200 }
+        severity:
+          $ref: '#/components/schemas/Severity'
+        include_processing_attempts:
+          type: boolean
+          default: false
+    CreateSavedSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [name, target, query]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        target:
+          $ref: '#/components/schemas/SavedSearchTarget'
+        query:
+          $ref: '#/components/schemas/SavedSearchQuery'
+    SavedSearch:
+      type: object
+      additionalProperties: false
+      required: [id, owner_subject, name, target, query, open_url, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        owner_subject:
+          type: string
+        name:
+          type: string
+        target:
+          $ref: '#/components/schemas/SavedSearchTarget'
+        query:
+          $ref: '#/components/schemas/SavedSearchQuery'
+        open_url:
+          type: string
+          pattern: '^/(timeline|journey)\\?'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SavedSearchList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SavedSearch'
+    SearchPreset:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, open_url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        open_url:
+          type: string
+          pattern: '^/timeline\\?'
+    SearchPresetList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchPreset'
+    IngestionIssueKind:
+      type: string
+      enum: [CONTRACT_VALIDATION, ADMISSION_QUARANTINE, TECHNICAL_DLQ]
+    IngestionIssue:
+      type: object
+      additionalProperties: false
+      required: [id, kind, occurred_at, pipeline, error_code, event_id, event_type, correlation_id, source_topic, source_partition, source_offset, dlq_topic, dlq_partition, dlq_offset, payload_sha256, admission_profile, connector_name, connector_task, failure_stage, exception_class]
+      properties:
+        id: { type: string }
+        kind: { $ref: '#/components/schemas/IngestionIssueKind' }
+        occurred_at: { type: string, format: date-time }
+        pipeline: { type: string }
+        error_code: { type: string }
+        event_id: { type: [string, 'null'] }
+        event_type: { type: [string, 'null'] }
+        correlation_id: { type: [string, 'null'] }
+        source_topic: { type: [string, 'null'] }
+        source_partition: { type: [integer, 'null'], minimum: 0 }
+        source_offset: { type: [integer, 'null'], format: int64, minimum: 0 }
+        dlq_topic: { type: [string, 'null'] }
+        dlq_partition: { type: [integer, 'null'], minimum: 0 }
+        dlq_offset: { type: [integer, 'null'], format: int64, minimum: 0 }
+        payload_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        admission_profile: { type: [string, 'null'] }
+        connector_name: { type: [string, 'null'] }
+        connector_task: { type: [integer, 'null'], minimum: 0 }
+        failure_stage: { type: [string, 'null'] }
+        exception_class: { type: [string, 'null'] }
+    IngestionIssuePage:
+      type: object
+      additionalProperties: false
+      required: [items, page_size, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngestionIssue'
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        next_cursor:
+          type: [string, 'null']
+    InvestigationStatus:
+      type: string
+      enum: [OPEN, INVESTIGATING, WAITING_APPROVAL, RESOLVED, CLOSED]
+      description: 調查案件狀態；狀態轉移需由伺服器依狀態機驗證。
+    ReplayType:
+      type: string
+      enum: [PROJECTION_REBUILD, SANDBOX_BEHAVIORAL_REPLAY]
+      description: 隔離分析類型，不包含 Production Redrive。
+    Pagination:
+      type: object
+      required: [page_size]
+      properties:
+        page_size:
+          type: integer
+          minimum: 1
+        next_cursor:
+          type: [string, 'null']
+          description: 下一頁游標；沒有下一頁時為 null。
+    Error:
+      type: object
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+          example: RESOURCE_NOT_FOUND
+        message:
+          type: string
+          description: 給使用者或工程師看的錯誤說明。
+          example: 找不到指定的調查案件。
+        request_id:
+          type: string
+          description: 供客服與日誌查找的請求 ID。
+          example: req_01J5QZ7F9P
+        details:
+          type: object
+          additionalProperties: true
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            field_errors:
+              type: array
+              items:
+                type: object
+                required: [field, message]
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+    ConflictError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          required: [current_lock_version]
+          properties:
+            current_lock_version:
+              type: integer
+              format: int64
+              description: 伺服器目前版本；客戶端應重新 GET 後再提交。
+            current_resource:
+              type: object
+              additionalProperties: true
+    EventDefinition:
+      type: object
+      required: [event_type, description, producer, owner, compatibility_policy, lifecycle_status, lock_version, created_at, updated_at]
+      properties:
+        event_type:
+          type: string
+          example: PaymentCompleted
+        description:
+          type: string
+          example: 付款成功後由 Payment Service 發出的業務事件。
+        producer:
+          type: string
+          example: payment-service
+        consumers:
+          type: array
+          items:
+            type: string
+          example: [order-service, analytics-sink]
+        owner:
+          type: string
+          example: payments-platform
+        compatibility_policy:
+          type: string
+          enum: [BACKWARD, FORWARD, FULL, NONE]
+          description: Schema 演進的相容性政策。
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+        current_schema_version:
+          type: [integer, 'null']
+          minimum: 1
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateEventDefinitionRequest:
+      type: object
+      required: [event_type, description, producer, owner, compatibility_policy]
+      properties:
+        event_type:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9._-]*$'
+          example: PaymentCompleted
+        description:
+          type: string
+          minLength: 1
+        producer:
+          type: string
+          example: payment-service
+        consumers:
+          type: array
+          items:
+            type: string
+        owner:
+          type: string
+        compatibility_policy:
+          type: string
+          enum: [BACKWARD, FORWARD, FULL, NONE]
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+          default: DRAFT
+    EventSchemaVersion:
+      type: object
+      required: [event_type, version, schema_format, schema_body, lifecycle_status, created_at]
+      properties:
+        event_type:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        schema_format:
+          type: string
+          enum: [JSON_SCHEMA, AVRO, PROTOBUF]
+        schema_body:
+          type: object
+          description: Schema 定義本體；建立後不可變。
+          additionalProperties: true
+        compatibility_result:
+          type: [string, 'null']
+          enum: [COMPATIBLE, INCOMPATIBLE, null]
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+    CreateEventSchemaVersionRequest:
+      type: object
+      required: [version, schema_format, schema_body]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        schema_format:
+          type: string
+          enum: [JSON_SCHEMA, AVRO, PROTOBUF]
+        schema_body:
+          type: object
+          additionalProperties: true
+        run_compatibility_check:
+          type: boolean
+          default: true
+    TopicRegistration:
+      type: object
+      required: [topic_name, partition_key, ordering_guarantee, retention_days, pii_classification, owner, lifecycle_status, lock_version, created_at, updated_at]
+      properties:
+        topic_name:
+          type: string
+          example: payment.events
+        partition_key:
+          type: string
+          example: aggregateId
+        ordering_guarantee:
+          type: string
+          enum: [PER_PARTITION, PER_AGGREGATE, NONE]
+        retention_days:
+          type: integer
+          minimum: 1
+          example: 30
+        pii_classification:
+          $ref: '#/components/schemas/PiiClassification'
+        owner:
+          type: string
+          example: payments-platform
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateTopicRequest:
+      type: object
+      required: [topic_name, partition_key, ordering_guarantee, retention_days, pii_classification, owner]
+      properties:
+        topic_name:
+          type: string
+          example: payment.events
+        partition_key:
+          type: string
+          example: aggregateId
+        ordering_guarantee:
+          type: string
+          enum: [PER_PARTITION, PER_AGGREGATE, NONE]
+        retention_days:
+          type: integer
+          minimum: 1
+        pii_classification:
+          $ref: '#/components/schemas/PiiClassification'
+        owner:
+          type: string
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+          default: ACTIVE
+    UpdateTopicRequest:
+      type: object
+      minProperties: 1
+      properties:
+        partition_key:
+          type: string
+        ordering_guarantee:
+          type: string
+          enum: [PER_PARTITION, PER_AGGREGATE, NONE]
+        retention_days:
+          type: integer
+          minimum: 1
+        pii_classification:
+          $ref: '#/components/schemas/PiiClassification'
+        owner:
+          type: string
+        lifecycle_status:
+          $ref: '#/components/schemas/LifecycleStatus'
+    QualitySummary:
+      type: object
+      required: [from, to, generated_at, totals]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        generated_at:
+          type: string
+          format: date-time
+        totals:
+          $ref: '#/components/schemas/QualityTotals'
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicQuality'
+    QualityTotals:
+      type: object
+      required: [event_count, duplicate_count, schema_violation_count, out_of_order_candidate_count, dlq_count, average_delay_ms]
+      properties:
+        event_count:
+          type: integer
+          format: int64
+          minimum: 0
+        duplicate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        schema_violation_count:
+          type: integer
+          format: int64
+          minimum: 0
+        out_of_order_candidate_count:
+          type: integer
+          format: int64
+          minimum: 0
+        dlq_count:
+          type: integer
+          format: int64
+          minimum: 0
+        average_delay_ms:
+          type: number
+          format: double
+          minimum: 0
+    TopicQuality:
+      type: object
+      required: [topic_name, from, to, consumer_groups, totals]
+      properties:
+        topic_name:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        consumer_groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsumerGroupQuality'
+        totals:
+          $ref: '#/components/schemas/QualityTotals'
+    ConsumerGroupQuality:
+      type: object
+      required: [group_id, consumer_lag, last_seen_at]
+      properties:
+        group_id:
+          type: string
+        consumer_lag:
+          type: integer
+          format: int64
+          minimum: 0
+        last_seen_at:
+          type: string
+          format: date-time
+    QualityViolation:
+      type: object
+      required: [id, violation_type, severity, detected_at, topic_name, evidence_event_ids]
+      properties:
+        id:
+          type: string
+          format: uuid
+        violation_type:
+          type: string
+          example: DUPLICATE_EVENT
+        severity:
+          $ref: '#/components/schemas/Severity'
+        detected_at:
+          type: string
+          format: date-time
+        topic_name:
+          type: string
+        partition:
+          type: [integer, 'null']
+          minimum: 0
+        evidence_event_ids:
+          type: array
+          items:
+            type: string
+        summary:
+          type: string
+          example: 同一 eventId 在兩個 offset 出現。
+    CanonicalEvent:
+      type: object
+      required: [event_id, event_type, event_version, occurred_at, producer, correlation_id, trace_id, aggregate_type, aggregate_id, admission_status, quality_flags, admission_profile, ingested_at]
+      properties:
+        event_id:
+          type: string
+          example: evt-001
+        event_type:
+          type: string
+          example: PaymentCompleted
+        event_version:
+          type: integer
+          minimum: 1
+        occurred_at:
+          type: string
+          format: date-time
+        producer:
+          type: string
+          example: payment-service
+        correlation_id:
+          type: string
+          example: ORDER-1001
+        causation_id:
+          type: [string, 'null']
+          example: evt-000
+        trace_id:
+          type: [string, 'null']
+          example: 4bf92f3577b34da6a3ce929d0e0e4736
+        aggregate_type:
+          type: string
+          example: Payment
+        aggregate_id:
+          type: string
+          example: PAYMENT-1001
+        sequence:
+          type: [integer, 'null']
+          minimum: 0
+          example: 7
+        kafka_topic:
+          type: [string, 'null']
+          example: payment.events
+        kafka_partition:
+          type: [integer, 'null']
+          minimum: 0
+        kafka_offset:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        payload:
+          type: [object, 'null']
+          description: 只有在授權且要求 `include_payload=true` 時回傳遮罩後內容。
+          additionalProperties: true
+        ingested_at:
+          type: string
+          format: date-time
+        trace_url:
+          type: [string, 'null']
+          format: uri
+        service_version:
+          type: [string, 'null']
+        admission_status:
+          type: string
+          enum: [SEARCHABLE, SEARCHABLE_WITH_WARNINGS]
+          description: 代表事件是否足以可靠搜尋；不等同完整業務 payload contract 已驗證。
+        quality_flags:
+          type: array
+          description: 非阻擋式 ingestion 品質警告；空陣列代表目前 profile 沒有 warning。
+          items:
+            type: string
+            enum: [UNKNOWN_EVENT_TYPE, UNKNOWN_EVENT_VERSION, INVALID_TRACE_ID, AGGREGATE_TYPE_MISMATCH]
+        admission_profile:
+          type: string
+          description: 產生 admission_status 與 quality_flags 的驗證 profile。
+        processing_summary:
+          type: [object, 'null']
+          description: Consumer 處理重試摘要；只有來源提供 processing-attempt 遙測時才會回傳。
+          properties:
+            attempt_count:
+              type: integer
+              minimum: 1
+              example: 3
+            final_status:
+              type: string
+              enum: [STARTED, FAILED, RETRY_SCHEDULED, SUCCEEDED, DLQ]
+              example: SUCCEEDED
+            consumer_groups:
+              type: array
+              items:
+                type: string
+              example: [inventory-service]
+            retry_reasons:
+              type: array
+              items:
+                type: string
+              example: [DB_TIMEOUT]
+            last_attempt_at:
+              type: [string, 'null']
+              format: date-time
+    BusinessTimeline:
+      type: object
+      required: [correlation_id, from, to, event_count, events]
+      properties:
+        correlation_id:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        event_count:
+          type: integer
+          format: int64
+          minimum: 0
+        truncated:
+          type: boolean
+          description: 是否因 limit 而截斷結果。
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanonicalEvent'
+    BusinessJourney:
+      type: object
+      required: [correlation_id, profile_id, profile_version, profile_title, from, to, status, event_count, milestones, anomalies, unmapped_event_count]
+      properties:
+        correlation_id:
+          type: string
+        profile_id:
+          type: string
+          description: 此次解讀採用的 Git-managed Journey Profile 穩定識別碼。
+        profile_version:
+          type: integer
+          minimum: 1
+        profile_title:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [EMPTY, IN_PROGRESS, COMPLETED, FAILED, COMPENSATED]
+        event_count:
+          type: integer
+          minimum: 0
+        started_at:
+          type: [string, 'null']
+          format: date-time
+        ended_at:
+          type: [string, 'null']
+          format: date-time
+        duration_ms:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessJourneyMilestone'
+        anomalies:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessJourneyAnomaly'
+        unmapped_event_count:
+          type: integer
+          minimum: 0
+          description: 未落在目前物流 milestone 定義內的事件數；事件仍保留在 canonical store。
+    JourneyProfilePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JourneyProfile'
+    JourneyProfile:
+      type: object
+      required: [contract_version, id, version, status, default, title, description, source_path, checksum, milestones, journey_state_rules, anomaly_rules, data_quality]
+      properties:
+        contract_version:
+          type: integer
+          minimum: 1
+        id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{2,63}$'
+        version:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active, draft, retired]
+        default:
+          type: boolean
+        title:
+          type: string
+        description:
+          type: string
+        source_path:
+          type: string
+          description: 產生目前 registry entry 的 repo-relative YAML path。
+        checksum:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: 原始 YAML bytes 的 SHA-256。
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/JourneyProfileMilestone'
+        journey_state_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/JourneyProfileStateRule'
+        anomaly_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/JourneyProfileAnomalyRule'
+        data_quality:
+          $ref: '#/components/schemas/JourneyProfileDataQuality'
+    JourneyProfileMilestone:
+      type: object
+      required: [id, label, expected_event_types, state_rules]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        expected_event_types:
+          type: array
+          items:
+            type: string
+        state_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/JourneyProfileStateRule'
+    JourneyProfileStateRule:
+      type: object
+      required: [state, when_any_event_types]
+      properties:
+        state:
+          type: string
+          enum: [IN_PROGRESS, COMPLETED, FAILED, COMPENSATED]
+        when_any_event_types:
+          type: array
+          items:
+            type: string
+        unless_any_event_types:
+          type: array
+          items:
+            type: string
+    JourneyProfileAnomalyRule:
+      type: object
+      required: [code, severity, message, trigger_event_types, required_any_event_types, evidence_event_types, grace_period_seconds]
+      properties:
+        code:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        message:
+          type: string
+        trigger_event_types:
+          type: array
+          items:
+            type: string
+        required_any_event_types:
+          type: array
+          items:
+            type: string
+        evidence_event_types:
+          type: array
+          items:
+            type: string
+        grace_period_seconds:
+          type: integer
+          minimum: 0
+    JourneyProfileDataQuality:
+      type: object
+      required: [detect_duplicate_event_ids]
+      properties:
+        detect_duplicate_event_ids:
+          type: boolean
+    BusinessJourneyMilestone:
+      type: object
+      required: [id, label, state, expected_event_types, actual_event_types, events]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+          description: 由 Journey Profile 定義的穩定 milestone ID。
+        label:
+          type: string
+        state:
+          type: string
+          enum: [COMPLETED, IN_PROGRESS, FAILED, COMPENSATED, NOT_APPLICABLE]
+        expected_event_types:
+          type: array
+          items:
+            type: string
+        actual_event_types:
+          type: array
+          items:
+            type: string
+        first_event_at:
+          type: [string, 'null']
+          format: date-time
+        duration_from_previous_ms:
+          type: [integer, 'null']
+          format: int64
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessJourneyEventReference'
+    BusinessJourneyEventReference:
+      type: object
+      required: [event_id, event_type, occurred_at, producer, aggregate_type, aggregate_id]
+      properties:
+        event_id:
+          type: string
+        event_type:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        producer:
+          type: string
+        aggregate_type:
+          type: string
+        aggregate_id:
+          type: string
+        trace_id:
+          type: [string, 'null']
+    BusinessJourneyAnomaly:
+      type: object
+      required: [code, severity, message, event_ids]
+      properties:
+        code:
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        message:
+          type: string
+        event_ids:
+          type: array
+          items:
+            type: string
+    EventSearchResponse:
+      type: object
+      required: [events, count, truncated]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanonicalEvent'
+        count:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+    PatternFinding:
+      type: object
+      additionalProperties: false
+      required: [pattern_id, matched_conditions, severity, evidence_references, recommended_next_query]
+      properties:
+        finding_id:
+          type: string
+          format: uuid
+          description: 已持久化 finding 的識別碼；同步分析中的暫時結果可能尚未提供。
+        pattern_id:
+          type: string
+          example: payment-completed-without-shipment
+        matched_conditions:
+          type: array
+          items:
+            type: string
+          example: [PAYMENT_COMPLETED_EXISTS, SHIPMENT_CREATED_MISSING_WITHIN_5M]
+        severity:
+          $ref: '#/components/schemas/Severity'
+        evidence_references:
+          type: array
+          items:
+            type: string
+          example: [evt-001, evt-002, trace-500]
+        recommended_next_query:
+          type: string
+          example: 查詢 shipping.events 是否在付款成功後建立 Shipment。
+        query_template_id:
+          type: string
+          example: events.by_correlation.v1
+        replay_conditions:
+          type: array
+          items:
+            type: string
+          description: 未來 Projection Rebuild／Sandbox Replay 可驗證的條件；MVP 只保存，不執行。
+        feedback:
+          $ref: '#/components/schemas/PatternFindingFeedback'
+    ClassifyPatternFindingRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [CONFIRMED, FALSE_POSITIVE, NEEDS_REVIEW]
+    PatternFindingFeedback:
+      type: object
+      additionalProperties: false
+      required: [finding_id, status, actor_id, actor_role, updated_at, lock_version]
+      properties:
+        finding_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [UNREVIEWED, CONFIRMED, FALSE_POSITIVE, NEEDS_REVIEW]
+        actor_id:
+          type: string
+          description: UNREVIEWED 時為空字串。
+        actor_role:
+          type: string
+          description: UNREVIEWED 時為空字串。
+        updated_at:
+          type: [string, 'null']
+          format: date-time
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [id, evidence_type, reference, source, open_action, collected_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        evidence_type:
+          type: string
+          enum: [EVENT, TRACE, LOG, METRIC, GRAFANA_ALERT, QUALITY_VIOLATION, PATTERN_FINDING, REPORT]
+        reference:
+          type: string
+          description: 指向 ClickHouse、Trace、Log 或案件內部資料的穩定參照，不直接內嵌完整 PII。
+        source:
+          type: string
+          enum: [CLICKHOUSE, TEMPO, LOKI, GRAFANA, PATTERN_ENGINE, REPORT_STORE, UNKNOWN]
+          description: reference 的權威來源；Event Hunter 只保存參照與完整性資訊。
+        open_action:
+          type: string
+          enum: [GRAFANA_EVENT, GRAFANA_TEMPO, GRAFANA_LOKI, GRAFANA_DASHBOARD, GRAFANA_ALERT, PATTERN_LIBRARY, NONE]
+          description: 前端可依受信任 URL builder 執行的來源操作，不接受任意外部 URL。
+        source_locator:
+          type: string
+          pattern: '^/alerting/(grafana/)?[A-Za-z0-9_-]+/(view|edit)$'
+          description: 經後端驗證的相對來源路徑；不得包含 origin、credentials 或任意外部 URL。
+        source_org_id:
+          type: integer
+          minimum: 1
+          description: 來源 Grafana organization ID；只與受信任的 relative source_locator 組合。
+        collected_at:
+          type: string
+          format: date-time
+        checksum:
+          type: [string, 'null']
+          description: 證據內容雜湊，用於確認報告產生後資料未被替換。
+    AuditLogEntry:
+      type: object
+      additionalProperties: false
+      required: [id, actor_id, actor_role, action, request_id, metadata, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+        actor_role:
+          $ref: '#/components/schemas/DemoRole'
+        action:
+          type: string
+          enum: [CREATE_INVESTIGATION, UPDATE_INVESTIGATION, ADD_INVESTIGATION_NOTE, ATTACH_INVESTIGATION_EVENT, ANALYZE_INVESTIGATION, CLOSE_INVESTIGATION]
+        request_id:
+          type: string
+        trace_id:
+          type: [string, 'null']
+        metadata:
+          type: object
+          additionalProperties: true
+          description: 僅保存操作摘要，不得保存完整敏感 payload。
+        created_at:
+          type: string
+          format: date-time
+    EvidenceBundleManifest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, investigation_id, generated_at, query_window, partial, warnings, source_status, items, checksum_algorithm, manifest_sha256]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        investigation_id:
+          type: string
+          format: uuid
+        generated_at:
+          type: string
+          format: date-time
+        query_window:
+          $ref: '#/components/schemas/QueryWindow'
+        partial:
+          type: boolean
+          description: 任一 Evidence item 缺少必要完整性資訊時為 true。
+        warnings:
+          type: array
+          items:
+            type: string
+        source_status:
+          $ref: '#/components/schemas/EvidenceSourceStatus'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        checksum_algorithm:
+          type: string
+          const: SHA-256
+        manifest_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: 排除本欄位後，依 RFC 8785 JCS canonicalization 產生 bytes，再計算 SHA-256。
+    QueryWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+    SourceStatus:
+      type: string
+      enum: [OK, PARTIAL, UNAVAILABLE, TIMEOUT, NOT_REQUESTED]
+    EvidenceSourceStatus:
+      type: object
+      additionalProperties: false
+      required: [postgres, clickhouse, technical_observability]
+      properties:
+        postgres:
+          $ref: '#/components/schemas/SourceStatus'
+        clickhouse:
+          $ref: '#/components/schemas/SourceStatus'
+        technical_observability:
+          $ref: '#/components/schemas/SourceStatus'
+    InvestigationSummary:
+      type: object
+      required: [investigation_id, generated_at, query_window, event_retention_boundary, partial, warnings, source_status, source_last_success_at, case, timeline, pattern_findings, evidence_references, audit_entries]
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+        generated_at:
+          type: string
+          format: date-time
+        query_window:
+          $ref: '#/components/schemas/QueryWindow'
+        event_retention_boundary:
+          type: string
+          format: date-time
+          description: 依目前 90 天 canonical event TTL 推導的近似保留邊界；早於此時間的原始事件可能已被非同步清理。
+        partial:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+        source_status:
+          type: object
+          required: [postgres, clickhouse, technical_observability]
+          properties:
+            postgres:
+              $ref: '#/components/schemas/SourceStatus'
+            clickhouse:
+              $ref: '#/components/schemas/SourceStatus'
+            technical_observability:
+              $ref: '#/components/schemas/SourceStatus'
+        source_last_success_at:
+          type: object
+          additionalProperties: false
+          required: [postgres, clickhouse, technical_observability]
+          properties:
+            postgres:
+              type: [string, 'null']
+              format: date-time
+            clickhouse:
+              type: [string, 'null']
+              format: date-time
+            technical_observability:
+              type: [string, 'null']
+              format: date-time
+        case:
+          $ref: '#/components/schemas/InvestigationCase'
+        timeline:
+          $ref: '#/components/schemas/BusinessTimeline'
+        quality:
+          type: object
+          additionalProperties: true
+        pattern_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatternFinding'
+        technical_observations:
+          type: object
+          additionalProperties: true
+          description: 摘要與 deep links，不內嵌完整 Logs／Traces。
+        evidence_references:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        audit_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+    InvestigationCase:
+      type: object
+      required: [id, case_no, title, severity, status, allowed_transitions, correlation_id, incident_from, incident_to, incident_window_source, priority, tags, related_correlation_ids, last_updated_by, sla_status, sla_due_at, collaboration_notes, evidence, pattern_findings, lock_version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        case_no:
+          type: string
+          example: INC-2026-0001
+        title:
+          type: string
+          example: 訂單付款成功但未建立出貨單
+        severity:
+          $ref: '#/components/schemas/Severity'
+        status:
+          $ref: '#/components/schemas/InvestigationStatus'
+        allowed_transitions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/InvestigationStatus'
+          description: |
+            目前案件可執行的目標狀態，由 aggregate 產生。`CLOSED` 表示可呼叫專用
+            closeInvestigation operation；不得以 updateInvestigation 直接設為 CLOSED。
+        correlation_id:
+          type: string
+          example: ORDER-1001
+        incident_from:
+          type: string
+          format: date-time
+          description: 案件建立時保存的不可變基準窗口起點。
+        incident_to:
+          type: string
+          format: date-time
+          description: 案件建立時保存的不可變基準窗口終點；與 incident_from 的距離最多七天。
+        incident_window_source:
+          type: string
+          enum: [TIMELINE_SEARCH, MANUAL_DEFAULT, GRAFANA_ALERT, LEGACY_CREATED_AT]
+          description: 基準窗口的可追溯推導來源。
+        assignee:
+          type: [string, 'null']
+          description: Phase 1.1 的 owner；沿用 assignee 欄位名稱避免重複責任欄位。
+          example: oncall-payments
+        priority:
+          $ref: '#/components/schemas/CasePriority'
+        tags:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+        related_correlation_ids:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        last_updated_by:
+          type: string
+        sla_status:
+          $ref: '#/components/schemas/CaseSLAStatus'
+        sla_due_at:
+          type: string
+          format: date-time
+        root_cause:
+          type: [string, 'null']
+        resolution_summary:
+          type: [string, 'null']
+        fixed_version:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+          readOnly: true
+          deprecated: true
+          description: Phase 1 舊資料的唯讀相容欄位；新筆記一律使用 collaboration_notes。
+        collaboration_notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvestigationNote'
+        workflow_id:
+          type: [string, 'null']
+          description: Temporal Workflow ID；不保存 Temporal Server 內部資料作為本平台資料表。
+        pattern_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatternFinding'
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: [string, 'null']
+          format: date-time
+    CreateInvestigationRequest:
+      type: object
+      additionalProperties: false
+      required: [title, severity, correlation_id]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        severity:
+          $ref: '#/components/schemas/Severity'
+        correlation_id:
+          type: string
+          minLength: 1
+        incident_from:
+          type: string
+          format: date-time
+          description: 選填；與 incident_to 必須同時提供。Timeline 建案應保存目前查詢窗口。
+        incident_to:
+          type: string
+          format: date-time
+          description: 選填；與 incident_from 必須同時提供，且窗口不得超過七天。
+        start_workflow:
+          type: boolean
+          default: false
+          description: 是否同時啟動選用的 Temporal Case Workflow；伺服器未啟用時拒絕此選項。
+    AnalyzeInvestigationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        pattern_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          description: 未提供時執行所有已註冊且適用的 Pattern。
+        execution_mode:
+          type: string
+          enum: [SYNC, TEMPORAL]
+          default: SYNC
+    AnalysisResult:
+      type: object
+      required: [investigation_id, execution_mode, analyzed_at, analysis_status, executed_pattern_ids, effective_window, findings]
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+        execution_mode:
+          type: string
+          const: SYNC
+        analyzed_at:
+          type: string
+          format: date-time
+        analysis_status:
+          type: string
+          enum: [EVALUATED, NO_EVENTS]
+          description: |
+            `NO_EVENTS` 明確表示 correlation 沒有 canonical event，不等同 Pattern no-match。
+        executed_pattern_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+          description: 本次實際評估的 immutable Registry Pattern IDs；即使沒有 finding 也必須回傳。
+        effective_window:
+          oneOf:
+            - $ref: '#/components/schemas/EffectiveAnalysisWindow'
+            - type: 'null'
+          description: |
+            `NO_EVENTS` 時為 null；其餘由伺服器依 event time 決定。
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatternFinding'
+    EffectiveAnalysisWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to, observed_at, anchor, source_event_count]
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+          description: Exclusive upper bound；固定為最早 correlation event 後七天。
+        observed_at:
+          type: string
+          format: date-time
+          description: Pattern maturity 判定時間；超過固定 window 後會封頂，不再隨 wall clock 漂移。
+        anchor:
+          type: string
+          const: EARLIEST_CORRELATION_EVENT
+        source_event_count:
+          type: integer
+          minimum: 1
+    UpdateInvestigationRequest:
+      type: object
+      minProperties: 1
+      description: |
+        一般案件更新。若將狀態改為 `RESOLVED`，必須同時提供 `root_cause` 與
+        `resolution_summary`；不得用本 operation 設成 `CLOSED`，結案必須呼叫
+        `closeInvestigation`。狀態轉移以 investigation-state-machine.yaml 為準。
+      allOf:
+        - if:
+            properties:
+              status:
+                const: RESOLVED
+            required: [status]
+          then:
+            required: [root_cause, resolution_summary]
+            properties:
+              root_cause:
+                type: string
+                minLength: 1
+              resolution_summary:
+                type: string
+                minLength: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 300
+        status:
+          type: string
+          enum: [INVESTIGATING, WAITING_APPROVAL, RESOLVED]
+          description: "`OPEN` 是初始狀態，`CLOSED` 只能由 closeInvestigation 設定。"
+        severity:
+          $ref: '#/components/schemas/Severity'
+        assignee:
+          type: [string, 'null']
+          maxLength: 200
+          description: Phase 1.1 owner；空字串或 null 會清除 owner。
+        priority:
+          $ref: '#/components/schemas/CasePriority'
+        tags:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+        related_correlation_ids:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        root_cause:
+          type: [string, 'null']
+        resolution_summary:
+          type: [string, 'null']
+        fixed_version:
+          type: [string, 'null']
+          description: 已部署的修正版；不代表本 API 自動部署。
+    CasePriority:
+      type: string
+      enum: [P0, P1, P2, P3]
+      description: P0/P1/P2/P3 的目標處理時間分別為 1/4/24/72 小時。
+    CaseSLAStatus:
+      type: string
+      enum: [ON_TRACK, DUE_SOON, BREACHED, COMPLETED]
+    InvestigationNote:
+      type: object
+      additionalProperties: false
+      required: [id, body, author_id, author_role, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        author_id:
+          type: string
+        author_role:
+          $ref: '#/components/schemas/DemoRole'
+        created_at:
+          type: string
+          format: date-time
+    AddInvestigationNoteRequest:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 2000
+    AddInvestigationNoteResponse:
+      type: object
+      additionalProperties: false
+      required: [investigation, note]
+      properties:
+        investigation:
+          $ref: '#/components/schemas/InvestigationCase'
+        note:
+          $ref: '#/components/schemas/InvestigationNote'
+    AttachInvestigationEventRequest:
+      type: object
+      additionalProperties: false
+      required: [event_id, from, to]
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+          description: 必須晚於 from，且查詢時間窗不得超過七天。
+    AttachInvestigationEventResponse:
+      type: object
+      additionalProperties: false
+      required: [investigation, evidence, attached]
+      properties:
+        investigation:
+          $ref: '#/components/schemas/InvestigationCase'
+        evidence:
+          $ref: '#/components/schemas/Evidence'
+        attached:
+          type: boolean
+          description: true 表示本次新增 reference；false 表示相同 evidence 已存在。
+    CloseInvestigationRequest:
+      type: object
+      required: [root_cause, resolution_summary]
+      properties:
+        root_cause:
+          type: string
+          minLength: 1
+        resolution_summary:
+          type: string
+          minLength: 1
+        fixed_version:
+          type: [string, 'null']
+          description: 已部署的修正版；不代表本 API 自動部署。
+    WorkflowAccepted:
+      type: object
+      required: [case_id, workflow_id, status]
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        workflow_id:
+          type: string
+          example: investigation-case-INC-2026-0001
+        status:
+          type: string
+          enum: [QUEUED, RUNNING]
+        message:
+          type: string
+          example: Pattern 調查已排入 Temporal Workflow。
+    ReplaySession:
+      type: object
+      required: [id, investigation_id, replay_type, status, source_correlation_id, lock_version, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        investigation_id:
+          type: string
+          format: uuid
+        replay_type:
+          $ref: '#/components/schemas/ReplayType'
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, APPROVED, RUNNING, SUCCEEDED, FAILED, CANCELLED]
+        source_correlation_id:
+          type: string
+        target_service_version:
+          type: [string, 'null']
+          description: 隔離環境使用的服務版本。
+        sandbox_id:
+          type: [string, 'null']
+        workflow_id:
+          type: [string, 'null']
+        comparison_summary:
+          type: [object, 'null']
+          additionalProperties: true
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        lock_version:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateReplayRequest:
+      type: object
+      required: [investigation_id, replay_type, source_correlation_id]
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+        replay_type:
+          $ref: '#/components/schemas/ReplayType'
+        source_correlation_id:
+          type: string
+        target_service_version:
+          type: [string, 'null']
+        requested_invariants:
+          type: array
+          items:
+            type: string
+          example: [capturedAmount <= authorizedAmount, activeShipmentCount <= 1]
+        dry_run:
+          type: boolean
+          default: true
+          description: 是否只產生比較計畫；第一版應維持 true。
+    ApproveReplayRequest:
+      type: object
+      required: [approval_reason, sandbox_id]
+      properties:
+        approval_reason:
+          type: string
+          minLength: 1
+        sandbox_id:
+          type: string
+          description: 已建立且不連接正式服務的隔離環境識別碼。
+        expires_at:
+          type: string
+          format: date-time
+          description: 核准有效期限。
+    EventDefinitionPage:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventDefinition'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    TopicPage:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicRegistration'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    QualityViolationPage:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QualityViolation'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+    InvestigationPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvestigationCase'
+        next_cursor:
+          type: [string, 'null']
+          description: 下一頁游標；沒有下一頁時為 null。
+
+security:
+  - demoSession: []
+  - bearerAuth: []

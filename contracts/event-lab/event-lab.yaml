@@ -1,0 +1,110 @@
+schema_version: 1
+project: event-hunter
+
+service:
+  id: event-lab
+  purpose: deterministic_demo_event_and_telemetry_source
+  production_business_service: false
+  implementation_language: go
+  http:
+    listen_address: :28343
+    contract: event-lab.openapi.yaml
+  database:
+    local_postgres_service: postgres
+    database: event_hunter
+    schema: public
+    credentials_owner: event-hunter-local-demo
+    owned_tables: [scenario_runs]
+    cross_database_access: forbidden
+  event_publication: direct_kafka_for_isolated_lab_topic
+  live_service_entrypoint: demo-order-service
+
+logical_sources:
+  description: producer 欄位代表模擬的業務來源；實際 OTel resource service.name 一律是 event-lab。
+  values: [order-service, payment-service, shipping-service]
+
+scenarios:
+  - id: S1
+    name: NORMAL_ORDER_FLOW
+    execution_mode: LIVE_SERVICES
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated]
+  - id: S2
+    name: PAYMENT_WITHOUT_SHIPMENT
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted]
+  - id: S3
+    name: DUPLICATE_EVENT
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted, PaymentCompleted, ShipmentCreated]
+  - id: S4
+    name: OUT_OF_ORDER_EVENT
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted_sequence_2, PaymentCompleted_sequence_1]
+  - id: S5
+    name: RETRY_THEN_DLQ
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted]
+    processing_attempt_statuses: [FAILED, RETRY_SCHEDULED, DLQ]
+  - id: S6
+    name: SCHEMA_VIOLATION
+    execution_mode: LAB_INJECTION
+    event_sequence: [invalid_PaymentCompleted]
+    expected_ingestion_result: event-hunter.ingestion-failures.dlq
+  - id: S7
+    name: HIGH_EVENT_DELAY
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated]
+    occurred_at_offset: -PT10M
+  - id: S8
+    name: PAYMENT_FAILED_AND_CANCELLED
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentFailed, OrderCancelled]
+  - id: S9
+    name: SHIPMENT_DELIVERED
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated, ShipmentDispatched, ShipmentInTransit, ShipmentDelivered]
+  - id: S10
+    name: SHIPMENT_DISPATCH_RETRY
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated, ShipmentDispatchFailed, ShipmentDispatched, ShipmentDelivered]
+  - id: S11
+    name: RETURN_AND_REFUND
+    execution_mode: LAB_INJECTION
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated, ShipmentDispatched, ShipmentDelivered, ReturnRequested, ReturnReceived, PaymentRefunded]
+  - id: S12
+    name: LIVE_PAYMENT_FAILED_AND_CANCELLED
+    execution_mode: LIVE_SERVICES
+    event_sequence: [OrderCreated, PaymentFailed, OrderCancelled]
+  - id: S13
+    name: LIVE_SHIPMENT_DELIVERED
+    execution_mode: LIVE_SERVICES
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated, ShipmentDispatched, ShipmentInTransit, ShipmentDelivered]
+  - id: S14
+    name: LIVE_RETURN_AND_REFUND
+    execution_mode: LIVE_SERVICES
+    event_sequence: [OrderCreated, PaymentCompleted, ShipmentCreated, ShipmentDispatched, ShipmentDelivered, ReturnRequested, ReturnReceived, PaymentRefunded]
+
+event_contract:
+  topics: [event-lab.events, event-hunter.processing-attempts]
+  kafka_key: correlationId
+  schemas: ../events
+  propagation_fields: [eventId, correlationId, causationId, traceId, aggregateType, aggregateId, sequence]
+
+telemetry:
+  resource_service_name: event-lab
+  span_attribute_for_logical_source: event_hunter.simulated_service
+  required_log_fields: [scenario_run_id, scenario, correlation_id, event_id, trace_id, simulated_service]
+  metrics:
+    - event_lab_scenario_runs_total
+    - event_lab_events_emitted_total
+    - event_lab_processing_retries_total
+    - event_lab_dlq_total
+    - event_lab_scenario_duration_seconds
+  exporter: otlp
+
+invariants:
+  - scenario state is persisted before asynchronous execution starts
+  - LAB_INJECTION never publishes to the three live-service domain topics
+  - no test-only write endpoint is added to Event Hunter or ClickHouse
+  - the same seed and input produce the same event ordering and failure decisions
+  - Event Lab never claims that its logical sources are independently deployed business services

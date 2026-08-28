@@ -1,0 +1,150 @@
+{
+  "fixtureId": "payment-without-shipment-exclusions",
+  "fixtureType": "pattern-case-set",
+  "cases": [
+    {
+      "caseId": "cancelled-order",
+      "evaluationTime": "2026-08-20T12:06:00Z",
+      "events": [
+        {
+          "eventId": "evt-payment-3001-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T12:00:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-3001",
+          "causationId": null,
+          "traceId": "66666666666666666666666666666666",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-3001",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-3001",
+            "orderId": "ORDER-3001",
+            "amount": 500,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-order-3001-002",
+          "eventType": "OrderCancelled",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T12:01:00Z",
+          "producer": "order-service",
+          "correlationId": "ORDER-3001",
+          "causationId": "evt-payment-3001-001",
+          "traceId": "77777777777777777777777777777777",
+          "aggregateType": "Order",
+          "aggregateId": "ORDER-3001",
+          "sequence": 2,
+          "payload": {
+            "orderId": "ORDER-3001",
+            "reason": "Customer cancellation"
+          }
+        }
+      ],
+      "expected": {
+        "patternId": "payment-completed-without-shipment",
+        "matched": false,
+        "excludedBy": "OrderCancelled"
+      }
+    },
+    {
+      "caseId": "refunded-payment",
+      "evaluationTime": "2026-08-20T13:06:00Z",
+      "events": [
+        {
+          "eventId": "evt-payment-3002-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T13:00:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-3002",
+          "causationId": null,
+          "traceId": "88888888888888888888888888888888",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-3002",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-3002",
+            "orderId": "ORDER-3002",
+            "amount": 900,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-3002-002",
+          "eventType": "PaymentRefunded",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T13:02:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-3002",
+          "causationId": "evt-payment-3002-001",
+          "traceId": "99999999999999999999999999999999",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-3002",
+          "sequence": 2,
+          "payload": {
+            "paymentId": "PAYMENT-3002",
+            "orderId": "ORDER-3002",
+            "amount": 900,
+            "reason": "Inventory unavailable"
+          }
+        }
+      ],
+      "expected": {
+        "patternId": "payment-completed-without-shipment",
+        "matched": false,
+        "excludedBy": "PaymentRefunded"
+      }
+    },
+    {
+      "caseId": "voided-payment",
+      "evaluationTime": "2026-08-20T14:06:00Z",
+      "events": [
+        {
+          "eventId": "evt-payment-3003-001",
+          "eventType": "PaymentCompleted",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T14:00:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-3003",
+          "causationId": null,
+          "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-3003",
+          "sequence": 1,
+          "payload": {
+            "paymentId": "PAYMENT-3003",
+            "orderId": "ORDER-3003",
+            "amount": 1200,
+            "currency": "TWD"
+          }
+        },
+        {
+          "eventId": "evt-payment-3003-002",
+          "eventType": "PaymentVoided",
+          "eventVersion": 1,
+          "occurredAt": "2026-08-20T14:01:00Z",
+          "producer": "payment-service",
+          "correlationId": "ORDER-3003",
+          "causationId": "evt-payment-3003-001",
+          "traceId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "aggregateType": "Payment",
+          "aggregateId": "PAYMENT-3003",
+          "sequence": 2,
+          "payload": {
+            "paymentId": "PAYMENT-3003",
+            "orderId": "ORDER-3003",
+            "reason": "Authorization reversed"
+          }
+        }
+      ],
+      "expected": {
+        "patternId": "payment-completed-without-shipment",
+        "matched": false,
+        "excludedBy": "PaymentVoided"
+      }
+    }
+  ]
+}

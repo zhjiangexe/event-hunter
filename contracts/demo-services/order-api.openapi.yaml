@@ -1,0 +1,86 @@
+openapi: 3.1.0
+info:
+  title: Event Hunter Demo Order Service API
+  version: 0.1.0
+  description: |
+    Order Service 是 Event Hunter MVP 的示範業務來源。建立訂單會在同一個本機交易中寫入
+    訂單與 transactional outbox，後續由 Debezium 發布 OrderCreated；本 API 不直接寫入
+    Event Hunter 或 ClickHouse。
+servers:
+  - url: http://localhost:28335
+    description: 本機 Demo Order Service
+paths:
+  /api/v1/orders:
+    post:
+      operationId: createDemoOrder
+      summary: 建立示範訂單
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: 重複請求必須回傳原始 accepted result，不得建立第二筆訂單或事件。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDemoOrderRequest'
+      responses:
+        '202':
+          description: 訂單已接受；OrderCreated 將透過 Outbox、Debezium 與 Redpanda 發布。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoOrderAccepted'
+        '400':
+          description: 請求格式不合法。
+        '409':
+          description: Idempotency-Key 與原始請求內容不一致。
+        '503':
+          description: Order Service 的本機資料庫不可用。
+components:
+  schemas:
+    CreateDemoOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [customer_id, total_amount, currency]
+      properties:
+        customer_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        total_amount:
+          type: integer
+          minimum: 1
+          description: 以最小貨幣單位表示；示範環境使用 TWD 元整數。
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: TWD
+        simulation_profile:
+          type: string
+          enum: [NORMAL, PAYMENT_FAILED, SHIPMENT_DELIVERED, RETURN_REFUND]
+          default: NORMAL
+          description: Demo-only deterministic behavior profile; omitted requests use NORMAL.
+    DemoOrderAccepted:
+      type: object
+      additionalProperties: false
+      required: [order_id, correlation_id, status, accepted_at]
+      properties:
+        order_id:
+          type: string
+          minLength: 1
+        correlation_id:
+          type: string
+          minLength: 1
+          description: Domain Event canonical envelope 使用的 correlationId。
+        status:
+          type: string
+          const: ACCEPTED
+        accepted_at:
+          type: string
+          format: date-time

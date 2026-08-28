@@ -1,0 +1,54 @@
+contract_version: 1
+id: payment-completed-without-shipment
+version: 1
+status: active
+title: Payment completed without shipment
+description: Detect a paid order that has no shipment within the fixed investigation window.
+
+implementation:
+  source: go_code
+  package: internal/contexts/investigation/domain/patterns
+  type: PaymentCompletedWithoutShipment
+  mutable_at_runtime: false
+
+correlation:
+  key: correlationId
+  secondary_payload_key: orderId
+
+trigger:
+  event_type: PaymentCompleted
+
+expected:
+  event_type: ShipmentCreated
+  within: PT5M
+
+exclusions:
+  any_event_type:
+    - OrderCancelled
+    - PaymentRefunded
+    - PaymentVoided
+
+finding:
+  matched_severity: HIGH
+  matched_condition_codes:
+    - PAYMENT_COMPLETED_EXISTS
+    - SHIPMENT_CREATED_MISSING_WITHIN_5M
+  recommended_next_query: shipping.events by correlationId and orderId
+  query_template_id: events.by_correlation.v1
+
+evidence:
+  required:
+    - trigger_event_reference
+    - bounded_timeline_query
+    - missing_expected_event_assertion
+  optional:
+    - trace_reference
+    - grafana_log_reference
+
+fixtures:
+  matches:
+    - ../fixtures/payment-without-shipment.json
+  does_not_match:
+    - ../fixtures/normal-order-flow.json
+    - ../fixtures/exclusion-cases.json
+

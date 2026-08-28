@@ -1,0 +1,78 @@
+schema_version: 1
+project: event-hunter
+
+classification_levels:
+  - NONE
+  - INTERNAL
+  - CONFIDENTIAL
+  - RESTRICTED
+
+default_event_classification: CONFIDENTIAL
+default_retention_days: 90
+
+access_policy:
+  VIEWER:
+    envelope_metadata: allow
+    masked_payload: deny
+    unmasked_confidential_payload: deny
+  INVESTIGATOR:
+    envelope_metadata: allow
+    masked_payload: deny
+    unmasked_confidential_payload: deny
+  ADMIN:
+    envelope_metadata: allow
+    masked_payload: allow_when_requested
+    unmasked_confidential_payload: allow_with_audit
+
+field_rules:
+  - paths: [$.eventId, $.eventType, $.eventVersion, $.occurredAt, $.producer, $.correlationId, $.causationId, $.traceId, $.aggregateType, $.aggregateId, $.sequence]
+    classification: INTERNAL
+    masking: none
+
+  - paths: [$..customerId, $..customer_id]
+    classification: CONFIDENTIAL
+    masking: stable_token
+    example: CUSTOMER-***-0001
+
+  - paths: [$..totalAmount, $..total_amount, $..amount]
+    classification: CONFIDENTIAL
+    masking: redact
+    replacement: "[REDACTED_AMOUNT]"
+
+  - paths: [$..reason]
+    classification: CONFIDENTIAL
+    masking: redact_detected_email_phone_and_token_patterns
+
+  - paths: [$..email, $..emailAddress, $..phone, $..phoneNumber, $..mobile]
+    classification: CONFIDENTIAL
+    masking: redact
+    replacement: "[REDACTED_PII]"
+
+  - paths: [$..password, $..passphrase, $..secret, $..clientSecret, $..apiKey, $..token, $..accessToken, $..refreshToken, $..authorization, $..cookie, $..sessionCookie]
+    classification: RESTRICTED
+    masking: redact
+    replacement: "[REDACTED]"
+
+  - paths: [$.payload.orderId, $.payload.paymentId, $.payload.shipmentId, $.payload.currency, $.payload.provider, $.payload.status]
+    classification: INTERNAL
+    masking: none
+
+prohibited_fields:
+  names_case_insensitive: [cardNumber, cvv, password, accessToken, refreshToken, authorization]
+  action: reject_before_outbox_insert
+
+evidence_bundle:
+  always_mask_payload: true
+  include_raw_logs: false
+  include_raw_traces: false
+  include_unmasked_pii: false
+
+audit:
+  actions_requiring_record:
+    - ADMIN_UNMASKED_PAYLOAD_READ
+    - EVIDENCE_BUNDLE_GENERATED
+  forbidden_audit_metadata:
+    - raw_event_payload
+    - session_cookie
+    - webhook_secret
+    - authorization_header

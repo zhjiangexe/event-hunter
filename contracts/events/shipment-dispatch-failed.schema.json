@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/shipment-dispatch-failed.schema.json",
+  "title": "ShipmentDispatchFailed",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "ShipmentDispatchFailed" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Shipment" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["shipmentId", "orderId", "provider", "reasonCode", "retryable", "status"],
+          "properties": {
+            "shipmentId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "provider": { "type": "string", "minLength": 1 },
+            "reasonCode": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "retryable": { "type": "boolean" },
+            "status": { "const": "DISPATCH_FAILED" }
+          }
+        }
+      }
+    }
+  ]
+}

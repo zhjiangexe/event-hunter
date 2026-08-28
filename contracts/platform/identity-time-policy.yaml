@@ -1,0 +1,50 @@
+schema_version: 1
+project: event-hunter
+
+identifiers:
+  eventId:
+    type: opaque_string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$'
+    uniqueness_scope: global_per_producer
+    case_sensitive: true
+  correlationId:
+    type: opaque_string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$'
+    uniqueness_scope: one_business_process
+    kafka_key: true
+    case_sensitive: true
+  causationId:
+    type: nullable_event_id
+  aggregateId:
+    type: opaque_string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$'
+    uniqueness_scope: aggregateType
+    case_sensitive: true
+  traceId:
+    type: w3c_trace_id
+    pattern: '^[0-9a-f]{32}$'
+    all_zero_forbidden: true
+  attemptId:
+    type: opaque_string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$'
+    uniqueness_scope: global
+
+rules:
+  - identifiers are never parsed to infer business state
+  - database and API comparisons are exact and case-sensitive
+  - empty strings are invalid
+  - correlationId is propagated unchanged across Order Payment and Shipping
+  - sequence is scoped by aggregateType and aggregateId and starts at 1 in demo services
+
+time:
+  storage_timezone: UTC
+  internal_wire_format: RFC3339
+  internal_wire_offset: Z
+  precision: milliseconds
+  occurredAt_source: producer_business_clock
+  ingestedAt_source: clickhouse_ingestion_clock
+  observedAt_source: telemetry_collector_clock
+  grafana_external_timestamp_behavior: accept_rfc3339_offset_and_normalize_to_utc
+  duration_format: ISO8601
+  interval_semantics: half_open
+  half_open_notation: '[from, to)'

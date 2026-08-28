@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/return-received.schema.json",
+  "title": "ReturnReceived",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "ReturnReceived" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Return" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["returnId", "orderId", "receivedAt", "condition", "status"],
+          "properties": {
+            "returnId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "receivedAt": { "type": "string", "format": "date-time" },
+            "condition": { "type": "string", "minLength": 1, "maxLength": 100 },
+            "status": { "const": "RECEIVED" }
+          }
+        }
+      }
+    }
+  ]
+}

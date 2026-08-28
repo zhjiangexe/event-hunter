@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/payment-completed.schema.json",
+  "title": "PaymentCompleted",
+  "allOf": [
+    { "$ref": "./canonical-envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "PaymentCompleted" },
+        "eventVersion": { "const": 1 },
+        "aggregateType": { "const": "Payment" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["paymentId", "orderId", "amount", "currency"],
+          "properties": {
+            "paymentId": { "type": "string", "minLength": 1 },
+            "orderId": { "type": "string", "minLength": 1 },
+            "amount": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+            "simulationProfile": {
+              "type": "string",
+              "enum": ["NORMAL", "PAYMENT_FAILED", "SHIPMENT_DELIVERED", "RETURN_REFUND"]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

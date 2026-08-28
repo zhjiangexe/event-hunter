@@ -1,0 +1,127 @@
+{
+  "fixtureId": "quality-window-2026-08-20T15:00Z",
+  "windowStart": "2026-08-20T15:00:00Z",
+  "windowEnd": "2026-08-20T15:01:00Z",
+  "events": [
+    {
+      "eventId": "evt-quality-duplicate",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T15:00:10Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-Q-1",
+      "causationId": null,
+      "traceId": "51015101510151015101510151015101",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-Q-1",
+      "sequence": 1,
+      "payload": { "paymentId": "PAYMENT-Q-1", "orderId": "ORDER-Q-1", "amount": 100, "currency": "TWD" }
+    },
+    {
+      "eventId": "evt-quality-duplicate",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T15:00:10Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-Q-1",
+      "causationId": null,
+      "traceId": "51015101510151015101510151015101",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-Q-1",
+      "sequence": 1,
+      "payload": { "paymentId": "PAYMENT-Q-1", "orderId": "ORDER-Q-1", "amount": 100, "currency": "TWD" }
+    },
+    {
+      "eventId": "evt-quality-sequence-3",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T15:00:20Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-Q-1",
+      "causationId": "evt-quality-duplicate",
+      "traceId": "cccccccccccccccccccccccccccccccc",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-Q-1",
+      "sequence": 3,
+      "payload": { "paymentId": "PAYMENT-Q-1", "orderId": "ORDER-Q-1", "amount": 100, "currency": "TWD" }
+    },
+    {
+      "eventId": "evt-quality-sequence-2-late",
+      "eventType": "PaymentCompleted",
+      "eventVersion": 1,
+      "occurredAt": "2026-08-20T15:00:30Z",
+      "producer": "payment-service",
+      "correlationId": "ORDER-Q-1",
+      "causationId": "evt-quality-duplicate",
+      "traceId": "dddddddddddddddddddddddddddddddd",
+      "aggregateType": "Payment",
+      "aggregateId": "PAYMENT-Q-1",
+      "sequence": 2,
+      "payload": { "paymentId": "PAYMENT-Q-1", "orderId": "ORDER-Q-1", "amount": 100, "currency": "TWD" }
+    }
+  ],
+  "kafkaMetadata": [
+    { "eventIndex": 0, "topic": "payment.events", "partition": 99, "offset": 10, "ingestedAt": "2026-08-20T15:00:10.100Z" },
+    { "eventIndex": 1, "topic": "payment.events", "partition": 99, "offset": 11, "ingestedAt": "2026-08-20T15:00:10.200Z" },
+    { "eventIndex": 2, "topic": "payment.events", "partition": 99, "offset": 12, "ingestedAt": "2026-08-20T15:00:20.300Z" },
+    { "eventIndex": 3, "topic": "payment.events", "partition": 99, "offset": 13, "ingestedAt": "2026-08-20T15:00:30.400Z" }
+  ],
+  "attempts": [
+    {
+      "attemptId": "attempt-quality-dlq-1",
+      "eventId": "evt-quality-sequence-3",
+      "eventType": "PaymentCompleted",
+      "correlationId": "ORDER-Q-1",
+      "traceId": "cccccccccccccccccccccccccccccccc",
+      "consumerGroupId": "shipping-service-v1",
+      "consumerService": "shipping-service",
+      "attempt": 3,
+      "processingStatus": "DLQ",
+      "retryReason": "PROVIDER_TIMEOUT",
+      "retryTopic": "payment.events.dlq",
+      "kafkaTopic": "payment.events",
+      "kafkaPartition": 99,
+      "kafkaOffset": 12,
+      "startedAt": "2026-08-20T15:00:40Z",
+      "completedAt": "2026-08-20T15:00:40.200Z",
+      "observedAt": "2026-08-20T15:00:40.201Z"
+    }
+  ],
+  "ingestionFailures": [
+    {
+      "sourceTopic": "payment.events",
+      "sourcePartition": 99,
+      "sourceOffset": 14,
+      "errorType": "SCHEMA_VIOLATION",
+      "errorCode": "PAYLOAD_REQUIRED_FIELD_MISSING",
+      "payloadSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "failedAt": "2026-08-20T15:00:50Z"
+    },
+    {
+      "sourceTopic": "order.events",
+      "sourcePartition": 1,
+      "sourceOffset": 21,
+      "errorType": "SCHEMA_VIOLATION",
+      "errorCode": "EVENT_VERSION_UNSUPPORTED",
+      "payloadSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "failedAt": "2026-08-20T16:00:20Z"
+    }
+  ],
+  "consumerLagSamples": [
+    { "topic": "payment.events", "partition": 99, "consumerGroupId": "shipping-service-v1", "sampledAt": "2026-08-20T15:01:00Z", "lagMessages": 120 }
+  ],
+  "expectedMetric": {
+    "topicName": "payment.events",
+    "kafkaPartition": 99,
+    "consumerGroupId": "shipping-service-v1",
+    "eventCount": 4,
+    "duplicateCount": 1,
+    "schemaViolationCount": 1,
+    "outOfOrderCount": 1,
+    "dlqCount": 2,
+    "maxEventDelayMs": 400,
+    "consumerLagMessages": 120,
+    "maxProcessingLatencyMs": 200,
+    "source": "quality-worker-v1"
+  }
+}
