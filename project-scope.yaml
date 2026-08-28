@@ -1,0 +1,302 @@
+schema_version: 1
+project: event-hunter
+decision_status: accepted
+decision_date: 2026-08-20
+phase: mvp
+
+sources_of_truth:
+  scope: project-scope.yaml
+  http_api: openapi.yaml
+  event_api: contracts/asyncapi.yaml
+  event_schemas: contracts/events
+  pattern_contracts: contracts/patterns
+  journey_profile_contracts: contracts/journeys
+  platform_contracts: contracts/platform
+  quality_contracts: contracts/quality
+  integration_contracts: contracts/integrations
+  telemetry_contracts: contracts/telemetry
+  demo_service_contracts: contracts/demo-services
+  toolchain_policy: contracts/platform/toolchain-policy.yaml
+  port_registry: contracts/platform/port-registry.yaml
+  database_schema:
+    - backend/migrations/postgres
+    - backend/migrations/clickhouse
+  acceptance_tests:
+    - e2e/backend
+    - e2e/frontend
+
+mvp_capabilities:
+  - id: REQ-EH-001
+    name: Business Timeline
+    required: true
+  - id: REQ-EH-002
+    name: Investigation Case
+    required: true
+  - id: REQ-EH-003
+    name: Deterministic Domain Pattern
+    required: true
+  - id: REQ-EH-004
+    name: Evidence Bundle JSON Manifest
+    required: true
+  - id: REQ-EH-005
+    name: Investigation Summary Read Model
+    required: true
+  - id: REQ-EH-006
+    name: Demo Role Session
+    required: true
+  - id: REQ-EH-007
+    name: Grafana Business Alert Intake
+    required: true
+  - id: REQ-EH-008
+    name: Event Quality Aggregation and Grafana Dashboard
+    required: true
+    event_hunter_custom_ui: false
+  - id: REQ-EH-009
+    name: Demonstrable Outbox-to-Timeline Event Pipeline
+    required: true
+  - id: REQ-EH-010
+    name: Investigation Overview and Source Health
+    required: true
+  - id: REQ-EH-011
+    name: Deterministic Smart Search Identification
+    required: true
+  - id: REQ-EH-012
+    name: Read-only Business Journey
+    required: true
+  - id: REQ-EH-013
+    name: Personal Saved Searches and Built-in Presets
+    required: true
+  - id: REQ-EH-014
+    name: Investigation Case Collaboration
+    required: true
+  - id: REQ-EH-015
+    name: Timeline Event Evidence Attachment
+    required: true
+  - id: REQ-EH-016
+    name: Event Hunter Guide and External System Integration Onboarding
+    required: true
+
+temporal:
+  mvp_required: false
+  enabled_by_default: false
+  purpose:
+    - long_running_investigation_activity_retry
+    - human_approval
+    - phase_2_or_3_sandbox_workflow
+  forbidden_uses:
+    - per_event_workflow
+    - kafka_routing
+    - kafka_consumer_retry
+
+authentication:
+  mode: demo_role_session
+  production_oidc: deferred
+  login_page: /login
+  roles:
+    VIEWER:
+      permissions:
+        - timeline:read
+        - investigation:read
+        - pattern:read
+        - evidence:read_masked
+    INVESTIGATOR:
+      inherits: VIEWER
+      permissions:
+        - investigation:create
+        - investigation:update
+        - investigation:analyze
+        - investigation:close
+    ADMIN:
+      inherits: INVESTIGATOR
+      permissions:
+        - payload:read_sensitive
+        - integration:manage
+  session:
+    transport: signed_http_only_cookie
+    cookie_name: eh_demo_session
+    same_site: Lax
+    secure_when_https: true
+    persistence_table: none
+    ttl: PT8H
+    signing_algorithm: HMAC-SHA256
+    secret_source: environment:DEMO_SESSION_SECRET
+
+grafana_alert_intake:
+  mvp_required: true
+  endpoint_operation_id: receiveGrafanaAlertWebhook
+  payload_schema: contracts/integrations/grafana-alert-webhook.schema.json
+  signature_algorithm: HMAC-SHA256
+  signature_header: X-Grafana-Alerting-Signature
+  timestamp_header: X-Grafana-Alerting-Timestamp
+  max_clock_skew: PT5M
+  secret_source: environment:GRAFANA_WEBHOOK_SECRET
+  required_labels:
+    event_hunter: investigate
+    correlation_id: non_empty
+  allowed_severities: [HIGH, CRITICAL]
+  resolved_alert_auto_closes_case: false
+  case_linking:
+    firing_lookup: most_recent_non_closed_case_with_exact_correlation_id
+    create_title_template: "Grafana: {alertname} [{correlation_id}]"
+    create_status: OPEN
+    create_assignee: null
+    resolved_lookup: prior_receipt_with_same_org_id_fingerprint_and_correlation_id
+    resolved_without_matching_case: IGNORED
+  evidence_reference_template: "grafana-alert:{org_id}:{fingerprint}:{status}:{starts_at}:{ends_at}"
+  provisioned_delivery:
+    contact_point: event-hunter-investigation
+    notification_policy_matcher: event_hunter=investigate
+    business_rule_uids: [event-hunter-dlq-investigation]
+    aggregate_quality_alerts_routed: false
+
+event_pipeline:
+  mvp_required: true
+  demo_services: [order-service, payment-service, shipping-service]
+  service_topology: contracts/demo-services/service-topology.yaml
+  outbox_cdc: debezium
+  broker: redpanda
+  clickhouse_sink: redpanda-connect
+  kafka_key: correlationId
+  sequence_scope: [aggregateType, aggregateId]
+  contracts:
+    topic_topology: contracts/platform/topic-topology.yaml
+    outbox_routing: contracts/platform/outbox-routing.yaml
+    ingestion_mapping: contracts/platform/ingestion-mapping.yaml
+
+event_quality:
+  mvp_required: true
+  worker_command: quality-worker aggregate
+  schedule: PT1M
+  temporal_used: false
+  event_hunter_custom_ui: false
+  external_ui: grafana
+  rules: contracts/quality/event-quality-rules.yaml
+
+event_contract:
+  protocol: kafka
+  format: json
+  schema: json_schema_2020_12
+  asyncapi_version: 3.0.0
+  canonical_correlation_field: correlationId
+  required_event_types:
+    - OrderCreated
+    - PaymentCompleted
+    - ShipmentCreated
+  pattern_exclusion_event_types:
+    - OrderCancelled
+    - PaymentRefunded
+    - PaymentVoided
+  versioning_policy: contracts/platform/event-versioning-policy.yaml
+  identity_time_policy: contracts/platform/identity-time-policy.yaml
+
+pattern_registry:
+  runtime_source: go_code
+  mutable_at_runtime: false
+  list_api: read_only
+  llm_enabled: false
+  first_pattern:
+    id: payment-completed-without-shipment
+    version: 1
+    window: PT5M
+    severity: HIGH
+
+evidence_bundle:
+  format: json_manifest
+  canonicalization: rfc8785_jcs
+  checksum: sha256
+  include_raw_logs: false
+  include_raw_traces: false
+  include_unmasked_pii: false
+  zip_export: deferred
+  pdf_export: deferred
+
+phase_1_frontend:
+  delivery_plan: requirements/phase-1-delivery-plan.md
+  required_routes:
+    - /login
+    - /timeline
+    - /investigations
+    - /patterns
+  required_capabilities:
+    - bounded_basic_and_advanced_timeline_search
+    - investigation_list_cursor_pagination
+    - investigation_detail_summary_timeline_patterns_and_evidence
+    - deterministic_pattern_analysis
+    - read_only_pattern_library
+    - grafana_explore_dashboard_and_alerting_deep_links
+    - tempo_trace_and_loki_log_deep_links
+    - trusted_external_origin_allowlist
+  prototype_parity_non_blocking: []
+  hidden_until_later_phase:
+    - temporal_workflow_tab
+    - replay_approval
+    - replay_execution
+    - replay_comparison
+
+phase_1_1:
+  development_plan: requirements/phase-1-1-development-plan.md
+  required_routes:
+    - /dashboard
+    - /investigations
+  required_capabilities:
+    - server_side_investigation_overview
+    - canonical_source_health_states
+    - partial_results_without_misleading_zeroes
+    - overview_deep_links
+    - deterministic_identifier_candidates
+    - investigation_owner_priority_tags_and_related_correlations
+    - append_only_case_notes
+    - derived_case_sla_status
+    - optimistic_case_collaboration_updates
+    - bounded_timeline_event_evidence_attachment
+    - idempotent_event_reference_persistence
+
+non_functional_requirements:
+  event_volume_per_day: 1000000
+  clickhouse_retention_days: 90
+  timeline_default_window: PT24H
+  timeline_max_window: P7D
+  timeline_default_limit: 1000
+  timeline_max_limit: 10000
+  timeline_p95_ms: 2000
+  investigation_summary_p95_ms: 5000
+  concurrent_investigators: 20
+
+local_development:
+  compose_file: compose.yaml
+  default_stack:
+    - postgres
+    - clickhouse
+    - redpanda
+    - redpanda-console
+    - otel-collector
+    - prometheus
+    - loki
+    - tempo
+    - grafana
+  optional_profiles:
+    temporal:
+      enabled_by_default: false
+  implemented_in_compose:
+    - event-hunter-api
+    - event-hunter-frontend
+    - demo-order-service
+    - demo-payment-service
+    - demo-shipping-service
+    - kafka-connect
+    - redpanda-connect
+    - redpanda-connect-attempts
+  intentionally_not_yet_in_compose:
+    - event-quality-worker-scheduler
+    - temporal-worker
+
+deferred:
+  - llm_analysis
+  - event_catalog_crud
+  - topic_registry_crud
+  - custom_observability_console
+  - generic_alert_management
+  - production_redrive
+  - projection_rebuild
+  - sandbox_behavioral_replay
+  - multi_tenant_rbac

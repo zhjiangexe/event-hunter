@@ -1,0 +1,139 @@
+schema_version: 1
+project: event-hunter
+source: ui-prototype.html
+policy:
+  prototype_is_ux_reference_not_contract: true
+  phase_1_blocking_requires_requirement_mapping: true
+  mock_values_must_not_enter_production_ui: true
+  temporal_default_enabled: false
+
+features:
+  - id: PROTO-EH-001
+    name: Demo role login
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-006]
+    routes: [/login]
+
+  - id: PROTO-EH-002
+    name: Overview dashboard
+    phase: phase-1-1
+    phase_1_blocking: false
+    status: implemented
+    requirement_ids: [REQ-EH-010]
+    routes: [/dashboard]
+    note: Uses server-side aggregates and source health; mock counts are forbidden.
+
+  - id: PROTO-EH-003
+    name: Timeline basic identifier and bounded-time search
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-001]
+    routes: [/timeline]
+
+  - id: PROTO-EH-004
+    name: Timeline advanced allowlist search
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-001]
+    routes: [/timeline]
+    implementation:
+      pattern_id: ACTIVE Pattern required expected and exclusion event types
+      alert_id: Grafana alert receipt fingerprint resolved to correlation IDs
+      minimum_severity: investigation case severity threshold resolved to correlation IDs
+
+  - id: PROTO-EH-005
+    name: Timeline event detail
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-001]
+    routes: [/timeline]
+
+  - id: PROTO-EH-006
+    name: Investigation list cursor pagination and right drawer
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-002]
+    routes: [/investigations]
+
+  - id: PROTO-EH-007
+    name: Investigation detail summary timeline patterns evidence and audit
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-005]
+    routes: [/investigations, /investigations/:investigationId]
+
+  - id: PROTO-EH-008
+    name: Read-only Pattern Library
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-003]
+    routes: [/patterns]
+
+  - id: PROTO-EH-009
+    name: Grafana Explore Dashboard and Alerting deep links
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-001, REQ-EH-004, REQ-EH-007, REQ-EH-008]
+    external_ui: [grafana-explore, grafana-dashboard, grafana-alerting]
+    implemented_on: [/timeline, /investigations]
+
+  - id: PROTO-EH-010
+    name: Tempo trace and Loki log deep links
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-001, REQ-EH-004]
+    external_ui: [tempo-trace, loki-logs]
+    implemented_on: [/timeline, /investigations]
+
+  - id: PROTO-EH-011
+    name: Evidence manifest and source open actions
+    phase: phase-1
+    phase_1_blocking: true
+    status: implemented
+    requirement_ids: [REQ-EH-004, REQ-EH-005]
+
+  - id: PROTO-EH-012
+    name: Temporal long-running case workflow tab
+    phase: phase-1-optional
+    phase_1_blocking: false
+    status: deferred
+    task_ids: [EH-MVP-010]
+    note: Hide when TEMPORAL_ENABLED=false; never display mock RUNNING state.
+
+  - id: PROTO-EH-013
+    name: Projection rebuild and rebuilt-state comparison
+    phase: phase-2
+    phase_1_blocking: false
+    status: deferred
+    routes: []
+
+  - id: PROTO-EH-014
+    name: Sandbox behavioral replay approval execution and comparison
+    phase: phase-3
+    phase_1_blocking: false
+    status: deferred
+    routes: []
+
+  - id: PROTO-EH-015
+    name: Production redrive
+    phase: excluded
+    phase_1_blocking: false
+    status: out_of_scope
+    note: Requires a separate product authorization model kill switch and operational controls.
+
+  - id: PROTO-EH-016
+    name: UI inventory modal
+    phase: prototype-only
+    phase_1_blocking: false
+    status: out_of_scope
+    note: Design inventory helper; not a production feature.

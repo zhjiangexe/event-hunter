@@ -1,0 +1,503 @@
+<div id="eventHunterPrototype">
+  <style>
+    #eventHunterPrototype {
+      --eh-ink: light-dark(#152238, #e7edf7);
+      --eh-muted: light-dark(#64748b, #9aa9bd);
+      --eh-subtle: light-dark(#f3f6fa, #182230);
+      --eh-surface: light-dark(#ffffff, #111a26);
+      --eh-surface-2: light-dark(#f8fafc, #0e1722);
+      --eh-border: light-dark(#dce4ee, #273548);
+      --eh-accent: light-dark(#2563eb, #73a4ff);
+      --eh-accent-soft: light-dark(#eaf2ff, #172c4e);
+      --eh-success: light-dark(#087443, #57d89c);
+      --eh-success-soft: light-dark(#e8f7ef, #14352a);
+      --eh-warning: light-dark(#a45a00, #f5bb69);
+      --eh-warning-soft: light-dark(#fff4df, #3f2e18);
+      --eh-danger: light-dark(#b42318, #ff8d86);
+      --eh-danger-soft: light-dark(#431d24, #431d24);
+      color-scheme: light dark;
+      color: var(--eh-ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.45;
+      width: 100%;
+    }
+
+    #eventHunterPrototype * { box-sizing: border-box; }
+    #eventHunterPrototype button,
+    #eventHunterPrototype input,
+    #eventHunterPrototype select,
+    #eventHunterPrototype textarea { font: inherit; }
+    #eventHunterPrototype button { cursor: pointer; }
+
+    #eventHunterPrototype .eh-shell { display: flex; min-height: 720px; background: var(--eh-surface-2); border: 1px solid var(--eh-border); overflow: hidden; }
+    #eventHunterPrototype [hidden] { display: none !important; }
+    #eventHunterPrototype .eh-login { min-height: 720px; display: grid; place-items: center; padding: 28px; border: 1px solid var(--eh-border); background: var(--eh-surface-2); }
+    #eventHunterPrototype .eh-login-card { width: min(760px, 100%); padding: 32px; border: 1px solid var(--eh-border); border-radius: 14px; background: var(--eh-surface); box-shadow: 0 20px 55px rgba(15, 23, 42, .10); }
+    #eventHunterPrototype .eh-role-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+    #eventHunterPrototype .eh-role-card { min-height: 150px; padding: 18px; border: 1px solid var(--eh-border); border-radius: 10px; color: var(--eh-ink); background: var(--eh-surface-2); text-align: left; }
+    #eventHunterPrototype .eh-role-card:hover { border-color: var(--eh-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--eh-accent) 12%, transparent); }
+    #eventHunterPrototype .eh-role-card strong { display: block; margin-bottom: 8px; font-size: 15px; }
+    #eventHunterPrototype .eh-role-card span { color: var(--eh-muted); font-size: 11px; }
+    #eventHunterPrototype .eh-sidebar { width: 238px; flex: 0 0 238px; padding: 24px 14px; color: #dce8f7; background: light-dark(#142238, #0d1723); display: flex; flex-direction: column; }
+    #eventHunterPrototype .eh-brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 26px; }
+    #eventHunterPrototype .eh-brand-mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #2f74df; color: #fff; font-weight: 800; letter-spacing: -0.04em; }
+    #eventHunterPrototype .eh-brand strong { display: block; font-size: 15px; letter-spacing: -0.01em; }
+    #eventHunterPrototype .eh-brand span { display: block; color: #91a7c2; font-size: 11px; margin-top: 1px; }
+    #eventHunterPrototype .eh-nav-label { margin: 8px 10px 7px; color: #7890ad; font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    #eventHunterPrototype .eh-nav { display: grid; gap: 3px; }
+    #eventHunterPrototype .eh-nav button { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 8px; padding: 9px 10px; color: #b7c7da; background: transparent; text-align: left; }
+    #eventHunterPrototype .eh-nav button:hover { background: #1c304a; color: #fff; }
+    #eventHunterPrototype .eh-nav button[aria-current="page"] { color: #fff; background: #24579c; box-shadow: inset 3px 0 #86b7ff; }
+    #eventHunterPrototype .eh-nav svg { width: 16px; height: 16px; }
+    #eventHunterPrototype .eh-sidebar-footer { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid #27405c; color: #89a0ba; font-size: 11px; }
+
+    #eventHunterPrototype .eh-main { min-width: 0; flex: 1; background: var(--eh-surface-2); }
+    #eventHunterPrototype .eh-topbar { height: 64px; padding: 0 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--eh-border); background: var(--eh-surface); }
+    #eventHunterPrototype .eh-breadcrumb { display: flex; align-items: center; gap: 9px; color: var(--eh-muted); font-size: 12px; }
+    #eventHunterPrototype .eh-breadcrumb strong { color: var(--eh-ink); font-size: 14px; }
+    #eventHunterPrototype .eh-top-actions { display: flex; align-items: center; gap: 9px; }
+    #eventHunterPrototype .eh-user { display: flex; align-items: center; gap: 8px; padding-left: 10px; border-left: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: #4a6fa8; font-size: 11px; font-weight: 700; }
+    #eventHunterPrototype .eh-user span { color: var(--eh-muted); font-size: 12px; }
+    #eventHunterPrototype .eh-content { padding: 28px; max-width: 1480px; margin: 0 auto; }
+    #eventHunterPrototype .eh-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    #eventHunterPrototype h1 { margin: 0; font-size: 25px; line-height: 1.15; letter-spacing: -.035em; }
+    #eventHunterPrototype h2 { margin: 0; font-size: 16px; letter-spacing: -.015em; }
+    #eventHunterPrototype h3 { margin: 0; font-size: 13px; }
+    #eventHunterPrototype .eh-kicker { margin: 5px 0 0; color: var(--eh-muted); font-size: 13px; }
+    #eventHunterPrototype .eh-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    #eventHunterPrototype .eh-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 7px 12px; border: 1px solid var(--eh-border); border-radius: 7px; color: var(--eh-ink); background: var(--eh-surface); font-size: 12px; font-weight: 650; }
+    #eventHunterPrototype .eh-btn:hover { border-color: var(--eh-accent); color: var(--eh-accent); }
+    #eventHunterPrototype .eh-btn-primary { border-color: var(--eh-accent); color: #fff; background: var(--eh-accent); }
+    #eventHunterPrototype .eh-btn-primary:hover { color: #fff; filter: brightness(1.06); }
+    #eventHunterPrototype .eh-btn-ghost { border-color: transparent; background: transparent; color: var(--eh-muted); }
+    #eventHunterPrototype .eh-btn-danger { color: var(--eh-danger); }
+    #eventHunterPrototype .eh-btn svg { width: 14px; height: 14px; }
+    #eventHunterPrototype .eh-grid { display: grid; gap: 16px; }
+    #eventHunterPrototype .eh-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    #eventHunterPrototype .eh-grid-two { grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr); }
+    #eventHunterPrototype .eh-panel { border: 1px solid var(--eh-border); border-radius: 10px; background: var(--eh-surface); }
+    #eventHunterPrototype .eh-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-panel-body { padding: 17px 18px; }
+    #eventHunterPrototype .eh-stat { padding: 17px 18px; border: 1px solid var(--eh-border); border-radius: 10px; background: var(--eh-surface); }
+    #eventHunterPrototype .eh-stat-label { color: var(--eh-muted); font-size: 12px; }
+    #eventHunterPrototype .eh-stat-value { margin-top: 7px; font-size: 26px; line-height: 1; font-weight: 720; letter-spacing: -.04em; }
+    #eventHunterPrototype .eh-stat-foot { margin-top: 8px; color: var(--eh-muted); font-size: 11px; }
+    #eventHunterPrototype .eh-stat-foot strong { color: var(--eh-success); }
+    #eventHunterPrototype .eh-table-wrap { overflow-x: auto; }
+    #eventHunterPrototype table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    #eventHunterPrototype th { padding: 10px 14px; color: var(--eh-muted); border-bottom: 1px solid var(--eh-border); text-align: left; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+    #eventHunterPrototype td { padding: 13px 14px; border-bottom: 1px solid var(--eh-border); vertical-align: middle; font-size: 12px; }
+    #eventHunterPrototype tr:last-child td { border-bottom: 0; }
+    #eventHunterPrototype tbody tr:hover { background: var(--eh-subtle); }
+    #eventHunterPrototype .eh-mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; }
+    #eventHunterPrototype .eh-muted { color: var(--eh-muted); }
+    #eventHunterPrototype .eh-status { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 8px; font-size: 10px; font-weight: 720; white-space: nowrap; }
+    #eventHunterPrototype .eh-status-open { color: var(--eh-danger); background: var(--eh-danger-soft); }
+    #eventHunterPrototype .eh-status-warn { color: var(--eh-warning); background: var(--eh-warning-soft); }
+    #eventHunterPrototype .eh-status-ok { color: var(--eh-success); background: var(--eh-success-soft); }
+    #eventHunterPrototype .eh-status-blue { color: var(--eh-accent); background: var(--eh-accent-soft); }
+    #eventHunterPrototype .eh-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    #eventHunterPrototype .eh-list { display: grid; }
+    #eventHunterPrototype .eh-list-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-list-row:last-child { border-bottom: 0; }
+    #eventHunterPrototype .eh-list-main { min-width: 0; }
+    #eventHunterPrototype .eh-list-title { overflow: hidden; color: var(--eh-ink); font-size: 12px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+    #eventHunterPrototype .eh-list-meta { margin-top: 4px; color: var(--eh-muted); font-size: 11px; }
+    #eventHunterPrototype .eh-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-toolbar-left, #eventHunterPrototype .eh-toolbar-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    #eventHunterPrototype .eh-field { height: 34px; min-width: 150px; padding: 6px 10px; border: 1px solid var(--eh-border); border-radius: 7px; color: var(--eh-ink); background: var(--eh-surface); outline: none; font-size: 12px; }
+    #eventHunterPrototype .eh-field:focus { border-color: var(--eh-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--eh-accent) 18%, transparent); }
+    #eventHunterPrototype .eh-tabs { display: flex; gap: 3px; padding: 0 18px; border-bottom: 1px solid var(--eh-border); overflow-x: auto; }
+    #eventHunterPrototype .eh-tab { padding: 11px 13px; border: 0; border-bottom: 2px solid transparent; color: var(--eh-muted); background: transparent; font-size: 12px; font-weight: 650; white-space: nowrap; }
+    #eventHunterPrototype .eh-tab[aria-selected="true"] { border-bottom-color: var(--eh-accent); color: var(--eh-accent); }
+    #eventHunterPrototype .eh-timeline { position: relative; display: grid; gap: 15px; padding-left: 24px; }
+    #eventHunterPrototype .eh-timeline:before { position: absolute; top: 6px; bottom: 6px; left: 6px; width: 1px; background: var(--eh-border); content: ""; }
+    #eventHunterPrototype .eh-event { position: relative; padding: 13px 14px; border: 1px solid var(--eh-border); border-radius: 8px; background: var(--eh-surface-2); }
+    #eventHunterPrototype .eh-event:before { position: absolute; top: 18px; left: -22px; width: 9px; height: 9px; border: 2px solid var(--eh-surface); border-radius: 50%; background: var(--eh-accent); box-shadow: 0 0 0 1px var(--eh-accent); content: ""; }
+    #eventHunterPrototype .eh-event-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #eventHunterPrototype .eh-event-type { font-weight: 720; }
+    #eventHunterPrototype .eh-event-body { display: flex; flex-wrap: wrap; gap: 8px 15px; margin-top: 7px; color: var(--eh-muted); font-size: 11px; }
+    #eventHunterPrototype .eh-pattern { padding: 13px 0; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-pattern:last-child { border-bottom: 0; }
+    #eventHunterPrototype .eh-pattern-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #eventHunterPrototype .eh-pattern p { margin: 7px 0 0; color: var(--eh-muted); font-size: 11px; }
+    #eventHunterPrototype .eh-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    #eventHunterPrototype .eh-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border: 1px solid var(--eh-border); border-radius: 6px; color: var(--eh-muted); background: var(--eh-subtle); font-size: 10px; }
+    #eventHunterPrototype .eh-callout { display: flex; align-items: flex-start; gap: 10px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--eh-accent) 30%, var(--eh-border)); border-radius: 8px; background: var(--eh-accent-soft); }
+    #eventHunterPrototype .eh-callout svg { flex: 0 0 auto; width: 16px; height: 16px; color: var(--eh-accent); }
+    #eventHunterPrototype .eh-callout p { margin: 0; color: var(--eh-ink); font-size: 11px; }
+    #eventHunterPrototype .eh-empty { padding: 34px 18px; color: var(--eh-muted); text-align: center; font-size: 12px; }
+    #eventHunterPrototype .eh-modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(5, 12, 22, .58); }
+    #eventHunterPrototype .eh-modal { width: min(560px, 100%); max-height: min(720px, 90vh); overflow: auto; border: 1px solid var(--eh-border); border-radius: 12px; background: var(--eh-surface); box-shadow: 0 24px 70px rgba(0, 0, 0, .3); }
+    #eventHunterPrototype .eh-modal-wide { width: min(760px, 100%); }
+    #eventHunterPrototype .eh-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-modal-body { padding: 20px; }
+    #eventHunterPrototype .eh-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-close { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--eh-muted); background: transparent; }
+    #eventHunterPrototype .eh-close:hover { color: var(--eh-ink); background: var(--eh-subtle); }
+    #eventHunterPrototype .eh-form-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #eventHunterPrototype .eh-form-row { display: grid; gap: 5px; }
+    #eventHunterPrototype .eh-form-row-full { grid-column: 1 / -1; }
+    #eventHunterPrototype .eh-label { color: var(--eh-muted); font-size: 11px; font-weight: 680; }
+    #eventHunterPrototype .eh-help { color: var(--eh-muted); font-size: 10px; }
+    #eventHunterPrototype .eh-toast { position: fixed; right: 24px; bottom: 24px; z-index: 70; max-width: 340px; padding: 11px 14px; border: 1px solid var(--eh-border); border-radius: 8px; color: var(--eh-ink); background: var(--eh-surface); box-shadow: 0 15px 35px rgba(0, 0, 0, .18); font-size: 12px; }
+    #eventHunterPrototype .eh-inventory { display: grid; gap: 12px; }
+    #eventHunterPrototype .eh-inventory-item { display: grid; grid-template-columns: 120px 1fr; gap: 15px; padding: 11px 0; border-bottom: 1px solid var(--eh-border); }
+    #eventHunterPrototype .eh-inventory-item:last-child { border-bottom: 0; }
+    #eventHunterPrototype .eh-inventory-count { color: var(--eh-accent); font-size: 18px; font-weight: 750; }
+    #eventHunterPrototype .eh-inventory-desc { color: var(--eh-muted); font-size: 11px; }
+    @media (max-width: 920px) {
+      #eventHunterPrototype .eh-sidebar { width: 70px; flex-basis: 70px; padding: 18px 9px; }
+      #eventHunterPrototype .eh-brand { justify-content: center; padding: 0 0 24px; }
+      #eventHunterPrototype .eh-brand-copy, #eventHunterPrototype .eh-nav-label, #eventHunterPrototype .eh-nav button span, #eventHunterPrototype .eh-sidebar-footer { display: none; }
+      #eventHunterPrototype .eh-nav button { justify-content: center; padding: 11px 8px; }
+      #eventHunterPrototype .eh-grid-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #eventHunterPrototype .eh-grid-two { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      #eventHunterPrototype .eh-role-grid { grid-template-columns: 1fr; }
+      #eventHunterPrototype .eh-topbar { padding: 0 16px; }
+      #eventHunterPrototype .eh-top-actions .eh-btn span, #eventHunterPrototype .eh-user span { display: none; }
+      #eventHunterPrototype .eh-content { padding: 20px 15px; }
+      #eventHunterPrototype .eh-page-head { display: block; }
+      #eventHunterPrototype .eh-page-head .eh-actions { margin-top: 14px; }
+      #eventHunterPrototype .eh-grid-four { grid-template-columns: 1fr 1fr; gap: 10px; }
+      #eventHunterPrototype .eh-stat { padding: 13px; }
+      #eventHunterPrototype .eh-stat-value { font-size: 22px; }
+      #eventHunterPrototype .eh-form-grid { grid-template-columns: 1fr; }
+      #eventHunterPrototype .eh-form-row-full { grid-column: auto; }
+    }
+  </style>
+
+  <section id="eh-login" class="eh-login" aria-labelledby="eh-login-title">
+    <div class="eh-login-card">
+      <div class="eh-brand" style="padding:0"><div class="eh-brand-mark">EH</div><div class="eh-brand-copy"><strong>Event Hunter</strong><span>Demo role session</span></div></div>
+      <h1 id="eh-login-title" style="margin-top:28px">選擇示範角色</h1>
+      <p class="eh-kicker">MVP 不建立帳號或密碼。後端會以簽署的 HttpOnly Cookie 套用角色權限；正式環境再改接 OIDC。</p>
+      <div class="eh-role-grid">
+        <button type="button" class="eh-role-card" data-demo-role="VIEWER" data-testid="role-viewer"><strong>Viewer</strong><span>查看 Timeline、案件、Pattern 與遮罩後 Evidence。</span></button>
+        <button type="button" class="eh-role-card" data-demo-role="INVESTIGATOR" data-testid="role-investigator"><strong>Investigator</strong><span>建立、分析、更新與結案；作品展示的預設角色。</span></button>
+        <button type="button" class="eh-role-card" data-demo-role="ADMIN" data-testid="role-admin"><strong>Admin</strong><span>包含 Investigator 權限，並可查看受控敏感 payload。</span></button>
+      </div>
+    </div>
+  </section>
+
+  <div id="eh-app-shell" class="eh-shell" hidden>
+    <aside class="eh-sidebar">
+      <div class="eh-brand">
+        <div class="eh-brand-mark">EH</div>
+        <div class="eh-brand-copy"><strong>Event Hunter</strong><span>Business Forensics</span></div>
+      </div>
+      <div class="eh-nav-label">Workspace</div>
+      <nav class="eh-nav" aria-label="主要導覽">
+        <button type="button" data-page="overview" aria-current="page"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>總覽</span></button>
+        <button type="button" data-page="investigations"><i data-lucide="search-check" aria-hidden="true"></i><span>調查案件</span></button>
+        <button type="button" data-page="timeline"><i data-lucide="route" aria-hidden="true"></i><span>時間線搜尋</span></button>
+        <button type="button" data-page="patterns"><i data-lucide="workflow" aria-hidden="true"></i><span>Pattern Library</span></button>
+      </nav>
+      <div class="eh-sidebar-footer">MVP · Business investigation<br>Grafana-linked observability</div>
+    </aside>
+
+    <main class="eh-main">
+      <header class="eh-topbar">
+        <div class="eh-breadcrumb"><strong id="eh-breadcrumb-title">總覽</strong><span>/</span><span>Event Hunter</span></div>
+        <div class="eh-top-actions">
+          <button type="button" class="eh-btn eh-btn-ghost" data-modal="inventory"><i data-lucide="layers-3" aria-hidden="true"></i><span>UI 規劃</span></button>
+          <button type="button" class="eh-btn eh-btn-ghost" data-role-switch><div class="eh-avatar">EH</div><span id="eh-current-role">INVESTIGATOR</span></button>
+        </div>
+      </header>
+      <section id="eh-page" class="eh-content" aria-live="polite"></section>
+    </main>
+  </div>
+  <div id="eh-modal-root"></div>
+  <div id="eh-toast-root"></div>
+
+  <script>
+    (() => {
+      const root = document.getElementById("eventHunterPrototype");
+      const page = document.getElementById("eh-page");
+      const login = document.getElementById("eh-login");
+      const appShell = document.getElementById("eh-app-shell");
+      const currentRole = document.getElementById("eh-current-role");
+      const breadcrumb = document.getElementById("eh-breadcrumb-title");
+      const modalRoot = document.getElementById("eh-modal-root");
+      const toastRoot = document.getElementById("eh-toast-root");
+      const state = { page: "overview", tab: "summary", activeCase: "INC-2026-0001", role: null };
+      const cases = [
+        { no: "INC-2026-0001", title: "付款成功但未建立出貨單", severity: "HIGH", status: "INVESTIGATING", correlation: "ORDER-1001", age: "12 分鐘前", assignee: "payments-platform" },
+        { no: "INC-2026-0002", title: "PaymentCompleted 重複出現", severity: "MEDIUM", status: "OPEN", correlation: "ORDER-0982", age: "38 分鐘前", assignee: "待指派" },
+        { no: "INC-2026-0003", title: "shipping-service 事件延遲", severity: "LOW", status: "WAITING_APPROVAL", correlation: "ORDER-0970", age: "2 小時前", assignee: "platform-team" },
+        { no: "INC-2026-0004", title: "退款金額超過已捕獲金額候選", severity: "CRITICAL", status: "RESOLVED", correlation: "ORDER-0920", age: "昨天", assignee: "payments-platform" }
+      ];
+      const pageNames = { overview: "總覽", investigations: "調查案件", timeline: "時間線搜尋", patterns: "Pattern Library", detail: "案件詳情" };
+
+      function icon(name) { return `<i data-lucide="${name}" aria-hidden="true"></i>`; }
+      function status(value) {
+        const map = {
+          OPEN: ["eh-status-open", "待調查"], INVESTIGATING: ["eh-status-blue", "調查中"], WAITING_APPROVAL: ["eh-status-warn", "等待核准"],
+          RESOLVED: ["eh-status-ok", "已解決"], CLOSED: ["eh-status-ok", "已結案"], RUNNING: ["eh-status-blue", "執行中"],
+          SUCCEEDED: ["eh-status-ok", "成功"], PENDING_APPROVAL: ["eh-status-warn", "等待核准"], FAILED: ["eh-status-open", "失敗"],
+          ACTIVE: ["eh-status-ok", "ACTIVE"], DEPRECATED: ["eh-status-warn", "DEPRECATED"]
+        };
+        const item = map[value] || ["eh-status-blue", value];
+        return `<span class="eh-status ${item[0]}"><span class="eh-dot"></span>${item[1]}</span>`;
+      }
+      function severity(value) {
+        const color = value === "CRITICAL" || value === "HIGH" ? "eh-status-open" : value === "MEDIUM" ? "eh-status-warn" : "eh-status-blue";
+        return `<span class="eh-status ${color}">${value}</span>`;
+      }
+      function refreshIcons() { if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } }); }
+      function toast(message) {
+        toastRoot.innerHTML = `<div class="eh-toast" role="status">${icon("check-circle-2")} ${message}</div>`;
+        refreshIcons();
+        window.setTimeout(() => { toastRoot.innerHTML = ""; }, 2600);
+      }
+      function panelHead(title, action = "") { return `<div class="eh-panel-head"><h2>${title}</h2>${action}</div>`; }
+      function caseRows(items = cases) {
+        return items.map(item => `<tr>
+          <td><button type="button" class="eh-btn eh-btn-ghost eh-mono" data-view-case="${item.no}">${item.no}</button></td>
+          <td><strong>${item.title}</strong><div class="eh-muted eh-mono">${item.correlation}</div></td>
+          <td>${severity(item.severity)}</td><td>${status(item.status)}</td>
+          <td class="eh-muted">${item.assignee}</td><td class="eh-muted">${item.age}</td>
+          <td><div class="eh-actions"><button type="button" class="eh-btn" data-view-case="${item.no}">查看</button><button type="button" class="eh-btn" data-modal="analyze">分析</button></div></td>
+        </tr>`).join("");
+      }
+      function renderOverview() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>總覽</h1><p class="eh-kicker">以業務調查為中心，快速掌握案件、Pattern Finding、Evidence 與 Grafana 告警參照。</p></div><div class="eh-actions"><button type="button" class="eh-btn" data-modal="inventory">${icon("map")} UI 元件地圖</button><button type="button" class="eh-btn eh-btn-primary" data-modal="new-case">${icon("plus")} 建立調查案件</button></div></div>
+          <div class="eh-grid eh-grid-four">
+            <div class="eh-stat"><div class="eh-stat-label">Open investigations</div><div class="eh-stat-value">12</div><div class="eh-stat-foot"><strong>+3</strong> 本週新增</div></div>
+            <div class="eh-stat"><div class="eh-stat-label">Grafana business alerts</div><div class="eh-stat-value">7</div><div class="eh-stat-foot"><strong>2</strong> 件需要建立業務案件</div></div>
+            <div class="eh-stat"><div class="eh-stat-label">Evidence references</div><div class="eh-stat-value">184</div><div class="eh-stat-foot">ClickHouse／Grafana · last 24h</div></div>
+            <div class="eh-stat"><div class="eh-stat-label">Temporal case workflows</div><div class="eh-stat-value">3</div><div class="eh-stat-foot">2 running · 1 waiting</div></div>
+          </div>
+          <div class="eh-grid eh-grid-two" style="margin-top:16px">
+            <section class="eh-panel">${panelHead("待處理案件", `<button type="button" class="eh-btn eh-btn-ghost" data-page="investigations">查看全部 ${icon("arrow-up-right")}</button>`)}<div class="eh-panel-body"><div class="eh-list">
+              ${cases.slice(0, 3).map(item => `<div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">${item.title}</div><div class="eh-list-meta"><span class="eh-mono">${item.no}</span> · ${item.correlation} · ${item.age}</div></div><div class="eh-actions">${severity(item.severity)}<button type="button" class="eh-btn" data-view-case="${item.no}">查看</button></div></div>`).join("")}
+            </div></div></section>
+            <section class="eh-panel">${panelHead("調查流程", `<span class="eh-muted eh-mono">MVP read-only</span>`)}<div class="eh-panel-body"><div class="eh-callout">${icon("workflow")}<p><strong>Pattern → Evidence → Case</strong><br>固定規則先收集證據，再由 Temporal 管理調查 Activity 的重試、審批與結案；Kafka 事件重試由 Consumer／Retry Topic 處理。</p></div><div class="eh-chip-row" style="margin-top:15px"><span class="eh-chip">${icon("database")} PostgreSQL control plane</span><span class="eh-chip">${icon("table-2")} ClickHouse event plane</span><span class="eh-chip">${icon("timer")} Temporal case workflow</span></div></div></section>
+          </div>
+          <div class="eh-grid eh-grid-two" style="margin-top:16px">
+            <section class="eh-panel">${panelHead("Grafana 告警摘要", `<button type="button" class="eh-btn eh-btn-ghost" data-toast="原型：將開啟 Grafana Alerting／Explore">開啟 Grafana ${icon("external-link")}</button>`)}<div class="eh-panel-body"><div class="eh-list">
+              <div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">DUPLICATE_EVENT · payment.events</div><div class="eh-list-meta">Grafana Alerting · eventId evt-001 在兩個 offset 出現</div></div><div class="eh-actions">${severity("HIGH")}<button type="button" class="eh-btn" data-modal="new-case">建立案件</button></div></div>
+              <div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">OUT_OF_ORDER_CANDIDATE · shipping.events</div><div class="eh-list-meta">Grafana Alerting · sequence 8 早於 sequence 7 到達</div></div><div class="eh-actions">${severity("MEDIUM")}<button type="button" class="eh-btn" data-toast="原型：將開啟 Grafana Alerting">查看告警</button></div></div>
+              <div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">SCHEMA_VIOLATION · order.events</div><div class="eh-list-meta">Grafana Alerting · eventVersion 2 缺少 aggregateId</div></div><div class="eh-actions">${severity("LOW")}<button type="button" class="eh-btn" data-toast="原型：將開啟 Grafana Dashboard">查看 Dashboard</button></div></div>
+            </div></div></section>
+            <section class="eh-panel">${panelHead("MVP 範圍", `<button type="button" class="eh-btn eh-btn-ghost" data-modal="inventory">查看 UI inventory</button>`)}<div class="eh-panel-body"><div class="eh-inventory"><div class="eh-inventory-item"><div class="eh-inventory-count">4</div><div><h3>功能頁</h3><div class="eh-inventory-desc">總覽、調查案件、時間線搜尋、Pattern Library。</div></div></div><div class="eh-inventory-item"><div class="eh-inventory-count">5</div><div><h3>核心列表</h3><div class="eh-inventory-desc">案件、Timeline events、Pattern findings、Evidence references、Workflow activities。</div></div></div><div class="eh-inventory-item"><div class="eh-inventory-count">3</div><div><h3>主要操作</h3><div class="eh-inventory-desc">建立案件、執行 Pattern、結案；Grafana 觀測使用外部連結。</div></div></div></div></div></section>
+          </div>`;
+      }
+      function renderInvestigations() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>調查案件</h1><p class="eh-kicker">案件是人工調查、Evidence 與 Temporal Workflow 的控制面。</p></div><div class="eh-actions"><button type="button" class="eh-btn eh-btn-primary" data-modal="new-case">${icon("plus")} 建立案件</button></div></div>
+          <section class="eh-panel">${panelHead("案件列表", `<span class="eh-muted">4 / 12 顯示</span>`)}<div class="eh-toolbar"><div class="eh-toolbar-left"><input class="eh-field" id="eh-case-search" placeholder="搜尋案件編號、標題或 correlationId" aria-label="搜尋案件"><select class="eh-field" aria-label="案件狀態"><option>全部狀態</option><option>調查中</option><option>等待核准</option><option>已結案</option></select></div><div class="eh-toolbar-right"><button type="button" class="eh-btn" data-toast="已匯出目前案件清單">${icon("download")} 匯出</button></div></div><div class="eh-table-wrap"><table><thead><tr><th>案件</th><th>摘要</th><th>嚴重度</th><th>狀態</th><th>負責人</th><th>更新</th><th>操作</th></tr></thead><tbody id="eh-case-rows">${caseRows()}</tbody></table></div></section>`;
+        const search = document.getElementById("eh-case-search");
+        search.addEventListener("input", () => { const q = search.value.toLowerCase(); document.getElementById("eh-case-rows").innerHTML = caseRows(cases.filter(item => `${item.no} ${item.title} ${item.correlation}`.toLowerCase().includes(q))); });
+      }
+      function renderTimeline() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>時間線搜尋</h1><p class="eh-kicker">以業務識別碼或技術識別碼重建唯讀的業務流程，不會重新送回正式系統。</p></div><div class="eh-actions"><span class="eh-muted eh-mono">ClickHouse allowlist query</span></div></div>
+          <section class="eh-panel">${panelHead("基本查詢條件", `<span class="eh-muted">時間範圍最多 7 天</span>`)}<div class="eh-panel-body"><div class="eh-toolbar-left"><select class="eh-field" id="eh-timeline-key" aria-label="識別碼類型"><option value="correlation_id">Correlation ID</option><option value="aggregate_id">Aggregate／Business ID</option><option value="trace_id">Trace ID</option><option value="event_id">Event ID</option></select><input class="eh-field" id="eh-timeline-value" value="ORDER-1001" aria-label="識別碼值" placeholder="例如 ORDER-1001"><input class="eh-field" type="datetime-local" value="2026-08-20T00:00" aria-label="開始時間"><input class="eh-field" type="datetime-local" value="2026-08-20T01:00" aria-label="結束時間"><button type="button" class="eh-btn eh-btn-primary" data-toast="已依 allowlist 條件從 ClickHouse 載入 4 筆事件">${icon("search")} 查詢時間線</button><button type="button" class="eh-btn" data-toggle-advanced aria-expanded="false" aria-controls="eh-timeline-advanced">${icon("sliders-horizontal")} 進階條件</button></div><div id="eh-timeline-advanced" class="eh-form-grid" hidden style="margin-top:16px"><div class="eh-form-row"><label class="eh-label" for="eh-event-type">Event type</label><input class="eh-field" id="eh-event-type" placeholder="PaymentCompleted"></div><div class="eh-form-row"><label class="eh-label" for="eh-event-version">Event version</label><input class="eh-field" id="eh-event-version" type="number" min="1" placeholder="1"></div><div class="eh-form-row"><label class="eh-label" for="eh-producer">Producer／Service</label><input class="eh-field" id="eh-producer" placeholder="payment-service"></div><div class="eh-form-row"><label class="eh-label" for="eh-causation">Causation ID</label><input class="eh-field" id="eh-causation" placeholder="evt-order-001"></div><div class="eh-form-row"><label class="eh-label" for="eh-topic">Kafka topic</label><input class="eh-field" id="eh-topic" placeholder="payment.events"></div><div class="eh-form-row"><label class="eh-label" for="eh-partition">Partition</label><input class="eh-field" id="eh-partition" type="number" min="0" placeholder="0"></div><div class="eh-form-row"><label class="eh-label" for="eh-offset">Offset</label><input class="eh-field" id="eh-offset" type="number" min="0" placeholder="10042"></div><div class="eh-form-row"><label class="eh-label" for="eh-pattern">Pattern ID</label><input class="eh-field" id="eh-pattern" placeholder="missing-shipment-after-payment"></div><div class="eh-form-row"><label class="eh-label" for="eh-alert">Grafana Alert ID</label><input class="eh-field" id="eh-alert" placeholder="grafana-alert-123"></div><div class="eh-form-row"><label class="eh-label" for="eh-severity">最低嚴重度</label><select class="eh-field" id="eh-severity"><option>所有嚴重度</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option><option>CRITICAL</option></select></div><div class="eh-form-row"><label class="eh-label">Payload</label><label class="eh-chip" style="min-height:34px"><input type="checkbox" aria-label="包含遮罩後 payload"> 包含遮罩後 payload（需權限）</label></div></div></div></section>
+          <div class="eh-grid eh-grid-two" style="margin-top:16px"><section class="eh-panel">${panelHead("ORDER-1001 · Business Timeline", `<span class="eh-muted">4 events · 0 truncated</span>`)}<div class="eh-panel-body"><div class="eh-timeline">
+            <div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">OrderCreated</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:01.042</span><span class="eh-mono">order-service v1.8.0</span><span class="eh-mono">evt-order-001</span></div></div>
+            <div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">PaymentCompleted</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:03.840</span><span class="eh-mono">payment-service v1.4.2</span><span class="eh-mono">evt-payment-001</span></div></div>
+            <div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">PaymentCaptured</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:04.120</span><span class="eh-mono">payment-service v1.4.2</span><span class="eh-mono">trace-500</span></div></div>
+            <div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">ShipmentCreated</span>${status("FAILED")}</div><div class="eh-event-body"><span>未找到 · window 5m</span><span class="eh-mono">shipping-service</span><span class="eh-status eh-status-open">缺失候選</span></div></div>
+          </div></div></section><section class="eh-panel">${panelHead("查詢結果摘要")}<div class="eh-panel-body"><div class="eh-callout">${icon("triangle-alert")}<p><strong>Pattern matched</strong><br>付款已完成，但 5 分鐘內沒有 ShipmentCreated。這只是調查候選，需搭配 Domain Invariant 與 Grafana 技術觀測判斷。</p></div><div class="eh-chip-row" style="margin-top:14px"><span class="eh-chip">key: correlation_id</span><span class="eh-chip">window: 1h</span><span class="eh-chip">source: ClickHouse</span></div><div class="eh-actions" style="margin-top:16px"><button type="button" class="eh-btn eh-btn-primary" data-modal="new-case">${icon("folder-plus")} 以此建立案件</button><button type="button" class="eh-btn" data-modal="evidence">${icon("file-search")} 查看證據</button><button type="button" class="eh-btn" data-toast="原型：將開啟 Grafana Explore／Tempo deep link">${icon("external-link")} 在 Grafana 查看</button></div></div></section></div>`;
+      }
+      function renderPatterns() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>Pattern Library</h1><p class="eh-kicker">固定、唯讀、可測試的 Domain Pattern；不提供線上編輯或 LLM 自動推理。</p></div><div class="eh-actions"><button type="button" class="eh-btn" data-toast="Pattern 定義由版本控制與 CI 管理">${icon("git-branch")} 由程式碼管理</button></div></div>
+          <section class="eh-panel">${panelHead("固定 Pattern", `<span class="eh-muted">3 enabled · read-only</span>`)}<div class="eh-table-wrap"><table><thead><tr><th>Pattern ID</th><th>條件</th><th>Evidence</th><th>嚴重度</th><th>狀態</th></tr></thead><tbody>
+            <tr><td class="eh-mono">payment-completed-without-shipment</td><td>PaymentCompleted 後 5 分鐘內缺少 ShipmentCreated</td><td class="eh-mono">events.by_correlation.v1</td><td>${severity("HIGH")}</td><td>${status("ACTIVE")}</td></tr>
+            <tr><td class="eh-mono">duplicate-event-id</td><td>同一 event_id 出現在不同 Kafka offset</td><td class="eh-mono">events.by_id.v1</td><td>${severity("MEDIUM")}</td><td>${status("ACTIVE")}</td></tr>
+            <tr><td class="eh-mono">domain-invariant-payment-capture</td><td>capturedAmount 不得大於 authorizedAmount</td><td class="eh-mono">payment.invariant.v1</td><td>${severity("HIGH")}</td><td>${status("ACTIVE")}</td></tr>
+          </tbody></table></div></section>
+          <section class="eh-panel" style="margin-top:16px">${panelHead("執行邊界")}<div class="eh-panel-body"><div class="eh-callout">${icon("shield-check")}<p>Pattern 只讀取 ClickHouse 事件與 Grafana 技術觀測參照，產生 Finding 與 Evidence reference；不修改正式訂單、付款、庫存，也不執行 Replay。</p></div></div></section>`;
+      }
+      // Deferred screen fixtures below are retained for future design reference only.
+      // They are intentionally not registered in renderPage and have no MVP navigation entry.
+      function renderEvents() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>事件目錄</h1><p class="eh-kicker">管理 Event type、Schema version、Producer 與相容性政策。</p></div><button type="button" class="eh-btn eh-btn-primary" data-modal="event-definition">${icon("plus")} 登錄事件</button></div><section class="eh-panel">${panelHead("Event Definitions", `<span class="eh-muted">24 event types</span>`)}<div class="eh-toolbar"><div class="eh-toolbar-left"><input class="eh-field" placeholder="搜尋 event type" aria-label="搜尋 event type"><select class="eh-field" aria-label="Lifecycle"><option>全部 Lifecycle</option><option>ACTIVE</option><option>DRAFT</option><option>DEPRECATED</option></select></div></div><div class="eh-table-wrap"><table><thead><tr><th>Event type</th><th>Producer</th><th>Schema</th><th>Consumers</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td><strong>PaymentCompleted</strong><div class="eh-muted">付款完成</div></td><td class="eh-mono">payment-service</td><td>v3 · JSON Schema</td><td>order, analytics</td><td>payments-platform</td><td>${status("ACTIVE")}</td><td><button type="button" class="eh-btn" data-modal="schema">查看 Schema</button></td></tr>
+          <tr><td><strong>OrderCreated</strong><div class="eh-muted">訂單建立</div></td><td class="eh-mono">order-service</td><td>v2 · JSON Schema</td><td>payment, fraud</td><td>commerce-core</td><td>${status("ACTIVE")}</td><td><button type="button" class="eh-btn" data-modal="schema">查看 Schema</button></td></tr>
+          <tr><td><strong>ShipmentCreated</strong><div class="eh-muted">出貨單建立</div></td><td class="eh-mono">shipping-service</td><td>v1 · JSON Schema</td><td>notification</td><td>fulfillment</td><td>${status("DRAFT")}</td><td><button type="button" class="eh-btn" data-modal="schema">查看 Schema</button></td></tr>
+        </tbody></table></div></section>`;
+      }
+      function renderTopics() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>Topic Registry</h1><p class="eh-kicker">治理 Kafka Topic、partition key、ordering guarantee 與 PII 分類。</p></div><button type="button" class="eh-btn eh-btn-primary" data-modal="topic-definition">${icon("plus")} 登錄 Topic</button></div><section class="eh-panel">${panelHead("Registered Topics", `<span class="eh-muted">8 topics</span>`)}<div class="eh-table-wrap"><table><thead><tr><th>Topic</th><th>Partition key</th><th>Ordering</th><th>Retention</th><th>PII</th><th>Owner</th><th>Status</th><th></th></tr></thead><tbody>
+          <tr><td class="eh-mono">payment.events</td><td>aggregateId</td><td>PER_AGGREGATE</td><td>30 days</td><td>CONFIDENTIAL</td><td>payments-platform</td><td>${status("ACTIVE")}</td><td><button type="button" class="eh-btn" data-modal="topic">詳情</button></td></tr>
+          <tr><td class="eh-mono">order.events</td><td>aggregateId</td><td>PER_AGGREGATE</td><td>30 days</td><td>INTERNAL</td><td>commerce-core</td><td>${status("ACTIVE")}</td><td><button type="button" class="eh-btn" data-modal="topic">詳情</button></td></tr>
+          <tr><td class="eh-mono">shipping.events</td><td>aggregateId</td><td>PER_AGGREGATE</td><td>14 days</td><td>INTERNAL</td><td>fulfillment</td><td>${status("ACTIVE")}</td><td><button type="button" class="eh-btn" data-modal="topic">詳情</button></td></tr>
+        </tbody></table></div></section>`;
+      }
+      function renderQuality() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>品質監控</h1><p class="eh-kicker">品質指標是調查線索，不會單獨等同於業務事故。</p></div><div class="eh-actions"><button type="button" class="eh-btn" data-toast="已刷新最近 24 小時品質指標">${icon("refresh-cw")} 刷新</button></div></div><div class="eh-grid eh-grid-four"><div class="eh-stat"><div class="eh-stat-label">Duplicate rate</div><div class="eh-stat-value">0.04%</div><div class="eh-stat-foot"><strong>低於 budget</strong></div></div><div class="eh-stat"><div class="eh-stat-label">Average delay</div><div class="eh-stat-value">182ms</div><div class="eh-stat-foot">p95 1.4s</div></div><div class="eh-stat"><div class="eh-stat-label">Schema violations</div><div class="eh-stat-value">7</div><div class="eh-stat-foot">3 topics affected</div></div><div class="eh-stat"><div class="eh-stat-label">Consumer lag</div><div class="eh-stat-value">2.8K</div><div class="eh-stat-foot">shipping group highest</div></div></div><section class="eh-panel" style="margin-top:16px">${panelHead("Quality Violations", `<span class="eh-muted">last 24 hours</span>`)}<div class="eh-toolbar"><div class="eh-toolbar-left"><select class="eh-field" aria-label="違規類型"><option>全部違規類型</option><option>DUPLICATE_EVENT</option><option>OUT_OF_ORDER_CANDIDATE</option><option>SCHEMA_VIOLATION</option></select><select class="eh-field" aria-label="嚴重度"><option>所有嚴重度</option><option>HIGH</option><option>MEDIUM</option></select></div></div><div class="eh-table-wrap"><table><thead><tr><th>Detected</th><th>Violation</th><th>Topic</th><th>Evidence</th><th>嚴重度</th><th></th></tr></thead><tbody>
+          <tr><td class="eh-muted">01:00:12</td><td><strong>DUPLICATE_EVENT</strong><div class="eh-muted">同一 eventId 出現兩次</div></td><td class="eh-mono">payment.events</td><td class="eh-mono">evt-payment-001</td><td>${severity("HIGH")}</td><td><button type="button" class="eh-btn" data-modal="new-case">建立案件</button></td></tr>
+          <tr><td class="eh-muted">00:52:08</td><td><strong>OUT_OF_ORDER_CANDIDATE</strong><div class="eh-muted">sequence 8 早於 7 到達</div></td><td class="eh-mono">shipping.events</td><td class="eh-mono">ORDER-1001</td><td>${severity("MEDIUM")}</td><td><button type="button" class="eh-btn" data-page="timeline">查看時間線</button></td></tr>
+          <tr><td class="eh-muted">00:41:55</td><td><strong>SCHEMA_VIOLATION</strong><div class="eh-muted">缺少 aggregateId</div></td><td class="eh-mono">order.events</td><td class="eh-mono">evt-order-088</td><td>${severity("LOW")}</td><td><button type="button" class="eh-btn" data-modal="evidence">查看證據</button></td></tr>
+        </tbody></table></div></section>`;
+      }
+      function renderReplays() {
+        page.innerHTML = `<div class="eh-page-head"><div><h1>Replay／Verify</h1><p class="eh-kicker">只允許 Projection Rebuild 與 Sandbox Behavioral Replay，不提供 Production Redrive。</p></div><button type="button" class="eh-btn eh-btn-primary" data-modal="replay">${icon("plus")} 建立隔離分析</button></div><div class="eh-callout" style="margin-bottom:16px">${icon("shield-alert")}<p><strong>安全邊界</strong><br>Replay 必須有案件、隔離 Sandbox、人工核准與副作用攔截器。正式付款、通知、物流與資料庫不會被呼叫。</p></div><section class="eh-panel">${panelHead("Replay Sessions", `<span class="eh-muted">2 sessions</span>`)}<div class="eh-table-wrap"><table><thead><tr><th>Session</th><th>案件</th><th>類型</th><th>Sandbox</th><th>Status</th><th>更新</th><th></th></tr></thead><tbody>
+          <tr><td class="eh-mono">rep-2026-0004</td><td class="eh-mono">INC-2026-0001</td><td>PROJECTION_REBUILD</td><td class="eh-mono">sandbox-17</td><td>${status("PENDING_APPROVAL")}</td><td class="eh-muted">3 分鐘前</td><td><button type="button" class="eh-btn eh-btn-primary" data-modal="approve-replay">核准</button><button type="button" class="eh-btn" data-modal="replay">查看</button></td></tr>
+          <tr><td class="eh-mono">rep-2026-0003</td><td class="eh-mono">INC-2026-0004</td><td>SANDBOX_BEHAVIORAL_REPLAY</td><td class="eh-mono">sandbox-12</td><td>${status("SUCCEEDED")}</td><td class="eh-muted">昨天</td><td><button type="button" class="eh-btn" data-modal="evidence">查看比較</button></td></tr>
+        </tbody></table></div></section>`;
+      }
+      function renderDetail() {
+        const item = cases.find(x => x.no === state.activeCase) || cases[0];
+        const tabs = ["summary", "timeline", "evidence", "patterns", "workflow"];
+        const tabContent = {
+          summary: `<div class="eh-grid eh-grid-two"><section class="eh-panel">${panelHead("Pattern Findings", `<span class="eh-status eh-status-open">1 HIGH</span>`)}<div class="eh-panel-body"><div class="eh-pattern"><div class="eh-pattern-top"><strong>payment-completed-without-shipment</strong>${severity("HIGH")}</div><p>PaymentCompleted 存在，但 5 分鐘內找不到 ShipmentCreated。</p><div class="eh-chip-row" style="margin-top:9px"><span class="eh-chip">evt-payment-001</span><span class="eh-chip">trace-500</span><span class="eh-chip">query: events.by_correlation.v1</span></div></div><div class="eh-pattern"><div class="eh-pattern-top"><strong>payment-captured-domain-check</strong>${status("ACTIVE")}</div><p>capturedAmount <= authorizedAmount，未發現違規。</p></div></div></section><section class="eh-panel">${panelHead("案件資訊")}<div class="eh-panel-body"><div class="eh-list"><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Correlation ID</div><div class="eh-list-meta eh-mono">${item.correlation}</div></div>${icon("copy")}</div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Temporal Workflow</div><div class="eh-list-meta eh-mono">investigation-${item.no}</div></div>${status("RUNNING")}</div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Evidence</div><div class="eh-list-meta">4 references · 0 PII payloads</div></div><button type="button" class="eh-btn" data-tab="evidence">查看</button></div></div></div></section></div><section class="eh-panel" style="margin-top:16px">${panelHead("調查摘要", `<button type="button" class="eh-btn eh-btn-ghost" data-modal="evidence">查看 Evidence Bundle</button>`)}<div class="eh-panel-body"><div class="eh-callout">${icon("file-check-2")}<p><strong>目前結論</strong><br>付款事件已進入事件平面，但出貨事件缺失。下一步建議檢查 shipping-service v2.1.0 的 deployment 與 outbound provider log。</p></div></div></section>`,
+          timeline: `<section class="eh-panel">${panelHead("Business Timeline", `<span class="eh-muted">ORDER-1001 · 4 events</span>`)}<div class="eh-panel-body"><div class="eh-timeline"><div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">OrderCreated</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:01.042</span><span class="eh-mono">evt-order-001</span><span>order-service v1.8.0</span></div></div><div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">PaymentCompleted</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:03.840</span><span class="eh-mono">evt-payment-001</span><span>payment-service v1.4.2</span></div></div><div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">PaymentCaptured</span>${status("SUCCEEDED")}</div><div class="eh-event-body"><span>00:00:04.120</span><span class="eh-mono">trace-500</span><span>payment-service v1.4.2</span></div></div><div class="eh-event"><div class="eh-event-head"><span class="eh-event-type">ShipmentCreated</span><span class="eh-status eh-status-open"><span class="eh-dot"></span>缺失候選</span></div><div class="eh-event-body"><span>5 分鐘 window 未找到</span><span>shipping-service</span><button type="button" class="eh-btn" data-modal="evidence">查看查詢證據</button></div></div></div></div></section>`,
+          evidence: `<section class="eh-panel">${panelHead("Evidence Bundle", `<button type="button" class="eh-btn" data-toast="Evidence reference 已複製">${icon("copy")} 複製 references</button>`)}<div class="eh-table-wrap"><table><thead><tr><th>Type</th><th>Reference</th><th>Collected</th><th>Checksum</th><th>Source</th></tr></thead><tbody><tr><td>EVENT</td><td class="eh-mono">evt-payment-001</td><td>01:02:08</td><td class="eh-mono">sha256:8ae…</td><td>ClickHouse</td></tr><tr><td>TRACE</td><td class="eh-mono">trace-500</td><td>01:02:08</td><td class="eh-mono">sha256:71c…</td><td>Grafana → Tempo</td></tr><tr><td>PATTERN_FINDING</td><td class="eh-mono">finding-001</td><td>01:02:09</td><td class="eh-mono">sha256:2a1…</td><td>Pattern Engine</td></tr></tbody></table></div></section>`,
+          patterns: `<section class="eh-panel">${panelHead("Pattern Registry", `<span class="eh-muted">fixed rules · v1</span>`)}<div class="eh-panel-body"><div class="eh-pattern"><div class="eh-pattern-top"><strong>payment-completed-without-shipment</strong>${severity("HIGH")}</div><p>跨事件時間窗檢查 PaymentCompleted → ShipmentCreated。</p></div><div class="eh-pattern"><div class="eh-pattern-top"><strong>duplicate-event-id</strong>${severity("MEDIUM")}</div><p>檢查同一 event_id 是否在不同 Kafka offset 出現。</p></div><div class="eh-pattern"><div class="eh-pattern-top"><strong>domain-invariant-payment-capture</strong>${status("ACTIVE")}</div><p>檢查 capturedAmount <= authorizedAmount。</p></div></div></section>`,
+          workflow: `<section class="eh-panel">${panelHead("Temporal Case Workflow", `<span class="eh-status eh-status-blue"><span class="eh-dot"></span>RUNNING</span>`)}<div class="eh-panel-body"><div class="eh-list"><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Collect evidence</div><div class="eh-list-meta">Activity completed · 01:02:08</div></div>${status("SUCCEEDED")}</div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Run Pattern Engine</div><div class="eh-list-meta">1 finding · 3 evidence references</div></div>${status("SUCCEEDED")}</div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Wait for investigator confirmation</div><div class="eh-list-meta">等待人工補充證據或更新案件結論</div></div>${status("WAITING_APPROVAL")}</div></div></div></section>`
+        };
+        page.innerHTML = `<div class="eh-page-head"><div><div class="eh-breadcrumb" style="margin-bottom:7px"><button type="button" class="eh-btn eh-btn-ghost" data-page="investigations">${icon("arrow-left")} 調查案件</button><span>/</span><span class="eh-mono">${item.no}</span></div><h1>${item.title}</h1><p class="eh-kicker"><span class="eh-mono">${item.correlation}</span> · ${severity(item.severity)} · ${status(item.status)}</p></div><div class="eh-actions"><button type="button" class="eh-btn" data-modal="analyze">${icon("scan-search")} 執行 Pattern</button><button type="button" class="eh-btn" data-toast="原型：將開啟 Grafana Explore／Tempo deep link">${icon("external-link")} 開啟 Grafana</button><button type="button" class="eh-btn eh-btn-primary" data-modal="close-case">${icon("check")} 結案</button></div></div><section class="eh-panel"><div class="eh-tabs">${tabs.map(tab => `<button type="button" class="eh-tab" data-tab="${tab}" aria-selected="${state.tab === tab}">${{summary:"摘要",timeline:"時間線",evidence:"Evidence",patterns:"Patterns",workflow:"Workflow"}[tab]}</button>`).join("")}</div><div class="eh-panel-body">${tabContent[state.tab]}</div></section>`;
+      }
+      function renderPage() {
+        const renderers = { overview: renderOverview, investigations: renderInvestigations, timeline: renderTimeline, patterns: renderPatterns, detail: renderDetail };
+        (renderers[state.page] || renderOverview)();
+        breadcrumb.textContent = pageNames[state.page] || "總覽";
+        root.querySelectorAll("[data-page]").forEach(button => { if (button.closest(".eh-nav")) button.setAttribute("aria-current", button.dataset.page === state.page ? "page" : "false"); });
+        decorateMvpPage();
+        refreshIcons();
+      }
+      function decorateMvpPage() {
+        page.dataset.testid = state.page === "detail" ? "investigation-detail" : `${state.page}-page`;
+        root.querySelectorAll("[data-tab='workflow']").forEach(element => { element.hidden = true; });
+        const createButtons = root.querySelectorAll("[data-modal='new-case']");
+        createButtons.forEach(button => { button.dataset.testid = "create-investigation"; button.hidden = state.role === "VIEWER"; });
+        root.querySelectorAll("[data-modal='analyze']").forEach(button => { button.dataset.testid = "run-pattern-analysis"; button.hidden = state.role === "VIEWER"; });
+        root.querySelectorAll("[data-modal='close-case']").forEach(button => { button.hidden = state.role === "VIEWER"; });
+        root.querySelectorAll("[data-tab='evidence']").forEach(button => { button.dataset.testid = "evidence-bundle-tab"; });
+        const timelineInput = document.getElementById("eh-timeline-value");
+        if (timelineInput) timelineInput.dataset.testid = "timeline-correlation-id";
+        const timelineSubmit = page.querySelector("[data-toast^='已依 allowlist']");
+        if (timelineSubmit) timelineSubmit.dataset.testid = "timeline-search-submit";
+        if (state.page === "timeline") {
+          page.dataset.testid = "timeline-results";
+          page.querySelectorAll(".eh-event-type").forEach((element, index) => { element.dataset.testid = `timeline-event-${index}-type`; });
+        }
+        const findingHeading = [...page.querySelectorAll(".eh-pattern strong")].find(element => element.textContent === "payment-completed-without-shipment");
+        if (findingHeading) {
+          findingHeading.closest(".eh-pattern").dataset.testid = "pattern-finding-payment-completed-without-shipment";
+          const findingSeverity = findingHeading.closest(".eh-pattern").querySelector(".eh-status");
+          if (findingSeverity) findingSeverity.dataset.testid = "finding-severity";
+        }
+        page.querySelectorAll(".eh-pattern strong").forEach(element => {
+          if (element.textContent !== "payment-completed-without-shipment") element.closest(".eh-pattern").hidden = true;
+        });
+        if (state.page === "detail" && state.tab === "evidence") {
+          const manifest = page.querySelector(".eh-panel");
+          if (manifest) {
+            manifest.dataset.testid = "evidence-manifest";
+            const algorithm = document.createElement("span");
+            algorithm.hidden = true;
+            algorithm.dataset.testid = "evidence-checksum-algorithm";
+            algorithm.textContent = "SHA-256";
+            manifest.appendChild(algorithm);
+          }
+        }
+        const replacements = [
+          ["Temporal case workflows", "選用流程自動化"],
+          ["Temporal case workflow", "選用流程自動化"],
+          ["Temporal Case Workflow", "選用流程自動化"],
+          ["Temporal Workflow", "選用流程自動化"],
+          ["案件是人工調查、Evidence 與選用流程自動化的控制面。", "案件是人工調查、Pattern 與 Evidence 的控制面；流程自動化預設關閉。"],
+          ["固定規則先收集證據，再由 Temporal 管理調查 Activity 的重試、審批與結案", "固定規則同步收集證據；需要長時間重試或人工審批時才啟用 Temporal"],
+          ["建立後可啟動選用流程自動化。", "建立案件不會自動啟動 Temporal。"],
+          ["Workflow activities", "案件稽核紀錄"],
+          ["3 enabled · read-only", "1 enabled · read-only"]
+        ];
+        const walker = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+          for (const [from, to] of replacements) walker.currentNode.nodeValue = walker.currentNode.nodeValue.replaceAll(from, to);
+        }
+      }
+      function modal(title, body, footer = "", wide = false) { modalRoot.innerHTML = `<div class="eh-modal-backdrop" data-close-modal><div class="eh-modal ${wide ? "eh-modal-wide" : ""}" role="dialog" aria-modal="true" aria-label="${title}"><div class="eh-modal-head"><div><h2>${title}</h2><p class="eh-kicker">Event Hunter prototype</p></div><button type="button" class="eh-close" data-close-modal aria-label="關閉">${icon("x")}</button></div><div class="eh-modal-body">${body}</div>${footer ? `<div class="eh-modal-foot">${footer}</div>` : ""}</div></div>`; refreshIcons(); }
+      function decorateModal(name) {
+        const dialog = modalRoot.querySelector("[role='dialog']");
+        if (!dialog) return;
+        if (name === "new-case") {
+          dialog.dataset.testid = "investigation-create-modal";
+          document.getElementById("case-title").dataset.testid = "investigation-title";
+          document.getElementById("case-severity").dataset.testid = "investigation-severity";
+          dialog.querySelector("[type='submit']").dataset.testid = "investigation-create-submit";
+        }
+        if (name === "analyze") {
+          dialog.querySelector("[data-confirm]").dataset.testid = "pattern-analysis-submit";
+          const chips = dialog.querySelectorAll(".eh-chip");
+          chips.forEach(chip => {
+            if (chip.textContent === "duplicate-event-id") chip.hidden = true;
+            if (chip.textContent === "missing-shipment-after-payment") chip.textContent = "payment-completed-without-shipment";
+          });
+        }
+      }
+      function openModal(name) {
+        // Event Catalog, Topic Registry and Replay modal fixtures are deferred and unreachable from MVP UI.
+        if (name === "event-definition") modal("登錄 Event Definition", `<div class="eh-form-grid"><div class="eh-form-row eh-form-row-full"><label class="eh-label">Event type</label><input class="eh-field" value="ShipmentCreated" placeholder="例如 PaymentCompleted"></div><div class="eh-form-row"><label class="eh-label">Producer</label><input class="eh-field" value="shipping-service"></div><div class="eh-form-row"><label class="eh-label">Schema version</label><input class="eh-field" value="v1"></div><div class="eh-form-row eh-form-row-full"><label class="eh-label">Schema reference</label><input class="eh-field" value="registry://shipping/ShipmentCreated/v1"></div></div><p class="eh-help" style="margin-top:13px">儲存前應執行 schema compatibility check，並要求 owner 與 lifecycle 狀態。</p>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="Event Definition 已建立為 DRAFT">儲存草稿</button>`);
+        if (name === "topic-definition") modal("登錄 Kafka Topic", `<div class="eh-form-grid"><div class="eh-form-row eh-form-row-full"><label class="eh-label">Topic name</label><input class="eh-field" value="shipping.events" placeholder="service.events"></div><div class="eh-form-row"><label class="eh-label">Partition key</label><input class="eh-field" value="aggregateId"></div><div class="eh-form-row"><label class="eh-label">Ordering guarantee</label><select class="eh-field"><option>PER_AGGREGATE</option><option>NONE</option><option>GLOBAL</option></select></div><div class="eh-form-row"><label class="eh-label">Retention</label><input class="eh-field" value="14 days"></div><div class="eh-form-row"><label class="eh-label">PII classification</label><select class="eh-field"><option>INTERNAL</option><option>CONFIDENTIAL</option><option>RESTRICTED</option></select></div></div><p class="eh-help" style="margin-top:13px">Topic Registry 只治理契約與風險資訊，不直接建立或刪除 Kafka Topic。</p>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="Topic 已登錄為 ACTIVE">儲存設定</button>`);
+        if (name === "inventory") modal("UI inventory · MVP prototype", `<div class="eh-inventory"><div class="eh-inventory-item"><div class="eh-inventory-count">4</div><div><h3>功能頁</h3><div class="eh-inventory-desc">總覽、調查案件、時間線搜尋、Pattern Library；案件詳情由案件列表進入。</div></div></div><div class="eh-inventory-item"><div class="eh-inventory-count">5</div><div><h3>主要列表</h3><div class="eh-inventory-desc">案件、Timeline events、Pattern findings、Evidence references、Workflow activities。</div></div></div><div class="eh-inventory-item"><div class="eh-inventory-count">6</div><div><h3>Modal／Drawer</h3><div class="eh-inventory-desc">UI inventory、建立案件、Pattern 分析、結案、Evidence、Grafana／Tempo deep link 參照。</div></div></div><div class="eh-inventory-item"><div class="eh-inventory-count">1</div><div><h3>狀態變更按鈕</h3><div class="eh-inventory-desc">結案需要 lock_version；Pattern 分析是唯讀調查，Replay 核准不在 MVP。</div></div></div></div>`, `<button type="button" class="eh-btn eh-btn-primary" data-close-modal>完成</button>`);
+        if (name === "new-case") modal("建立調查案件", `<form id="eh-new-case-form"><div class="eh-form-grid"><div class="eh-form-row eh-form-row-full"><label class="eh-label" for="case-title">案件標題</label><input id="case-title" class="eh-field" required value="付款成功但未建立出貨單"></div><div class="eh-form-row"><label class="eh-label" for="case-correlation">Correlation ID</label><input id="case-correlation" class="eh-field" required value="ORDER-1001"></div><div class="eh-form-row"><label class="eh-label" for="case-severity">嚴重度</label><select id="case-severity" class="eh-field"><option>HIGH</option><option>CRITICAL</option><option>MEDIUM</option><option>LOW</option></select></div><div class="eh-form-row eh-form-row-full"><label class="eh-label" for="case-note">調查備註</label><textarea id="case-note" class="eh-field" rows="3" placeholder="可選：客訴、告警或人工觀察"></textarea><span class="eh-help">建立後可啟動 Temporal Case Workflow。</span></div></div></form>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="submit" form="eh-new-case-form" class="eh-btn eh-btn-primary">建立案件</button>`);
+        if (name === "analyze") modal("執行 Pattern Investigation", `<div class="eh-callout">${icon("scan-search")}<p><strong>唯讀調查</strong><br>系統會依固定 Pattern Registry 查詢 ClickHouse，並透過 Grafana／Tempo／Loki 參照取得技術證據，產生 Finding 與 Evidence references。這個動作不會修改正式業務資料。</p></div><div class="eh-chip-row" style="margin-top:15px"><span class="eh-chip">events.by_correlation.v1</span><span class="eh-chip">duplicate-event-id</span><span class="eh-chip">missing-shipment-after-payment</span></div>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="Pattern 分析已排入 Temporal Workflow">${icon("play")} 開始分析</button>`);
+        if (name === "replay") modal("建立隔離分析", `<div class="eh-form-grid"><div class="eh-form-row"><label class="eh-label">分析類型</label><select class="eh-field"><option>PROJECTION_REBUILD</option><option>SANDBOX_BEHAVIORAL_REPLAY</option></select></div><div class="eh-form-row"><label class="eh-label">Target version</label><input class="eh-field" value="shipping-service:v2.1.0"></div><div class="eh-form-row eh-form-row-full"><label class="eh-label">Sandbox</label><select class="eh-field"><option>sandbox-17 · isolated</option><option>建立新的 sandbox</option></select><span class="eh-help">必須攔截付款、通知、物流與正式資料庫副作用。</span></div></div>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="Replay session 已建立，等待人工核准">建立 Replay</button>`);
+        if (name === "approve-replay") modal("核准隔離 Replay", `<div class="eh-callout">${icon("shield-check")}<p><strong>這不是 Production Redrive</strong><br>只會在指定 Sandbox 執行 Projection Rebuild／Behavioral Replay，並保留核准人與期限。</p></div><div class="eh-form-row" style="margin-top:15px"><label class="eh-label">核准理由</label><textarea class="eh-field" rows="3">驗證 shipping-service v2.1.0 是否修復缺少出貨事件問題</textarea></div>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="Replay 已核准，Temporal Workflow 開始執行">${icon("shield-check")} 核准執行</button>`);
+        if (name === "close-case") modal("結束調查案件", `<div class="eh-form-row"><label class="eh-label">根因</label><textarea class="eh-field" rows="3">shipping-service deployment v2.1.0 未註冊 PaymentCaptured 事件。</textarea></div><div class="eh-form-row" style="margin-top:14px"><label class="eh-label">修復版本</label><input class="eh-field" value="shipping-service:v2.1.1"></div><p class="eh-help" style="margin-top:12px">提交時會檢查 lock_version；若案件已被其他人更新，回傳 409 Conflict。</p>`, `<button type="button" class="eh-btn" data-close-modal>取消</button><button type="button" class="eh-btn eh-btn-primary" data-confirm="案件已更新為 RESOLVED">${icon("check")} 確認結案</button>`);
+        if (name === "schema") modal("PaymentCompleted · Schema v3", `<div class="eh-chip-row"><span class="eh-chip">Producer: payment-service</span><span class="eh-chip">Compatibility: BACKWARD</span><span class="eh-chip">Owner: payments-platform</span></div><pre style="margin:16px 0 0;padding:13px;border:1px solid var(--eh-border);border-radius:8px;background:var(--eh-subtle);overflow:auto;color:var(--eh-ink);font:11px/1.6 'SFMono-Regular',monospace">{\n  "eventId": "string",\n  "correlationId": "string",\n  "aggregateId": "string",\n  "occurredAt": "date-time",\n  "amount": "number"\n}</pre>`, `<button type="button" class="eh-btn" data-close-modal>關閉</button>`);
+        if (name === "topic") modal("payment.events · Topic details", `<div class="eh-list"><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Partition key</div><div class="eh-list-meta eh-mono">aggregateId</div></div></div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Ordering guarantee</div><div class="eh-list-meta">PER_AGGREGATE</div></div></div><div class="eh-list-row"><div class="eh-list-main"><div class="eh-list-title">Retention／PII</div><div class="eh-list-meta">30 days · CONFIDENTIAL</div></div></div></div>`, `<button type="button" class="eh-btn" data-close-modal>關閉</button>`);
+        if (name === "evidence") modal("Evidence Bundle · 3 references", `<div class="eh-callout">${icon("file-check-2")}<p>摘要與 Pattern 結果只保存 reference、query template 與 checksum；完整 payload 仍留在 ClickHouse，Trace／Log／Metrics 由 Grafana 連接的觀測後端提供。</p></div><div class="eh-list" style="margin-top:15px"><div class="eh-list-row"><div><strong class="eh-mono">evt-payment-001</strong><div class="eh-list-meta">EVENT · ClickHouse · checksum sha256:8ae…</div></div><button type="button" class="eh-btn" data-toast="已開啟 ClickHouse 受控查詢">開啟</button></div><div class="eh-list-row"><div><strong class="eh-mono">trace-500</strong><div class="eh-list-meta">TRACE · Grafana → Tempo · checksum sha256:71c…</div></div><button type="button" class="eh-btn" data-toast="已開啟 Grafana／Tempo deep link">開啟</button></div><div class="eh-list-row"><div><strong class="eh-mono">finding-001</strong><div class="eh-list-meta">PATTERN_FINDING · Pattern Engine</div></div><button type="button" class="eh-btn" data-toast="Finding reference 已複製">複製</button></div></div>`, `<button type="button" class="eh-btn" data-close-modal>關閉</button>`, true);
+      }
+
+      root.addEventListener("click", event => {
+        const roleButton = event.target.closest("[data-demo-role]");
+        const roleSwitch = event.target.closest("[data-role-switch]");
+        const pageButton = event.target.closest("[data-page]");
+        const viewCase = event.target.closest("[data-view-case]");
+        const tab = event.target.closest("[data-tab]");
+        const open = event.target.closest("[data-modal]");
+        const close = event.target.closest("[data-close-modal]");
+        const confirm = event.target.closest("[data-confirm]");
+        const notice = event.target.closest("[data-toast]");
+        const toggleAdvanced = event.target.closest("[data-toggle-advanced]");
+        if (roleButton) {
+          state.role = roleButton.dataset.demoRole;
+          state.page = "timeline";
+          currentRole.textContent = state.role;
+          login.hidden = true;
+          appShell.hidden = false;
+          renderPage();
+          return;
+        }
+        if (roleSwitch) {
+          state.role = null;
+          appShell.hidden = true;
+          login.hidden = false;
+          return;
+        }
+        if (toggleAdvanced) {
+          const advanced = document.getElementById(toggleAdvanced.getAttribute("aria-controls"));
+          if (advanced) {
+            advanced.hidden = !advanced.hidden;
+            toggleAdvanced.setAttribute("aria-expanded", String(!advanced.hidden));
+          }
+          return;
+        }
+        if (pageButton) { state.page = pageButton.dataset.page; state.tab = "summary"; renderPage(); return; }
+        if (viewCase) { state.page = "detail"; state.activeCase = viewCase.dataset.viewCase; state.tab = "summary"; renderPage(); return; }
+        if (tab) { state.tab = tab.dataset.tab; renderPage(); return; }
+        if (open) { openModal(open.dataset.modal); decorateModal(open.dataset.modal); return; }
+        if (confirm) { modalRoot.innerHTML = ""; toast(confirm.dataset.confirm.includes("Temporal") ? "Pattern 分析已同步完成" : confirm.dataset.confirm); return; }
+        if (close && (event.target === close || event.target.closest(".eh-close") || event.target.closest(".eh-modal-foot"))) { modalRoot.innerHTML = ""; return; }
+        if (notice) { toast(notice.dataset.toast); return; }
+      });
+      root.addEventListener("submit", event => {
+        if (event.target.id !== "eh-new-case-form") return;
+        event.preventDefault();
+        modalRoot.innerHTML = "";
+        toast("案件已建立；Temporal 預設未啟用");
+        state.page = "investigations";
+        renderPage();
+      });
+      renderPage();
+    })();
+  </script>
+</div>

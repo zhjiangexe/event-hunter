@@ -1,0 +1,321 @@
+schema_version: 1
+project: event-hunter
+
+# REQ-EH-* 是穩定需求 ID；每個需求必須映射到 API、資料儲存、前端路由與驗收測試。
+requirements:
+  - id: REQ-EH-001
+    title: Business Timeline
+    scope: mvp
+    openapi_operations:
+      - getBusinessTimeline
+      - searchForensicsEvents
+    event_contracts:
+      - contracts/asyncapi.yaml
+      - contracts/events/canonical-envelope.schema.json
+    stores:
+      - clickhouse.forensics_events
+      - clickhouse.event_processing_attempts
+    frontend_routes:
+      - /timeline
+    external_ui:
+      - grafana-explore
+      - grafana-dashboard
+      - tempo-trace
+      - loki-logs
+    acceptance_features:
+      - e2e/backend/timeline.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-002
+    title: Investigation Case
+    scope: mvp
+    openapi_operations:
+      - listInvestigations
+      - createInvestigation
+      - getInvestigation
+      - updateInvestigation
+      - closeInvestigation
+    stores:
+      - postgres.investigation_cases
+      - postgres.audit_logs
+    query_contracts:
+      - requirements/investigation-list-query-contract.md
+      - requirements/investigation-incident-window-contract.md
+      - contracts/platform/investigation-state-machine.yaml
+    frontend_routes:
+      - /investigations
+      - /investigations/:investigationId
+    acceptance_features:
+      - e2e/backend/investigation.feature
+      - e2e/backend/investigation-boundaries.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-003
+    title: Deterministic Domain Pattern
+    scope: mvp
+    openapi_operations:
+      - listPatterns
+      - getPatternEffectiveness
+      - analyzeInvestigation
+      - classifyPatternFinding
+    pattern_contracts:
+      - contracts/patterns/payment-completed-without-shipment.yaml
+      - requirements/pattern-governance-contract.md
+    stores:
+      - postgres.pattern_findings
+      - postgres.pattern_finding_feedback
+      - postgres.audit_logs
+    frontend_routes:
+      - /patterns
+    acceptance_features:
+      - e2e/backend/pattern.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-004
+    title: Evidence Bundle JSON Manifest
+    scope: mvp
+    openapi_operations:
+      - getEvidenceBundle
+    stores:
+      - postgres.case_evidence
+      - postgres.pattern_findings
+    frontend_routes:
+      - /investigations/:investigationId
+    external_ui:
+      - grafana-explore
+      - tempo-trace
+      - loki-logs
+    acceptance_features:
+      - e2e/backend/investigation.feature
+      - e2e/backend/investigation-boundaries.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-005
+    title: Investigation Summary Read Model
+    scope: mvp
+    openapi_operations:
+      - getInvestigationSummary
+    stores:
+      - postgres.investigation_cases
+      - postgres.case_evidence
+      - postgres.pattern_findings
+      - clickhouse.forensics_events
+    query_contracts:
+      - requirements/investigation-incident-window-contract.md
+    frontend_routes:
+      - /investigations/:investigationId
+    acceptance_features:
+      - e2e/backend/investigation.feature
+      - e2e/backend/investigation-boundaries.feature
+
+  - id: REQ-EH-006
+    title: Demo Role Session
+    scope: mvp
+    openapi_operations:
+      - createDemoSession
+      - getCurrentPrincipal
+      - deleteDemoSession
+    stores: []
+    frontend_routes:
+      - /login
+    acceptance_features:
+      - e2e/backend/auth.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-007
+    title: Grafana Business Alert Intake
+    scope: mvp
+    openapi_operations:
+      - receiveGrafanaAlertWebhook
+    integration_contracts:
+      - contracts/integrations/grafana-alert-webhook.schema.json
+      - contracts/fixtures/grafana-alert-firing.json
+      - contracts/fixtures/grafana-alert-resolved.json
+    stores:
+      - postgres.grafana_alert_receipts
+      - postgres.investigation_cases
+      - postgres.case_evidence
+      - postgres.audit_logs
+    frontend_routes:
+      - /investigations
+    external_ui:
+      - grafana-alerting
+    acceptance_features:
+      - e2e/backend/grafana-alert-webhook.feature
+      - e2e/backend/grafana-auto-case.feature
+
+  - id: REQ-EH-008
+    title: Event Quality Aggregation and Grafana Dashboard
+    scope: mvp-supporting-capability
+    openapi_operations: []
+    quality_contracts:
+      - contracts/quality/event-quality-rules.yaml
+      - contracts/fixtures/quality-window.json
+    stores:
+      - clickhouse.forensics_events
+      - clickhouse.event_processing_attempts
+      - clickhouse.event_ingestion_failures
+      - clickhouse.event_quality_metrics
+    frontend_routes: []
+    external_ui:
+      - grafana-event-quality-dashboard
+    acceptance_features:
+      - e2e/backend/quality-metrics.feature
+
+  - id: REQ-EH-009
+    title: Demonstrable Outbox-to-Timeline Event Pipeline
+    scope: mvp-supporting-capability
+    openapi_operations:
+      - getBusinessTimeline
+    system_operations:
+      - createDemoOrder
+    system_contracts:
+      - contracts/demo-services/order-api.openapi.yaml
+      - contracts/demo-services/service-topology.yaml
+      - contracts/platform/topic-topology.yaml
+      - contracts/platform/outbox-routing.yaml
+      - contracts/platform/ingestion-mapping.yaml
+      - contracts/asyncapi.yaml
+    stores:
+      - demo-order-postgres.orders
+      - demo-order-postgres.outbox_events
+      - demo-payment-postgres.payments
+      - demo-payment-postgres.outbox_events
+      - demo-shipping-postgres.shipments
+      - demo-shipping-postgres.outbox_events
+      - clickhouse.forensics_events
+    frontend_routes:
+      - /timeline
+    acceptance_features:
+      - e2e/backend/event-pipeline.feature
+
+  - id: REQ-EH-010
+    title: Investigation Overview and Source Health
+    scope: phase-1.1
+    openapi_operations:
+      - getInvestigationOverview
+      - getSourceHealth
+    stores:
+      - postgres.investigation_cases
+      - postgres.pattern_findings
+      - postgres.grafana_alert_receipts
+      - postgres.scenario_runs
+      - clickhouse.forensics_events
+      - clickhouse.event_processing_attempts
+    frontend_routes:
+      - /dashboard
+    external_ui:
+      - grafana-event-quality-dashboard
+    acceptance_features:
+      - e2e/backend/investigation-overview.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-011
+    title: Deterministic Smart Search Identification
+    scope: phase-1.1
+    openapi_operations:
+      - identifySmartSearchInput
+    stores: []
+    frontend_routes:
+      - /dashboard
+      - /timeline
+    acceptance_features:
+      - e2e/backend/smart-search.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-012
+    title: Read-only Business Journey
+    scope: phase-1.1
+    openapi_operations:
+      - getBusinessJourney
+      - listJourneyProfiles
+    stores:
+      - clickhouse.forensics_events
+    contracts:
+      - contracts/journeys/journey-profile.schema.json
+      - contracts/journeys/order-fulfillment.yaml
+    frontend_routes:
+      - /journey
+      - /journey-profiles
+      - /timeline
+    acceptance_features:
+      - e2e/backend/business-journey.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-013
+    title: Personal Saved Searches and Built-in Presets
+    scope: phase-1.1
+    openapi_operations:
+      - listSavedSearches
+      - createSavedSearch
+      - deleteSavedSearch
+      - listSearchPresets
+    stores:
+      - postgres.saved_searches
+    frontend_routes:
+      - /timeline
+      - /journey
+    compatibility_routes:
+      - /saved-searches redirects to /timeline?panel=query-shortcuts
+    acceptance_features:
+      - e2e/backend/saved-search.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-014
+    title: Investigation Case Collaboration
+    scope: phase-1.1
+    openapi_operations:
+      - listInvestigations
+      - getInvestigation
+      - updateInvestigation
+      - addInvestigationNote
+    stores:
+      - postgres.investigation_cases
+      - postgres.case_notes
+      - postgres.audit_logs
+    query_contracts:
+      - requirements/investigation-list-query-contract.md
+    frontend_routes:
+      - /investigations
+      - /investigations/:investigationId
+    acceptance_features:
+      - e2e/backend/investigation.feature
+      - e2e/backend/investigation-boundaries.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-015
+    title: Timeline Event Evidence Attachment
+    scope: phase-1.1
+    openapi_operations:
+      - searchForensicsEvents
+      - attachInvestigationEvent
+      - getEvidenceBundle
+      - getInvestigationSummary
+    stores:
+      - clickhouse.canonical_events
+      - postgres.investigation_cases
+      - postgres.case_evidence
+      - postgres.audit_logs
+    frontend_routes:
+      - /timeline
+      - /investigations
+    acceptance_features:
+      - e2e/backend/investigation.feature
+      - e2e/backend/investigation-boundaries.feature
+      - e2e/frontend/investigation-flow.feature
+
+  - id: REQ-EH-016
+    title: Event Hunter Guide and External System Integration Onboarding
+    scope: phase-1.1
+    openapi_operations: []
+    system_contracts:
+      - contracts/asyncapi.yaml
+      - contracts/events/canonical-envelope.schema.json
+      - contracts/platform/outbox-routing.yaml
+      - contracts/platform/ingestion-mapping.yaml
+      - contracts/integrations/grafana-alert-webhook.schema.json
+    stores: []
+    frontend_routes:
+      - /guide
+    acceptance_features:
+      - e2e/frontend/investigation-flow.feature

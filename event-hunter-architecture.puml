@@ -1,0 +1,133 @@
+@startuml event-hunter-architecture
+title Event Hunter Phase 1.1 Current Architecture
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #475569
+skinparam package {
+  BorderColor #64748B
+  FontColor #0F172A
+}
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+  FontColor #0F172A
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #2563EB
+  FontColor #1E3A8A
+}
+
+left to right direction
+
+actor "Viewer / Investigator / Admin" as User
+
+package "Event Hunter Product" {
+  component "React Console" as UI
+  component "Go API\nnet/http" as API
+  component "Scenario Lab API" as Lab
+  component "Quality Worker" as QW
+}
+
+package "Live Demo Domain" {
+  component "Order Service" as Order
+  component "Payment Service" as Payment
+  component "Shipping Service" as Shipping
+  database "Order PostgreSQL\n+ Outbox" as OrderDB
+  database "Payment PostgreSQL\n+ Outbox" as PaymentDB
+  database "Shipping PostgreSQL\n+ Outbox" as ShippingDB
+}
+
+package "Event Data Plane" {
+  component "Kafka Connect\nDebezium" as CDC
+  queue "Redpanda / Kafka" as Kafka
+  component "ClickHouse Kafka Connect Sink\nDomain + Processing Attempts" as Sink
+  queue "Technical DLQ" as TechDLQ
+  component "Technical DLQ Projector\nSafe Metadata Only" as TechProjector
+  database "ClickHouse\nCanonical Read Models" as CH
+  database "ClickHouse Isolated\n7-day Raw Landing" as RawCH
+  component "Materialized View Admission\nPromote / Quarantine" as Admission
+}
+
+package "Investigation Control Plane" {
+  database "Event Hunter PostgreSQL\nCases / Evidence / Findings / Audit / Runs" as PG
+}
+
+package "Technical Observability" {
+  component "OTel Collector" as OTel
+  database Tempo
+  database Loki
+  database Prometheus as Prom
+  component "Grafana OSS\nDashboard / Explore / Alerting" as Grafana
+}
+
+User --> UI
+UI --> API : same-origin /api
+UI --> Lab : scenario API
+API --> PG
+API --> CH : bounded read queries
+Lab --> PG : scenario runs
+Lab --> Order : LIVE_SERVICES
+Lab --> Kafka : LAB_INJECTION
+QW --> CH : quality metrics
+
+Order --> OrderDB : transaction + outbox
+Payment --> PaymentDB : transaction + outbox
+Shipping --> ShippingDB : transaction + outbox
+OrderDB --> CDC
+PaymentDB --> CDC
+ShippingDB --> CDC
+CDC --> Kafka : canonical events + trace headers
+Kafka --> Payment : OrderCreated / ReturnReceived
+Kafka --> Shipping : PaymentCompleted
+Kafka --> Sink : domain + attempt topics
+Sink --> RawCH : store raw + Kafka coordinates
+Sink --> TechDLQ : poison record
+TechDLQ --> TechProjector
+TechProjector --> CH : safe technical failures
+RawCH --> Admission
+Admission --> CH : promoted events / attempts
+
+Order --> OTel
+Payment --> OTel
+Shipping --> OTel
+Lab --> OTel
+OTel --> Tempo
+OTel --> Loki
+OTel --> Prom
+Tempo --> Grafana
+Loki --> Grafana
+Prom --> Grafana
+CH --> Grafana : ClickHouse datasource
+Grafana --> API : HMAC-signed business alert
+UI ..> Grafana : trusted deep links
+
+note bottom of Kafka
+  Kafka is the delivery plane.
+  Timeline queries ClickHouse,
+  not live Kafka messages.
+end note
+
+note bottom of API
+  No Event / Topic Registry,
+  Temporal worker, Replay,
+  or Production Redrive today.
+end note
+
+note bottom of RawCH
+  Formal default runtime.
+  Default-deny, TTL 7 days,
+  bounded dry-run-first purge.
+end note
+
+note bottom of Sink
+  Internal service / connector names retain
+  "poc" only for offset and migration compatibility.
+  Old Redpanda Connect ETL workers are removed.
+end note
+
+@enduml

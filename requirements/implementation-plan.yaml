@@ -1,0 +1,1111 @@
+schema_version: 1
+project: event-hunter
+# EH-MVP-* 是可調整的工程任務 ID，不等同於使用者需求 ID。
+execution_policy:
+  dependency_order_required: true
+  temporal_feature_flag_default: false
+  out_of_scope_requires_user_decision: true
+  completion_rule: all_outputs_and_acceptance_must_pass
+
+current_ingestion_runtime:
+  decision_task: EH-POC-003
+  adopted_at: 2026-08-27
+  domain_events: clickhouse-mv
+  processing_attempts: clickhouse-mv
+  broker: redpanda-kafka-compatible
+  cdc: debezium-kafka-connect
+  sink: official-clickhouse-kafka-connect
+  removed_workers: [redpanda-connect, redpanda-connect-attempts]
+  note: Earlier task progress records describe the historical implementation at that time; EH-POC-003 supersedes their legacy-default statements.
+
+phase_1_exit_criteria:
+  delivery_plan: requirements/phase-1-delivery-plan.md
+  required_tasks: [EH-MVP-001, EH-MVP-002, EH-MVP-003, EH-MVP-004, EH-MVP-005, EH-MVP-006, EH-MVP-007, EH-MVP-008, EH-MVP-009, EH-MVP-011, EH-MVP-012, EH-MVP-013, EH-MVP-014, EH-MVP-015, EH-MVP-016, EH-MVP-017]
+  optional_tasks: [EH-MVP-010]
+  note: Temporal is optional and must not block Phase 1 completion.
+
+tasks:
+  # depends_on 形成任務 DAG；前置任務未完成時，不應直接開始相依工作。
+  - id: EH-P1.1-001
+    title: Investigation overview and source health
+    status: completed
+    requirement_ids: [REQ-EH-010]
+    depends_on: [EH-MVP-016]
+    outputs:
+      - getInvestigationOverview aggregate API
+      - getSourceHealth canonical source state API
+      - PostgreSQL and ClickHouse overview read adapters
+      - React dashboard with trusted deep links and partial warnings
+    completed_progress:
+      - PostgreSQL aggregates cases severity recent Grafana alerts Scenario runs and top Pattern findings without frontend-derived counts
+      - ClickHouse aggregates deduplicated 24-hour event totals top producers top event types latest event and processing-attempt timestamps
+      - Tempo Loki Grafana PostgreSQL and ClickHouse expose canonical fresh stale partial and unavailable source states
+      - unavailable aggregate blocks serialize as null and the dashboard renders unavailable instead of a misleading zero
+      - dashboard case producer event-type Pattern-quality links preserve bounded server-side filters or use the trusted Grafana origin
+      - backend Karate 3 scenarios frontend Karate 7 scenarios Go tests vet frontend 29 tests typecheck build and browser navigation pass
+    acceptance:
+      - e2e/backend/investigation-overview.feature
+      - e2e/frontend/investigation-flow.feature dashboard scenario
+      - unavailable sources never render misleading zero values
+
+  - id: EH-P1.1-002
+    title: Deterministic smart search identification
+    status: completed
+    requirement_ids: [REQ-EH-011]
+    depends_on: [EH-P1.1-001]
+    outputs:
+      - identifySmartSearchInput contract and parser
+      - explicit identifier prefixes and ambiguous candidate responses
+      - dashboard smart-search entry with bounded Timeline navigation
+    completed_progress:
+      - explicit event trace correlation aggregate and alert prefixes produce one exact candidate after format validation
+      - raw opaque identifiers remain ambiguous and require user selection because Event Hunter contracts do not encode identifier type in the value
+      - raw W3C trace-shaped and Grafana fingerprint-shaped values expose strong format hints without silently executing a query
+      - invalid empty short oversized unsupported and all-zero trace inputs return INVALID with no event-store access
+      - selected candidates navigate to the existing allowlisted bounded Timeline search
+      - backend Karate 6 scenarios frontend Karate 8 scenarios parser unit tests frontend 31 tests and full Go regression pass
+    acceptance:
+      - invalid inputs never trigger an event query
+      - ambiguous opaque identifiers require user candidate selection
+      - e2e/backend/smart-search.feature
+      - e2e/frontend/investigation-flow.feature smart-search scenario
+
+  - id: EH-P1.1-003
+    title: Read-only Business Journey
+    status: completed
+    requirement_ids: [REQ-EH-012]
+    depends_on: [EH-P1.1-002]
+    outputs:
+      - getBusinessJourney bounded aggregate API
+      - Git-managed YAML Journey Profile and generated immutable runtime registry
+      - listJourneyProfiles API and read-only Journey Profile Registry list plus routeable detail drawer with YAML provenance
+      - deterministic profile-driven milestone and anomaly application service
+      - React Business Journey page and Correlation ID Smart Search routing
+    completed_progress:
+      - existing canonical events are grouped into order payment shipping delivery and return milestones without creating a projection
+      - backend owns journey status duration expected actual and deterministic anomaly decisions
+      - order-fulfillment YAML defines milestone state and anomaly rules while schema validation blocks unknown event types duplicate identities missing default and generated registry drift
+      - API exposes profile id version and title so each interpretation is attributable
+      - read-only registry exposes comparable list columns and a ?profile=id@version detail drawer for milestones anomaly rules source path and YAML checksum without pretending runtime publish exists
+      - empty results are represented as EMPTY and ClickHouse failures remain explicit 503 or 504 responses
+      - ShipmentDelivered is the explicit completion anchor while ShipmentCreated-only journeys remain IN_PROGRESS
+      - Smart Search correlation candidates enter Journey while event trace aggregate and alert candidates retain bounded Timeline search
+      - backend and frontend Karate cover both Journey interpretation and read-only profile discovery
+    acceptance:
+      - e2e/backend/business-journey.feature
+      - e2e/frontend/investigation-flow.feature Business Journey and Journey Profile Registry scenarios
+      - all queries remain bounded to seven days and 1000 events
+
+  - id: EH-P1.1-004
+    title: Personal Saved Searches and built-in presets
+    status: completed
+    requirement_ids: [REQ-EH-013]
+    depends_on: [EH-P1.1-003]
+    outputs:
+      - personal Saved Search aggregate and PostgreSQL repository
+      - list create delete Saved Search APIs scoped by session subject
+      - versioned read-only recent failure presets
+      - Timeline and Journey shared Query Shortcuts drawer with save-current-query actions
+    completed_progress:
+      - Saved Search domain rejects unbounded windows arbitrary targets empty Timeline filters and Journey queries without correlation ID
+      - include_payload and arbitrary URL or SQL fields are not part of the persistence contract
+      - migration 00004 stores only typed JSONB query state with owner-scoped case-insensitive unique names
+      - OpenAPI and generated React client expose owner-scoped list create delete and read-only preset operations
+      - Timeline and Journey can save fixed snapshots or rolling relative windows and restore server-generated URLs from the shared drawer
+      - the legacy /saved-searches route redirects to the Timeline drawer; the owner-scoped APIs and PostgreSQL model remain stable
+      - Viewer can manage only their own searches without receiving investigation mutation permissions
+      - one temporary Saved Search remained queryable after an API container restart and was then removed
+      - the original Phase 1.1 acceptance passed; the integrated drawer and relative-window revision is covered by refreshed backend, frontend, contract and browser verification
+    acceptance:
+      - e2e/backend/saved-search.feature
+      - e2e/frontend/investigation-flow.feature Saved Search scenario
+      - one principal cannot list or delete another principal's Saved Search
+
+  - id: EH-P1.1-005
+    title: Investigation case collaboration minimum model
+    status: completed
+    requirement_ids: [REQ-EH-014]
+    depends_on: [EH-P1.1-004]
+    outputs:
+      - rich InvestigationCase collaboration invariants and derived SLA policy
+      - PostgreSQL owner priority tags related correlations and append-only case notes persistence
+      - optimistic-locking update and addInvestigationNote OpenAPI operations
+      - React investigation drawer collaboration editor and note stream
+    completed_progress:
+      - the existing assignee field is the Phase 1.1 owner model and demo session subject is the temporary actor identity until production OIDC is approved
+      - priority is constrained to P0 P1 P2 or P3 and defaults deterministically from severity
+      - tags and related correlation IDs are normalized deduplicated bounded collections owned by the aggregate
+      - SLA status and due time are derived from priority created time and terminal state instead of stored as mutable state
+      - case notes are append-only rows with author role author subject and timestamp and cannot be overwritten through the case PATCH operation
+      - all metadata updates and note appends require If-Match and advance the aggregate lock_version with a corresponding audit entry
+      - Viewer remains read-only while Investigator and Admin receive only the existing investigation write permission
+      - OpenAPI-generated React types and precise React Query cache replacement expose the collaboration result without a detail refetch
+      - migration 00005 and the fixture migration runner are restart-safe
+      - backend Karate 77 scenarios frontend Karate 11 scenarios frontend 40 tests focused Go tests contract validation typecheck build and PostgreSQL plus API restart persistence pass
+    acceptance:
+      - e2e/backend/investigation.feature collaboration scenario
+      - e2e/frontend/investigation-flow.feature collaboration scenario
+      - stale If-Match returns 409 and append-only notes remain present after PostgreSQL and API restart
+
+  - id: EH-P1.1-006
+    title: Timeline event evidence attachment
+    status: completed
+    requirement_ids: [REQ-EH-015]
+    depends_on: [EH-P1.1-005]
+    outputs:
+      - rich InvestigationCase AttachEvent invariant and narrow evidence repository port
+      - bounded ClickHouse event verification and transactional PostgreSQL evidence attachment
+      - attachInvestigationEvent optimistic-locking OpenAPI operation and generated React client
+      - Timeline event detail action with open-case selection and same-correlation prioritization
+    completed_progress:
+      - InvestigationCase aggregate validates mutable state event identity source correlation and lowercase SHA-256 while automatically preserving cross-correlation evidence links
+      - PostgreSQL locks the current case and atomically inserts one EVENT reference updates related correlations and advances lock_version without storing event payload
+      - the application capability verifies the exact canonical event through a bounded ClickHouse lookup and duplicate attachment is an idempotent no-op without a second audit entry
+      - OpenAPI generated client and Timeline UI require If-Match load candidate cases only after opening the modal exclude CLOSED cases and prioritize the same correlation
+      - modal visual verification confirms a 660px dialog with no horizontal overflow while long candidate lists retain bounded vertical scrolling
+      - focused and full Go test plus go vet contract validation frontend 42 tests typecheck generated-client check and production build pass
+      - backend Karate 78 scenarios and frontend Chrome Karate 12 scenarios pass including the dedicated attachment path
+      - after PostgreSQL and API restart the same lock_version related correlation EVENT reference checksum and ATTACH_INVESTIGATION_EVENT audit remain queryable through the API
+    acceptance:
+      - e2e/backend/investigation.feature Timeline Event attachment scenario
+      - e2e/frontend/investigation-flow.feature Timeline Event attachment scenario
+      - duplicate event attachment is an idempotent no-op and stale If-Match returns 409
+      - Viewer cannot attach evidence and CLOSED cases are not mutable
+      - event payload is not copied into PostgreSQL
+      - evidence relationship and audit remain queryable after PostgreSQL and API restart
+
+  # 2026-08-24 cross-layer review reopened the Phase 1.1 release gate. These tasks
+  # repair regressions or incomplete production semantics in already-delivered
+  # requirements; they do not introduce new product scope or new REQ-EH IDs.
+  - id: EH-P1.1-007
+    title: Live ingestion liveness and restart recovery
+    status: completed
+    requirement_ids: [REQ-EH-008, REQ-EH-009, REQ-EH-010]
+    depends_on: [EH-P1.1-006]
+    outputs:
+      - ingestion consumer self-recovery after broker or consumer interruption
+      - readiness signal that verifies active ingestion capability instead of HTTP process health only
+      - bounded Kafka group lag and Scenario Lab actual-observer regression coverage
+    completed_progress:
+      - API liveness remains process-only while readiness concurrently verifies PostgreSQL ClickHouse both Redpanda Connect pipelines and a Stable domain-event ingestion group with an active member
+      - Redpanda Connect Compose healthchecks directly verify broker ClickHouse and non-empty connected component status instead of trusting HTTP 200 alone
+      - disruptive recovery test stops Redpanda confirms API 503 and then proves the same Connect container rejoins without recreation before Scenario S8 passes
+      - event pipeline Karate asserts the capability-level readiness response before creating a real order
+      - full Go tests vet contract validation Compose validation and Backend Karate 78 of 78 pass
+    acceptance:
+      - event-hunter-forensics-ingestion-v1 has an active member while the service reports ready
+      - a newly created demo order reaches Timeline and terminal Scenario Lab result without fixture telemetry
+      - restart and temporary dependency interruption recover without manual consumer recreation
+      - full backend Karate event pipeline and Scenario Lab scenarios pass
+
+  - id: EH-P1.1-008
+    title: Investigation read consistency and transactional audit integrity
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-004, REQ-EH-005, REQ-EH-014, REQ-EH-015]
+    depends_on: [EH-P1.1-006]
+    outputs:
+      - explicit failure or partial semantics for findings evidence notes and summary reads
+      - investigation mutation and audit persistence in one reliable transaction boundary
+      - repository-failure integration tests for detail summary lifecycle notes evidence and analysis
+    completed_progress:
+      - case lifecycle application snapshots fail explicitly when findings evidence notes or audit child reads fail instead of serializing incomplete detail or summary responses as complete
+      - a context-carried PostgreSQL unit of work gives case lifecycle note evidence and Pattern analysis mutations the same transaction boundary as their audit records
+      - audit failures roll back create update close note attachment evidence attachment findings and analysis persistence in application fault tests
+      - a PostgreSQL integration test deliberately violates the audit role constraint and proves that the preceding case insert is rolled back in the real database
+      - full Go tests vet contract validation and Backend Karate 78 of 78 pass after the consistency changes
+    acceptance:
+      - investigation detail and summary never report complete data after a required child read fails
+      - a failed audit write cannot leave an unaudited successful investigation mutation
+      - backend tests cover audit and child-repository failure paths
+
+  - id: EH-P1.1-009
+    title: Payload authorization and recursive masking hardening
+    status: completed
+    requirement_ids: [REQ-EH-001]
+    depends_on: [EH-P1.1-006]
+    outputs:
+      - explicit include_payload permission enforcement at the API boundary
+      - recursive masking for nested objects arrays and configured sensitive paths
+      - role and nested-secret contract plus Karate regression tests
+    completed_progress:
+      - Timeline Event Search and Investigation Summary reject include_payload for Viewer and Investigator before querying ClickHouse while ADMIN receives only masked payload
+      - the payload masker recursively traverses nested objects and arrays normalizes camelCase and snake_case field names and redacts configured customer identifiers amounts credentials tokens email and phone fields
+      - the OpenAPI data-classification policy generated client backend session permissions and frontend ADMIN-only expansion control now express the same authorization boundary
+      - a defensive Karate fixture writes nested prohibited fields directly to the ClickHouse read model proves response masking and synchronously removes the synthetic probe afterward
+      - full Go tests vet contract validation frontend 43 tests typecheck build formatting and Backend Karate 83 of 83 pass
+    acceptance:
+      - Viewer cannot obtain event payload through include_payload
+      - nested credentials tokens and PII configured by policy are redacted
+      - OpenAPI authorization description and implementation behavior agree
+
+  - id: EH-P1.1-010
+    title: Production investigation navigation and state semantics
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-005, REQ-EH-010, REQ-EH-012, REQ-EH-014]
+    depends_on: [EH-P1.1-008, EH-P1.1-009]
+    outputs:
+      - real investigation detail route synchronized with the right-side drawer
+      - shareable refresh-safe back-forward-safe investigation URLs
+      - removal of fixed demo time windows root-cause text and resolution text from production behavior
+      - explicit close confirmation and truthful empty loading partial and error states
+    completed_progress:
+      - investigation selection is URL-owned and synchronizes list clicks direct URLs reload browser back and forward drawer close and explicit missing-case state
+      - root cause and resolution start empty and case closure requires a confirmation dialog with both fields present
+      - summary and evidence reads no longer inject fixed demo dates and accept an explicit URL read window only when both bounds are supplied
+      - frontend unit and component tests pass 48 of 48 together with typecheck and production build
+      - tagged Frontend Karate acceptance passes 4 of 4 the full Frontend Karate suite passes 16 of 16 and a localhost browser inspection confirms the rendered right-side drawer and history behavior
+    acceptance:
+      - direct navigation to /investigations/{id} opens the requested case and never falls through to Timeline
+      - opening and closing the drawer updates browser history predictably
+      - case content and query time bounds come from API data or user selection rather than hard-coded demo values
+      - frontend unit and browser E2E cover direct URL refresh back forward and close confirmation
+
+  - id: EH-P1.1-011
+    title: Deterministic historical Pattern analysis window
+    status: completed
+    requirement_ids: [REQ-EH-003]
+    depends_on: [EH-P1.1-008]
+    outputs:
+      - documented server-owned analysis anchor and bounded time-window policy
+      - historical-case analysis that does not silently exclude evidence because of wall-clock now
+      - boundary and empty-window regression tests
+    completed_progress:
+      - the server discovers the earliest and latest retained canonical event for the case correlation before analysis
+      - the effective window is fixed to the half-open interval from the earliest event through seven days and observed_at is capped at the window end
+      - EVALUATED and NO_EVENTS are explicit API and UI states and an event span outside the supported window fails with ANALYSIS_WINDOW_EXCEEDS_LIMIT
+      - the same retained historical evidence produces the same effective window and finding when analyzed again
+      - Go tests vet generated OpenAPI client checks Frontend tests 49 of 49 Backend Karate 92 of 92 and Frontend Karate 16 of 16 pass
+    acceptance:
+      - the same case evidence produces the same Pattern result when replayed later
+      - API results disclose the effective analysis window
+      - old cases fail explicitly or analyze against their recorded event window instead of returning a misleading no-match
+
+  - id: EH-P1.1-012
+    title: Phase 1.1 release gate and cross-layer quality cleanup
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-006, REQ-EH-009, REQ-EH-010]
+    depends_on: [EH-P1.1-007, EH-P1.1-008, EH-P1.1-009, EH-P1.1-010, EH-P1.1-011]
+    outputs:
+      - mobile navigation and investigation drawer layout without horizontal page overflow
+      - accessible dialog focus Escape reduced-motion and status-announcement behavior
+      - deterministic scenario API generated-client drift check
+      - dependency-aware readiness graceful shutdown response content-type consistency and isolated E2E data lifecycle
+      - refreshed local Phase 1.1 sign-off artifacts
+    completed_progress:
+      - backend acceptance baseline now has 16 Karate features and 92 runtime scenarios passing end to end
+      - investigation-boundaries.feature covers cursor pagination input boundaries state transitions Viewer mutation denial consistent not-found semantics and closes scenario-owned open cases
+      - the 390px browser acceptance covers Timeline Overview Investigations Pattern Library and Scenario Lab without document-level horizontal overflow
+      - drawer and modal interactions provide dialog semantics initial focus focus trapping Escape dismissal focus restoration reduced-motion support and status announcements
+      - generated OpenAPI clients formatting contract validation Go tests vet Frontend 49 of 49 typecheck and production build all pass without drift
+      - API responses use consistent JSON content types and SIGTERM performs graceful shutdown while dependency-aware readiness remains enforced
+      - the complete local exit gate passes Backend Karate 92 of 92 Frontend Karate 17 of 17 live OpenTelemetry failure recovery sink acknowledgement performance and restart persistence
+      - gate-scoped cleanup removes E2E cases scenario runs Grafana receipts demo-service rows and ClickHouse probes before restoring interactive fixtures with zero scoped control-plane residue
+    acceptance:
+      - 390px browser viewport has no document-level horizontal overflow
+      - drawer and modal pass keyboard focus and dialog-semantic browser checks
+      - scenario-api check contract validation Go tests vet frontend tests typecheck build and all Karate suites pass
+      - health endpoints cannot report ready when required ingestion capability is absent
+      - repeat E2E execution does not accumulate open cases or change dashboard assertions
+
+  - id: EH-P1.1-013
+    title: Dynamic bounded query window and reproducible Timeline and Journey URLs
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-011, REQ-EH-012, REQ-EH-013]
+    depends_on: [EH-P1.1-012]
+    outputs:
+      - Timeline and Journey blank-state defaults derived from the current time instead of fixture constants
+      - allowlisted Timeline query state serialized into the URL after submit
+      - refresh back and forward restoration for submitted Timeline and Journey searches
+      - visible browser timezone and effective query window in search and result surfaces
+      - preserved bounded windows across existing Overview Journey Scenario and Saved Search entry points
+    completed_progress:
+      - blank Timeline and Journey routes derive a stable rolling 72-hour draft window from the current clock and Clear refreshes that window
+      - submitted Timeline filters use the URL as their durable source of truth including from to all UI allowlisted conditions payload authorization and processing-attempt preference
+      - route-keyed form drafts restore on reload back and forward without synchronous setState effects or duplicated submitted query state
+      - both search controls identify the browser timezone and both result surfaces disclose the effective bounded query window
+      - frontend unit and component tests pass 74 of 74 together with lint typecheck production build formatting and generated-client drift checks
+      - tagged Frontend Karate passes 2 of 2 full Frontend Karate passes 25 of 25 and the relevant Overview plus Saved Search Backend Karate passes 9 of 9
+    acceptance:
+      - frontend controlled-clock tests prove the blank-state default is now minus 72 hours through now
+      - Timeline search URL contains from to identifiers allowlisted advanced filters and authorized display flags
+      - browser E2E proves search URL reload back and forward restore both the form and results
+      - existing backend seven-day bounded-query acceptance remains green
+
+  - id: EH-P1.1-014
+    title: Durable investigation incident window and partial summary semantics
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-005]
+    depends_on: [EH-P1.1-013]
+    outputs:
+      - immutable incident window value owned by the Investigation aggregate
+      - PostgreSQL migration and deterministic legacy-case backfill
+      - manual Timeline and Grafana alert case creation with attributable window sources
+      - Case Summary and Evidence defaults based on the persisted incident window
+      - explicit baseline-versus-current window UI and partial ClickHouse failure response
+    completed_progress:
+      - InvestigationCase owns a validated immutable IncidentWindow and PostgreSQL migration 00008 deterministically backfills legacy rows from created_at
+      - Timeline and explicit API creation preserve TIMELINE_SEARCH windows manual creation derives MANUAL_DEFAULT once and Grafana alerts derive GRAFANA_ALERT from startsAt and the provisioned rule window
+      - Summary and Evidence default to the persisted baseline while explicit read overrides leave the aggregate unchanged
+      - ClickHouse unavailability returns a truthful HTTP 200 partial Summary with PostgreSQL sections retained source status last-success timestamps an approximate 90-day retention boundary and no false zero-event conclusion
+      - the case drawer distinguishes the baseline and current-view windows exposes source and retention context and links the persisted baseline back to Business Timeline
+      - migration is idempotent and a real PostgreSQL plus API restart preserves the case window Summary query window and event count
+      - full Go vet and tests contract validation frontend lint typecheck build and 66 component tests pass
+      - tagged Backend and Frontend Karate each pass 2 of 2 full Backend passes 104 of 104 and full Frontend browser acceptance passes 23 of 23
+      - a real ClickHouse outage partial-summary check passes and recovers the stack without fixture-only success
+    acceptance:
+      - reopening the same case later uses the same persisted baseline window
+      - explicit current-view windows do not mutate the case baseline
+      - Grafana and manual cases disclose distinct deterministic window sources
+      - ClickHouse timeout or unavailability retains PostgreSQL case data and marks event-derived sections partial
+      - migration restart backend frontend and browser E2E pass without rolling-now fallback
+
+  - id: EH-P1.1-015
+    title: Investigation workspace Pattern Analysis loop
+    status: completed
+    requirement_ids: [REQ-EH-003, REQ-EH-004, REQ-EH-005]
+    depends_on: [EH-P1.1-014]
+    outputs:
+      - server-owned all-active Pattern execution when pattern_ids are omitted
+      - executed Pattern identity in the analysis response and durable audit metadata
+      - case drawer controls for all-active and explicitly selected Pattern execution
+      - persisted latest-analysis context and distinct no-events no-match match and source-failure states
+      - automatic Summary Findings Evidence and Audit refresh after analysis
+      - Timeline case creation handoff into the canonical routeable investigation workspace
+    completed_progress:
+      - omitting pattern_ids now resolves every ACTIVE immutable Registry definition on the server and returns executed_pattern_ids even when no finding matches
+      - the executed set analysis status effective window and finding count are persisted in ANALYZE_INVESTIGATION audit metadata and restore the latest context after browser reload
+      - every writable non-closed case has an all-active action and an advanced explicit Registry selection in the routeable case drawer while Viewer and closed cases remain read-only
+      - the workspace distinguishes NO_EVENTS from evaluated no-match and match and gives actionable timeout source persistence and unknown-definition errors
+      - successful analysis invalidates and refreshes Summary Findings Evidence Audit and case detail without leaving the drawer
+      - Timeline creation now hands off to the canonical investigation route instead of maintaining duplicate Pattern and Evidence controls
+      - durable Pattern Evidence from an effective window outside the case baseline is explicitly distinguished from the baseline Timeline count and links to Business Timeline with the analysis window
+      - historical fixture browser cases now pass the fixture incident window instead of creating rolling MANUAL_DEFAULT cases whose Timeline appears empty
+      - full Go vet and tests contract validation frontend lint typecheck production build and 69 component tests pass
+      - full Backend Karate passes 105 of 105 including the closed-case API boundary full Frontend browser acceptance passes 23 of 23 and reload proves durable Audit restoration
+      - a real ClickHouse outage returns PATTERN_SOURCE_UNAVAILABLE persists no false Finding or Evidence and recovers the pipeline
+    acceptance:
+      - the default frontend request omits pattern_ids and the backend resolves all ACTIVE immutable definitions
+      - any writable non-closed case can execute analysis without returning to Timeline
+      - Viewer and closed cases remain read-only and explicit unknown Pattern IDs fail visibly
+      - success refreshes persisted Findings Evidence and Audit in the same drawer
+      - backend frontend component and browser E2E distinguish NO_EVENTS EVALUATED with no match MATCH and dependency failure
+
+  - id: EH-P1.1-016
+    title: Explicit investigation state actions and resolution forms
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-005]
+    depends_on: [EH-P1.1-015]
+    outputs:
+      - aggregate-owned allowed_transitions exposed by the Investigation read contract
+      - explicit start wait-for-approval resume resolve reopen and close actions
+      - separate resolve and close forms with required root-cause and resolution evidence
+      - unsaved draft protection for modal drawer route changes and browser reload
+      - actionable validation forbidden and optimistic-lock conflict feedback
+    acceptance:
+      - frontend renders actions only from backend allowed_transitions and does not duplicate the state map
+      - WAITING_APPROVAL can be entered and resumed from the case drawer
+      - resolve and close never submit blank evidence and CLOSED remains terminal
+      - stale versions reload the current case without silently overwriting another investigator
+      - unit backend frontend and browser E2E cover every legal and representative illegal transition
+    completed_progress:
+      - InvestigationCase owns deterministic allowed transitions including the dedicated close target and OpenAPI exposes them on every case response
+      - the case drawer renders only server-returned targets as start wait-for-approval resume resolve reopen and close actions and no longer guesses the next state
+      - resolve and close use separate modal flows with required root-cause and resolution evidence while Viewer and CLOSED remain read-only
+      - dirty resolution drafts warn on dialog or drawer dismissal and register a beforeunload guard for browser reload
+      - optimistic-lock and stale-transition failures invalidate detail summary and list caches and present an actionable reload message without overwriting concurrent work
+      - Go test and vet contract validation generated-client checks frontend lint typecheck build formatting and 74 component tests pass
+      - dedicated backend and Chrome acceptance each pass 1 of 1 and full Backend Karate passes 106 of 106 while full Frontend browser acceptance passes 25 of 25
+      - both Redpanda Connect consumer groups were verified Stable with one active member and zero lag after deployment recovery
+
+  - id: EH-P1.1-017
+    title: Event Hunter Guide and external system onboarding guidance
+    status: completed
+    requirement_ids: [REQ-EH-016]
+    depends_on: [EH-P1.1-013]
+    outputs:
+      - English Event Hunter Guide navigation placed after Scenario Lab
+      - default Getting Started and Integration guide with a complete investigation workflow
+      - Minimum Recommended and Full onboarding tiers
+      - truthful Outbox Kafka normalization telemetry and automatic-case integration paths
+      - canonical envelope field reference onboarding checklist and current product boundaries
+    acceptance:
+      - the default guide explains both platform usage and external system integration without claiming self-service onboarding
+      - navigation order route selection and feature-specific deep links remain deterministic and shareable
+      - the guide distinguishes a normalization consumer-producer from a ClickHouse sink and explains consumer-group isolation
+      - component and browser E2E cover the default guide integration content and existing feature switching
+      - the guide has no document-level horizontal overflow at 390px
+    completed_progress:
+      - the sidebar now names the route Event Hunter Guide and places it immediately after Scenario Lab while preserving the existing route and test identity
+      - the default guide is data-driven and covers the investigation workflow three onboarding tiers four reference paths twelve canonical envelope keys and an eight-step launch checklist
+      - the Integration Runbook adds four data-store responsibilities five Timeline admission gates seven expandable onboarding steps four failure classifications and five risk-labelled repeatable verification commands
+      - every runbook step identifies actions repository source files verification evidence and an explicit done condition while keeping destructive operations in the separate operations runbook
+      - current boundaries explicitly reject arbitrary-topic ingestion direct production-database polling HTTP event ingestion and a fabricated self-service onboarding capability
+      - README project scope traceability and the UX remediation plan now map the guide to REQ-EH-016 and EH-P1.1-017 without claiming the broader UX-13 scope is complete
+      - frontend lint typecheck build format generated-client checks 74 of 74 component tests and contract validation pass
+      - dedicated Guide browser acceptance passes 1 of 1 and full Frontend Karate passes 25 of 25 including the 390px no-horizontal-overflow scenario
+      - deployed browser inspection confirms the expected navigation order default content three tier cards and no horizontal overflow at 1280px
+
+  - id: P1.1-07-01
+    title: Post-sign-off failure scenario coverage
+    status: completed
+    requirement_ids: [REQ-EH-008, REQ-EH-009, REQ-EH-010]
+    depends_on: [EH-P1.1-012]
+    outputs:
+      - fixed S1 through S14 Scenario Lab catalog with live-service and isolated-lab execution modes
+      - actual-result checks backed by Kafka ClickHouse processing attempts ingestion failures Tempo and Loki
+      - regression coverage for duplicate ordering schema delay retry DLQ delivery cancellation and return flows
+    completed_progress:
+      - S1 and S12 through S14 execute the real order payment and shipping service outbox pipeline while S2 through S11 use the isolated event-lab topic
+      - the catalog exceeds the original S1 through S6 candidate and includes eleven reviewed deterministic narratives
+      - Backend Karate executes every scenario and verifies actual counts checks trace identity and observability links as part of the 92 of 92 baseline
+    acceptance:
+      - every fixed scenario derives PASSED FAILED or TIMED_OUT from observed backend state rather than hard-coded results
+      - live and synthetic telemetry remain distinguishable
+      - failure scenarios do not require test-only branches in production consumers
+
+  - id: P1.1-06-02
+    title: Real Grafana business-alert delivery
+    status: completed
+    requirement_ids: [REQ-EH-007, REQ-EH-008]
+    depends_on: [EH-P1.1-012, EH-MVP-015]
+    outputs:
+      - file-provisioned timestamped HMAC Event Hunter webhook contact point
+      - notification policy restricted to event_hunter investigate labels
+      - correlation-aware terminal DLQ business alert rule
+      - live Grafana firing and resolved backend acceptance scenario
+    completed_progress:
+      - the six aggregate quality rules remain Grafana-only and never fabricate a platform correlation ID
+      - the business rule uses reduce and threshold expressions so ClickHouse correlation event and consumer-group dimensions survive into the alert instance
+      - Grafana provisions the webhook secret from GRAFANA_WEBHOOK_SECRET and only exposes a redacted value through its API
+      - a real firing created a HIGH investigation and Alerting Evidence while a later successful attempt generated resolved Evidence without closing the case
+      - provisioning verification reports four datasources one dashboard seven healthy file-provisioned rules the contact point and its label-matched policy
+    acceptance:
+      - e2e/backend/grafana-auto-case.feature
+      - scripts/verify-grafana-provisioning.sh
+      - restart preserves and reloads the provisioned contact point policy and business rule
+
+  - id: P1.1-08-01
+    title: Local operations runbook and recovery smoke
+    status: completed
+    requirement_ids: [REQ-EH-008, REQ-EH-009, REQ-EH-010]
+    depends_on: [P1.1-07-01]
+    outputs:
+      - executable local operations runbook for lifecycle readiness recovery backup restore retention and secret rotation
+      - read-only smoke checker with optional explicitly confirmed restart persistence mode
+      - cold allowlisted volume backup helper with checksum manifest and overwrite protection
+    completed_progress:
+      - operations-runbook.md maps startup shutdown readiness diagnostics connector recovery observability recovery and release handoff to repository scripts
+      - verify-operations-runbook.sh validates scripts contracts persistence pipeline readiness Grafana assets API Event Lab and frontend with a static-only option
+      - backup-local-volumes.sh refuses a live stack or existing output directory and snapshots only explicit Event Hunter named volumes
+      - destructive restore remains a reviewed manual procedure so a convenience command cannot silently erase active volumes
+    acceptance:
+      - a new operator can run a non-destructive smoke and identify the failed dependency from documented evidence
+      - restart mode proves graceful shutdown and persistence only after explicit confirmation
+      - backup and restore instructions distinguish local recovery from production disaster recovery
+
+  - id: P1.1-QA
+    title: Static analysis dependency audit and known-vulnerability scan
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-008, REQ-EH-009, REQ-EH-010]
+    depends_on: [P1.1-08-01]
+    outputs:
+      - pinned Staticcheck and govulncheck execution with a machine-readable summary
+      - ESLint flat configuration for handwritten React and TypeScript sources
+      - frontend production and complete dependency audits
+      - Compose privilege image-tag and dangerous-mount policy check
+      - patched Go toolchain in local and Docker builds
+    completed_progress:
+      - the initial govulncheck found nineteen reachable standard-library vulnerabilities in host Go 1.26.1 and no reachable third-party vulnerability
+      - the repository toolchain policy go.mod directive and Docker builder now use Go 1.26.7 and the deployed API binary confirms go1.26.7 build info
+      - govulncheck v1.7.0 reports no vulnerabilities after the patch and Staticcheck v0.8.1 reports no findings
+      - ESLint 10 with TypeScript and React rules reports zero findings after removing render-time ref mutation unused state and unsafe case scope
+      - pnpm production and complete audits report no known vulnerabilities
+      - Compose policy reports no privileged host-network Docker-socket capability or unpinned-image errors and records the local Tempo root-user exception
+      - Frontend tests pass 49 of 49 and Frontend Karate passes 17 of 17 after deployment with scoped E2E cleanup returning zero residue
+    acceptance:
+      - scripts/test-security-quality.sh completes and writes a passed report
+      - the deployed Go runtime has no reachable known vulnerability according to the pinned scanner database
+      - lint is part of the normal Phase 1 exit gate
+      - every accepted security warning has an explicit local-only rationale
+
+  - id: P1.1-04-01
+    title: Read-only Pattern effectiveness metrics
+    status: completed
+    requirement_ids: [REQ-EH-003, REQ-EH-010]
+    depends_on: [EH-P1.1-012]
+    outputs:
+      - bounded Pattern hit count last hit and linked-investigation metrics API
+      - Pattern Library effectiveness columns with truthful unavailable states
+      - backend frontend and browser acceptance coverage
+    acceptance:
+      - metrics are calculated by the backend from persisted findings and cases rather than current-page frontend data
+      - an unavailable metric source is not rendered as zero
+      - Pattern definitions remain immutable Git-managed YAML
+    completed_progress:
+      - getPatternEffectiveness exposes a server-owned trailing thirty-day window and one metric row for every active registry Pattern
+      - PostgreSQL aggregates finding hits latest hit and distinct linked investigations without adding mutable Pattern state
+      - repository failure returns PATTERN_EFFECTIVENESS_UNAVAILABLE instead of serializing zero metrics
+      - Pattern Library renders hit case and latest-hit columns together with the effective window and a truthful unavailable state
+      - OpenAPI generated client traceability Go tests Frontend 51 of 51 typecheck lint build Backend Karate 94 of 94 and Frontend Karate 17 of 17 pass
+      - E2E cleanup now includes Scenario Lab correlations that naturally trigger Grafana cases and leaves zero cases in the gate window
+
+  - id: P1.1-04-02
+    title: Pattern finding feedback and Git governance completion
+    status: completed
+    requirement_ids: [REQ-EH-003]
+    depends_on: [P1.1-04-01]
+    outputs:
+      - confirmed false-positive and needs-review finding feedback contract
+      - Scenario coverage checksum and change-source metadata
+      - fixture expectation regression for Pattern changes
+    acceptance:
+      - feedback never mutates the runtime Pattern definition
+      - reviewer workflow is not introduced until the outstanding product decision is approved
+    completed_progress:
+      - generated Pattern Registry exposes the source YAML path SHA-256 checksum and match non-match fixture counts while remaining runtime immutable
+      - append-only pattern_findings are unchanged and human classification is stored in pattern_finding_feedback with an independent optimistic lock
+      - classifyPatternFinding supports CONFIRMED FALSE_POSITIVE and NEEDS_REVIEW rejects Viewer writes and records CLASSIFY_PATTERN_FINDING audit in the same PostgreSQL transaction
+      - Pattern Library shows source checksum and fixture coverage and the Investigation drawer supports truthful UNREVIEWED feedback actions
+      - Go test and vet Frontend 52 of 52 typecheck lint build contract drift Backend Karate 95 of 95 and Frontend Karate 17 of 17 pass
+      - an API-only restart preserved CONFIRMED feedback version one and its audit and gate-scoped cleanup left zero cases and feedback rows
+
+  - id: P1.1-02-03
+    title: Investigation advanced sorting and compound filtering
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-014]
+    depends_on: [EH-P1.1-012]
+    outputs:
+      - bounded backend-owned compound filtering and stable sorting
+      - shareable Investigation list URL state
+      - pagination ordering regression coverage
+    acceptance:
+      - the frontend does not sort only the currently loaded page
+      - repeated pagination produces stable results for the same query
+    completed_progress:
+      - listInvestigations accepts backend-owned status severity priority assignee tag and correlation filters plus allowlisted created_at or updated_at asc or desc sorting
+      - PostgreSQL keyset ordering uses the selected timestamp and deterministic id tie breaker in the same direction
+      - opaque version two cursors bind the selected sort field and direction and reject cross-sort reuse with INVALID_CURSOR
+      - the Investigation filter form is restored from and writes a shareable query string while drawer navigation preserves it and filter changes reset pagination
+      - Go test and vet Frontend 53 of 53 typecheck lint build generated client drift and contract validation passed
+      - tagged Backend Karate 7 of 7 and Frontend Karate 1 of 1 passed followed by full Backend 17 features 97 of 97 and Frontend 18 of 18
+      - gate-scoped cleanup left zero E2E cases feedback and Scenario runs and final pipeline readiness reported Debezium RUNNING Stable groups and zero lag
+
+  - id: P1.1-06-01
+    title: Grafana alert investigation eligibility boundary
+    status: completed
+    requirement_ids: [REQ-EH-007]
+    depends_on: [EH-MVP-015]
+    outputs:
+      - firing severity label and correlation eligibility gate
+      - durable ignored duplicate and resolved receipt dispositions
+      - case Evidence only when a real Investigation is linked
+    acceptance:
+      - ineligible aggregate alerts never create a fabricated business case
+      - duplicate and resolved notifications remain idempotent
+
+  - id: P1.1-08-02
+    title: Target-environment production hardening and rehearsal
+    status: pending
+    requirement_ids: [REQ-EH-008, REQ-EH-009, REQ-EH-010]
+    depends_on: [P1.1-QA]
+    outputs:
+      - target staging install upgrade TLS and secret-rotation evidence
+      - exercised backup restore migration rollback retention deletion capacity and disaster-recovery reports
+      - approved production identity and RTO RPO decisions before identity or DR implementation
+    acceptance:
+      - local Compose smoke and documentation review cannot be used as production-readiness evidence
+      - every destructive rehearsal uses an explicitly approved isolated target
+
+  - id: EH-MVP-001
+    title: Contract validation pipeline
+    status: completed
+    depends_on: []
+    outputs:
+      - validate OpenAPI and AsyncAPI YAML
+      - validate event fixtures against JSON Schema 2020-12
+      - verify local references and traceability operationIds
+    acceptance:
+      - all contract files parse
+      - every local reference resolves
+      - every MVP requirement maps to at least one Karate feature
+
+  - id: EH-MVP-002
+    title: Go modular-monolith skeleton
+    status: completed
+    depends_on: [EH-MVP-001]
+    outputs:
+      - backend/go.mod
+      - backend/cmd/api/main.go
+      - backend/internal/contexts/investigation
+      - backend/internal/platform
+      - health live and ready endpoints
+    completed_progress:
+      - Investigation HTTP handlers delegate PostgreSQL case audit finding and evidence operations to an application service with constructor-injected repository adapters
+      - Investigation state transitions and optimistic-lock conflict mapping are covered by application unit tests and a handler boundary regression test
+      - Timeline and Investigation handlers delegate ClickHouse reads to an application forensics service with a constructor-injected HTTP read-model adapter
+      - Architecture regression tests reject direct PostgreSQL and ClickHouse query access from HTTP handlers
+      - Investigation application services are split by screaming-architecture capability: case_lifecycle, forensics, event_search, pattern_analysis, and alert_intake; the flat application package and generic facade were removed
+      - Case lifecycle exposes separate Commands and Queries boundaries, with compile-time interface assertions and an architecture regression test preventing flat-package imports
+    acceptance:
+      - go test ./...
+      - API starts with TEMPORAL_ENABLED=false
+      - domain packages have no infrastructure imports
+
+  - id: EH-MVP-003
+    title: PostgreSQL and ClickHouse persistence
+    status: completed
+    depends_on: [EH-MVP-002]
+    outputs:
+      - apply existing goose migrations
+      - PostgreSQL repositories
+      - ClickHouse bounded timeline query adapter
+      - fixture loader using production field mapping
+    completed_progress:
+      - API ClickHouse reads use a three-second application deadline plus readonly max execution result scan byte and thread budgets from contracts/platform/failure-policy.yaml
+      - PostgreSQL API connections enforce a two-second statement_timeout while the HTTP layer propagates request cancellation
+      - Investigation case audit pattern-finding and evidence SQL is isolated in PostgreSQL adapters instead of HTTP handlers
+      - Bounded Timeline search processing-summary event-type and payment-evidence ClickHouse SQL is isolated in an HTTP read-model adapter with allowlisted typed filters and transport-delivery deduplication
+    acceptance:
+      - migration up and down integration tests
+      - stale lock_version update returns domain conflict
+      - ORDER-1001 and ORDER-2001 fixtures can be queried
+
+  - id: EH-MVP-011
+    title: Demo domain services and transactional outbox
+    status: completed
+    requirement_ids: [REQ-EH-009]
+    depends_on: [EH-MVP-002]
+    outputs:
+      - order payment and shipping Go service composition roots
+      - service boundaries and ports from contracts/demo-services/service-topology.yaml
+      - service-owned PostgreSQL databases and migrations
+      - transactional outbox in each service boundary
+      - createDemoOrder operation from contracts/demo-services/order-api.openapi.yaml
+      - correlationId causationId traceId and aggregate sequence propagation
+    acceptance:
+      - service domain and outbox write commit in one database transaction
+      - Idempotency-Key reuses the original accepted result
+      - services do not read another service database
+      - go test ./...
+
+  - id: EH-MVP-012
+    title: Debezium Redpanda and ClickHouse ingestion pipeline
+    status: completed
+    superseded_by: EH-POC-003
+    requirement_ids: [REQ-EH-009]
+    depends_on: [EH-MVP-003, EH-MVP-011]
+    outputs:
+      - deterministic topic bootstrap from contracts/platform/topic-topology.yaml
+      - Debezium outbox connector configuration from contracts/platform/outbox-routing.yaml
+      - initial Redpanda Connect configurations from the then-current contracts/platform/ingestion-mapping.yaml
+      - schema violation DLQ and event_ingestion_failures sink
+      - transport-delivery deduplication in read queries
+    completed_progress:
+      - the initial Redpanda Connect route validated the canonical envelope and six Phase 1 event types; EH-POC-003 later replaced this runtime
+      - Debezium outbox routing preserves nullable causationId and traceId fields while expanding JSON payloads
+      - scripts/test-ingestion-acknowledgement.sh proves source offsets remain uncommitted until ClickHouse recovers
+      - scripts/test-ingestion-pipeline.sh proves schema violations enter the restricted DLQ while ClickHouse stores checksum metadata only
+      - timeline read adapters deduplicate append-only sink redelivery by Kafka topic partition and offset
+      - direct outputs and acceptance are complete but task remains in_progress while EH-MVP-003 and EH-MVP-011 are not dependency-complete
+    acceptance:
+      - contracts and deployed topic names match
+      - source offset commits only after ClickHouse output succeeds
+      - sink redelivery of one offset does not duplicate a Timeline event
+      - invalid event enters restricted DLQ and only checksum metadata enters ClickHouse
+
+  - id: EH-MVP-013
+    title: Consumer processing-attempt telemetry
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-008]
+    depends_on: [EH-MVP-011, EH-MVP-012]
+    outputs:
+      - EventProcessingAttempt producer library
+      - event-hunter.processing-attempts topic
+      - ClickHouse processing-attempt ingestion
+      - timeline processing_summary adapter
+    completed_progress:
+      - processing-attempt ingestion validates the runtime JSON Schema and rejects errored records without acknowledging them
+      - processing summaries deduplicate by attemptId before counting attempts and selecting final status
+      - scripts/test-ingestion-pipeline.sh proves duplicate delivery of one attemptId remains one logical attempt
+      - e2e/backend/timeline.feature verifies attempt count final DLQ status and consumer-group scope
+      - direct outputs and acceptance are complete but task remains in_progress while EH-MVP-011 and EH-MVP-012 are not dependency-complete
+    acceptance:
+      - every fixture attempt validates against the JSON Schema
+      - attempt number is scoped by eventId and consumerGroupId
+      - duplicate events are never used to infer retry count
+      - processing summary scenario in e2e/backend/timeline.feature
+
+  - id: EH-MVP-004
+    title: Demo session and RBAC
+    status: completed
+    requirement_ids: [REQ-EH-006]
+    depends_on: [EH-MVP-002]
+    outputs:
+      - create delete and inspect demo session
+      - signed HttpOnly cookie middleware
+      - permission guards
+    acceptance:
+      - e2e/backend/auth.feature
+
+  - id: EH-MVP-005
+    title: Business Timeline API
+    status: completed
+    requirement_ids: [REQ-EH-001]
+    depends_on: [EH-MVP-003, EH-MVP-004, EH-MVP-013]
+    outputs:
+      - getBusinessTimeline
+      - searchForensicsEvents
+      - bounded query policy
+      - optional processing-attempt summary
+    completed_progress:
+      - timeline event metadata includes trace kafka coordinates service version and ingestion time
+      - payload is omitted by default and masked when explicitly requested
+      - timeline event-detail backend Karate acceptance passes
+    acceptance:
+      - e2e/backend/timeline.feature
+      - timeline p95 under 2000 ms at declared MVP load
+
+  - id: EH-MVP-006
+    title: Investigation case lifecycle
+    status: completed
+    requirement_ids: [REQ-EH-002]
+    depends_on: [EH-MVP-003, EH-MVP-004]
+    outputs:
+      - list create get update and close case operations
+      - ETag and If-Match optimistic locking
+      - audit log writes
+    completed_progress:
+      - lifecycle API and optimistic locking acceptance pass
+      - create update analyze and close audit writes
+      - summary audit read model and investigation drawer presentation
+    acceptance:
+      - optimistic-lock scenario in e2e/backend/investigation.feature
+      - create update analyze and close actions are exposed through the summary audit read model
+
+  - id: EH-MVP-007
+    title: Deterministic pattern engine
+    status: completed
+    requirement_ids: [REQ-EH-003]
+    depends_on: [EH-MVP-005, EH-MVP-006]
+    outputs:
+      - read-only Go Pattern Registry
+      - payment-completed-without-shipment version 1
+      - synchronous analyzeInvestigation
+      - idempotent pattern finding persistence
+    completed_progress:
+      - contracts patterns YAML is the single authoring source and generates the immutable Go runtime registry
+      - contract validation fails when the generated registry drifts from YAML
+      - registry metadata matches the formal Pattern contract
+      - registry exposes required expected and exclusion events with evidence query template
+      - mutation methods are absent and POST returns method not allowed
+      - evaluator applies occurred_at trigger-relative PT5M maturity late-event and exclusion semantics
+      - analyze rejects unknown or inactive pattern IDs and uses a bounded seven-day ClickHouse source query
+      - pattern findings and Event Trace Pattern evidence are persisted with checksums and audit records
+      - backend deterministic Pattern acceptance passes
+    acceptance:
+      - e2e/backend/pattern.feature
+      - normal fixture does not match
+      - missing-shipment fixture matches HIGH
+      - exclusion fixtures do not match
+
+  - id: EH-MVP-008
+    title: Summary and evidence manifest
+    status: completed
+    requirement_ids: [REQ-EH-004, REQ-EH-005]
+    depends_on: [EH-MVP-007]
+    outputs:
+      - getInvestigationSummary
+      - getEvidenceBundle
+      - RFC 8785 JCS canonical JSON SHA-256
+      - explicit partial source status
+    completed_progress:
+      - pattern analysis persists Event Trace and Finding references with SHA-256 checksums
+      - evidence items expose an authoritative source and allowlisted open action
+      - manifest exposes source status partial warnings and integrity checksum
+      - evidence contract scenario passes in the 58-scenario backend Karate suite
+    acceptance:
+      - summary and evidence scenarios in e2e/backend/investigation.feature
+      - summary p95 under 5000 ms at declared MVP load
+
+  - id: EH-MVP-009
+    title: React investigation console
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-005, REQ-EH-006]
+    depends_on: [EH-MVP-004, EH-MVP-005, EH-MVP-006, EH-MVP-007, EH-MVP-008]
+    outputs:
+      - demo role login
+      - timeline basic and advanced allowlist search with bounded from and to
+      - case list with cursor pagination and right-side detail drawer
+      - case summary timeline pattern findings evidence references and audit presentation
+      - read-only pattern library
+      - Grafana Explore Alerting Dashboard Tempo trace and Loki log deep links
+      - trusted external-link builder with URL encoding and configured origin allowlist
+      - evidence manifest and source-reference open actions
+      - generated OpenAPI client
+    completed_progress:
+      - timeline basic and advanced allowlist form
+      - expandable timeline event detail with masked payload and processing summary
+      - trusted Grafana Explore Dashboard Tempo and Loki links on timeline events
+      - demo fixture loading publishes matching OTLP traces and logs backfills event-time quality windows and verifies Tempo Loki queryability
+      - order payment and shipping services export real traces logs and metrics through the shared OpenTelemetry runtime
+      - otelhttp otelslog and franz-go kotel instrument HTTP structured logs and Kafka producer consumer boundaries
+      - outbox traceparent and tracestate fields are persisted and mapped by Debezium into Kafka headers to continue one distributed trace
+      - a live order vertical slice verifies one trace ID across three ClickHouse events three Tempo service resources and three Loki service logs
+      - live service logs use canonical event and Kafka attributes and the E2E requires their trace IDs to match Tempo and ClickHouse
+      - synthetic fixture streams use a dedicated service namespace instance and source marker so replay does not collide with live service streams
+      - documentation separates live SDK synthetic fixture and disabled optional otelc profiles and forbids duplicate instrumentation on one surface
+      - Grafana 13 Tempo deep links use TraceQL mode so a trace ID opens the rendered trace instead of an unsupported legacy query mode
+      - investigation drawer summary timeline patterns evidence and audit tabs
+      - read-only Pattern Library route backed by the Go registry
+      - Pattern source links open the library with the requested pattern selected and highlighted
+      - investigation source status partial warning role visibility and operation error feedback
+      - complete Evidence manifest with deferred tab loading and source-reference actions
+      - Event Trace Loki Dashboard and Pattern source builders reject arbitrary outbound URLs
+      - deep-link unit tests and frontend Karate acceptance
+      - openapi-typescript generates paths components and operations from openapi.yaml as the frontend type source
+      - openapi-fetch uses the generated paths for every implemented frontend API call
+      - pnpm api:check fails when the committed generated client drifts from openapi.yaml
+      - investigation cursor and response pagination contract matches the deployed backend and frontend behavior
+      - timeline advanced search resolves ACTIVE Pattern evidence event types Grafana alert fingerprints and minimum investigation severity through application-owned qualifiers before the bounded ClickHouse query
+      - backend Karate covers Pattern Alert fingerprint and severity filters without silently ignored query fields
+      - direct outputs and acceptance pass with frontend typecheck 25 component tests production build and 6 browser Karate scenarios
+    acceptance:
+      - frontend typecheck and component tests
+      - route navigation drawer pagination role visibility and API error tests
+      - deep-link tests assert encoded query variables and reject untrusted origins
+      - e2e/frontend/investigation-flow.feature
+
+  - id: EH-MVP-010
+    title: Optional Temporal adapter
+    status: pending
+    depends_on: [EH-MVP-008]
+    optional: true
+    feature_flag: TEMPORAL_ENABLED
+    outputs:
+      - separate worker composition root
+      - TEMPORAL execution mode for long-running investigation
+      - workflow and activity tests
+    acceptance:
+      - core API remains ready when feature is disabled
+      - disabled TEMPORAL request returns TEMPORAL_DISABLED
+
+  - id: EH-MVP-014
+    title: Deterministic quality worker and Grafana assets
+    status: completed
+    requirement_ids: [REQ-EH-008]
+    depends_on: [EH-MVP-012, EH-MVP-013]
+    outputs:
+      - backend cmd quality-worker
+      - one-minute aggregation defined by contracts/quality/event-quality-rules.yaml
+      - Grafana Event Quality dashboard provisioning
+      - Grafana alert rules and notification labels
+    completed_progress:
+      - Compose quality-worker schedule runs one-minute UTC tumbling windows after a two-minute late-arrival grace
+      - aggregate subcommand provides deterministic explicit-boundary backfill and Grafana selects the latest calculated revision
+      - worker health and unavailable-ClickHouse failure mode are executable through scripts/verify-quality-runtime.sh
+      - Grafana provisions four datasources one Event Quality dashboard all six aggregate contract thresholds and one correlation-aware business investigation rule
+      - all seven alert rules report healthy evaluation with file provenance
+      - restart verification preserves PostgreSQL rows ClickHouse rows and Redpanda topics and reloads Grafana assets
+      - EH-MVP-012 and EH-MVP-013 direct acceptance is closed but this task remains in_progress until their strict dependency statuses are completed
+    acceptance:
+      - quality-worker aggregate supports explicit from and to for deterministic backfill
+      - e2e/backend/quality-metrics.feature
+      - worker is not implemented as Temporal or per-event Workflow
+
+  - id: EH-MVP-015
+    title: Signed Grafana business-alert intake
+    status: completed
+    requirement_ids: [REQ-EH-007]
+    depends_on: [EH-MVP-006, EH-MVP-014]
+    outputs:
+      - receiveGrafanaAlertWebhook
+      - raw-body HMAC validation and five-minute replay protection
+      - idempotent grafana_alert_receipts persistence
+      - create or link investigation case for eligible firing alerts
+      - record resolved alerts without auto-closing cases
+    completed_progress:
+      - raw-body HMAC and payload validation stay in the HTTP adapter while eligibility deduplication and disposition policy run in the application service
+      - PostgreSQL adapter owns the advisory lock and atomic receipt case and Evidence transaction with no SQL in the HTTP adapter
+      - application policy transport boundary and architecture tests protect the separation
+      - firing and resolved receipts persist checksum-protected GRAFANA_ALERT case Evidence
+      - duplicate notification creates neither a second receipt nor a second Evidence row
+      - Evidence API exposes only validated alert-rule relative paths and Grafana organization IDs
+      - trusted frontend builder rebases Alerting detail paths onto the configured Grafana origin
+      - backend and browser Karate scenarios cover persistence idempotency resolution and deep-link visibility
+      - direct outputs and acceptance are complete but task remains in_progress while EH-MVP-014 is not dependency-complete
+    acceptance:
+      - e2e/backend/grafana-alert-webhook.feature
+      - invalid signature performs no database writes
+      - duplicate webhook creates no second case or evidence row
+
+  - id: EH-MVP-016
+    title: Full MVP vertical-slice and capacity verification
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-005, REQ-EH-006, REQ-EH-007, REQ-EH-008, REQ-EH-009]
+    depends_on: [EH-MVP-009, EH-MVP-012, EH-MVP-013, EH-MVP-014, EH-MVP-015]
+    outputs:
+      - one command local stack including implemented app services
+      - deterministic fixture and performance data loader
+      - CI regression profile performance report
+      - complete backend and frontend Karate reports
+      - restart persistence and Grafana provisioning verification
+      - Phase 1 prototype parity audit from requirements/phase-1-delivery-plan.md
+    completed_progress:
+      - OpenAPI-generated frontend client drift gate and deployed API rate-limit headers are covered by the frontend build and backend Karate suites
+      - API request PostgreSQL and ClickHouse deadlines plus ClickHouse query budgets are restart-safe Compose configuration and have focused Go failure-mode tests
+      - deterministic CI loader verifies 100000 events 20000 correlation IDs 10000 processing attempts and 1440 quality windows before measurement
+      - authenticated 200-request query mix covers timeline event search investigation summary and case listing with 10 concurrent investigators
+      - latest local CI profile completed with zero HTTP errors timeline p95 12.75 ms and summary p95 39.54 ms against 2000 ms and 5000 ms thresholds
+      - scripts/test-phase-1-exit.sh composes contracts Go frontend Karate ingestion quality Grafana performance and optional disruptive persistence checks into one report-producing command
+      - the exit gate creates a real order and verifies OpenTelemetry propagation across order payment and shipping before performance verification
+      - the full disruptive profile restarts ClickHouse Tempo Loki Collector and the three demo services then re-queries the same live telemetry
+      - restart persistence now re-joins Kafka consumers and revalidates all Debezium tasks after Redpanda and PostgreSQL restart; backend E2E fails readiness before polling when either the domain-event or processing-attempt ingestion group is empty or lagging
+      - event-pipeline acceptance uses explicit staged deadlines of 20 seconds for Order ingestion and 40 seconds for the complete Order Payment Shipping chain
+      - post-Scenario-Lab full disruptive local Phase 1 exit gate passes and records build/reports/phase-1-exit-summary.json
+      - deterministic quality fixtures use reserved synthetic partition 99 so product demo events cannot alter the fixed-window aggregate
+      - Loki WAL and graceful shutdown flush preserve freshly accepted canonical service logs across the restart persistence gate
+      - P1-02 Timeline advanced contract is closed with OpenAPI generated client PostgreSQL qualifier and ClickHouse E2E coverage
+      - .github/workflows/phase-1-ci.yml defines unit contract and full vertical-slice jobs with report artifact upload
+      - task completion已改為以本機 `test-phase-1-exit.sh` 成功為主，hosted CI 先不列為本輪阻擋條件
+    acceptance:
+      - e2e/backend/event-pipeline.feature
+      - every MVP acceptance feature passes
+      - contracts/platform/performance-profile.yaml ci thresholds pass
+      - no Phase 2 Phase 3 or Production Redrive control is visible in the default UI
+
+  - id: EH-MVP-017
+    title: Hybrid Scenario Lab with actual-result verification
+    status: completed
+    depends_on: [EH-MVP-003, EH-MVP-009, EH-MVP-011, EH-MVP-012, EH-MVP-013]
+    outputs:
+      - event-lab OpenAPI and generated frontend client
+      - stable S1-S14 catalog and PostgreSQL scenario_runs persistence
+      - S1 LIVE_SERVICES execution through Order Payment and Shipping
+      - S2-S11 LAB_INJECTION through isolated event-lab.events
+      - S12-S14 LIVE_SERVICES profiles for payment failure, delivery completion, and return/refund
+      - actual observer over forensics events processing attempts and ingestion failures
+      - React Scenario Lab expected versus actual checks and trusted deep links
+      - shared OTel trace ID across scenario envelope Kafka header Tempo and Loki
+    completed_progress:
+      - all eleven scenarios pass when executed against the local Kafka and ClickHouse stack
+      - Scenario Lab never publishes deterministic injections to the three live-service topics
+      - nginx and Vite preserve the Scenario Lab API prefix correctly
+      - Grafana links use encoded Explore panes with provisioned ClickHouse Loki and Tempo datasource UIDs
+      - declared Scenario Lab run event retry DLQ and duration metrics are exported through OTLP and queryable from Prometheus
+      - focused Go frontend contract and browser verification pass
+      - direct outputs are complete；本輪將 upstream completion 判斷綁在實際交付條件與本機 Exit Gate，hosted CI 不作為阻擋項
+    acceptance:
+      - e2e/backend/scenario-lab.feature executes S1-S14 and verifies actual checks
+      - synthetic scenario Tempo and Loki telemetry use the canonical event trace ID
+      - e2e/frontend/investigation-flow.feature runs S8 and renders actual results
+
+  - id: EH-POC-001
+    title: Isolated ClickHouse-first store-all and promote-searchable ingestion
+    status: completed
+    depends_on: [EH-MVP-009]
+    optional: true
+    feature_flag: clickhouse-mv-poc
+    outputs:
+      - official ClickHouse Kafka Connect Sink v1.5.0 image with pinned SHA-256
+      - independent Kafka Connect worker group and connector offsets
+      - isolated seven-day raw landing database
+      - minimum-envelope-v1 materialized admission classification with known-event required payload keys
+      - explicit SEARCHABLE SEARCHABLE_WITH_WARNINGS and QUARANTINED semantics
+      - promoted event and safe quarantine read models
+      - Grafana aggregate quarantine rule
+      - dedicated Karate POC and restart verification scripts
+      - canonical active and standby compatibility views with atomic cutover and rollback
+      - config-driven shadow parity and cutover rehearsal scripts
+      - canonical API and Timeline UI admission metadata with searchable warning presentation
+    completed_progress:
+      - at the isolated POC stage the existing Redpanda Connect and forensics_events path remained unchanged; EH-POC-003 later superseded this runtime decision
+      - eight Kafka records are conserved as four searchable events and four quarantined summaries
+      - unknown event type version and invalid optional trace metadata remain searchable with explicit quality flags
+      - full historical topic backfill conserves one output per transport delivery identity
+      - grafana_reader is denied access to the raw landing database
+      - connector configuration offsets and row counts survive worker restart
+      - candidate-only regression exposed payload-empty OrderCreated and PaymentCompleted as false-searchable; known event required-key validation now quarantines them as SCHEMA_VIOLATION
+      - 2026-08-27 local regression creates OrderCreated PaymentCompleted and ShipmentCreated through the production path and conserves all three in the parallel POC
+      - payload compatibility gate found and fixed JSON_QUERY array wrapping by using JSONExtractRaw and semantic JSON comparison
+      - canonical view cutover runs a new Order Payment Shipping Timeline E2E on the candidate then atomically rolls back and repeats on legacy
+      - API readiness follows the selected ingestion mode and verifies either the active legacy consumer group or the ClickHouse Sink connector tasks
+      - rollback automatically recovers empty domain-event and processing-attempt consumer groups before reporting ready
+      - Grafana provisioning verifies the POC quarantine rule as one of eight healthy file-provisioned alert rules
+      - canonical views expose admission_status quality_flags and admission_profile without changing the active source during upgrade
+      - candidate and post-rollback legacy Timeline E2E both assert the admission metadata API contract
+      - browser verification covers legacy Searchable and candidate SEARCHABLE_WITH_WARNINGS presentation and the final source is restored to legacy
+    acceptance:
+      - bash scripts/test-clickhouse-mv-poc.sh
+      - bash scripts/verify-clickhouse-mv-poc.sh --restart
+      - bash scripts/test-ingestion-cutover-rehearsal.sh --correlation CORRELATION_ID
+      - requirements/clickhouse-mv-ingestion-poc.md records cutover non-goals and pending decisions
+
+  - id: EH-POC-002
+    title: ClickHouse-first functional completion and operator safety
+    status: completed
+    depends_on: [EH-POC-001]
+    optional: true
+    feature_flag: clickhouse-mv-poc
+    priority: functional-completeness
+    outputs:
+      - safe admission and technical DLQ failure visibility without exposing raw payload
+      - candidate ClickHouse outage and full restart functional recovery
+      - explicit raw landing TTL default-deny access and bounded purge operation
+      - documented audit boundary for any future privileged raw reader
+    completed_progress:
+      - Ingestion Issues API and React page unify contract validation admission quarantine and technical DLQ summaries with bounded filters keyset pagination and a safe detail drawer
+      - technical-dlq-projector consumes the isolated Kafka Connect DLQ and persists only transport metadata exception class and payload SHA-256 without raw message stack trace or exception text
+      - the POC Karate test emits a real tombstone and verifies connector DLQ headers projector persistence health and exclusion from normal Timeline data
+      - candidate recovery test switches the canonical view after a parity gate returns API readiness 503 during ClickHouse outage restarts ClickHouse connector and projector drains a live three-event backlog and returns to legacy
+      - candidate-only recovery stops the legacy domain Redpanda Connect worker proves a new order exists as three candidate events and zero legacy events and preserves candidate mode across ClickHouse outage and backlog recovery
+      - candidate-only backend regression passes all 18 features and 108 scenarios with the legacy domain worker stopped
+      - backend E2E preserves the 300 request limit while using an isolated 10-second fixed window and restores the runtime window after execution
+      - nine deterministic synthetic fixtures can be mirrored with an explicit synthetic-fixture-mirror-v1 admission profile without pretending to be live Kafka telemetry
+      - this stage identified the processing-attempt Redpanda Connect worker as the remaining replacement gap; EH-POC-003 later closed it
+      - raw landing keeps a seven-day TTL and default-deny Grafana access while the purge command is dry-run first requires execute plus confirmation and limits each window to 24 hours ending at least one hour in the past
+      - backend regression passes 18 features and 108 scenarios frontend browser regression passes 25 of 25 and unit component regression passes 77 of 77
+    deferred_non_blocking:
+      - sustained ingestion load and soak tests
+      - capacity ceiling and throughput benchmarks
+      - high-concurrency duplicate and redelivery stress matrix
+    acceptance:
+      - a technical poison record has an observable safe failure result and never appears as a normal Timeline event
+      - candidate mode returns to ready and preserves queryable data after ClickHouse and connector restart
+      - raw landing remains unavailable to normal application and Grafana roles and expires or purges only through bounded policy
+      - the stage originally required an explicit adoption decision; EH-POC-003 records that completed decision
+      - bash scripts/test-clickhouse-mv-poc.sh
+      - bash scripts/test-clickhouse-mv-functional-recovery.sh
+      - bash scripts/test-clickhouse-mv-candidate-only-recovery.sh
+      - bash scripts/test-clickhouse-mv-raw-purge.sh
+
+  - id: EH-POC-003
+    title: Adopt ClickHouse-first ingestion and replace processing-attempt worker
+    status: completed
+    depends_on: [EH-POC-002]
+    priority: functional-completeness
+    outputs:
+      - processing-attempt Kafka Connect Sink raw landing promoted table failure summary and canonical view
+      - clickhouse-mv committed defaults for domain events and processing attempts
+      - fresh-start migrations and startup reconciliation that select both promoted sources
+      - removal of Redpanda Connect domain and processing-attempt services configurations ports and runtime containers
+      - canonical readers across API Scenario Lab Quality Worker and Grafana
+      - updated fixture mapping architecture runbook and operator guide
+    completed_progress:
+      - both official Sink connectors and all tasks are RUNNING and API readiness reports domain=clickhouse-mv attempts=clickhouse-mv
+      - processing-attempt validation routes valid rows to poc_event_processing_attempts and invalid rows to a safe admission summary without raw payload
+      - duplicate processing-attempt delivery remains one logical attempt by attempt_id
+      - candidate-only recovery proves domain and attempt backlog recovery after ClickHouse outage with no legacy writer
+      - fresh-start dev-up contract validation fixture loading and canonical source checks use the adopted route
+      - old Redpanda Connect workers Compose services YAML configurations and port allocations are removed while the Redpanda broker and Debezium worker remain
+      - backend acceptance passes 18 features and 108 scenarios; Scenario Lab passes 16 of 16 and Grafana auto-case passes 1 of 1
+    deferred_non_blocking:
+      - sustained ingestion load and soak tests
+      - capacity ceiling and throughput benchmarks
+      - high-concurrency duplicate and redelivery stress matrix
+      - production raw-data governance and privileged-reader approval
+    acceptance:
+      - contracts and Compose validation pass with no active Redpanda Connect ETL service
+      - domain and processing-attempt canonical views both resolve to ClickHouse-first promoted tables
+      - invalid domain events and attempts are retained raw and exposed only as safe failure summaries
+      - restart recovery preserves queryability and drains Kafka backlog for both routes
+      - complete Backend Karate regression remains green
