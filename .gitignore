@@ -1,0 +1,73 @@
+# Environment overrides and credentials. Keep the documented template only.
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+secrets*.json
+secrets*.yaml
+secrets*.yml
+
+# Operating-system and editor state.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Frontend dependencies, caches, builds, coverage and browser-test state.
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+frontend/.cache/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Go, Python and general build output.
+bin/
+backend/bin/
+*.test
+*.out
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+target/
+build/
+
+# Karate/E2E reports are runtime artifacts; feature files remain tracked.
+e2e/target/
+e2e/karate-*-results/
+artifacts/e2e/
+karate.log
+
+# Local databases, logs, traces, captures and downloaded test executables.
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+*.sock
+*.har
+*.pcap
+*.jar
+
+# Temporary and backup files.
+*.tmp
+*.temp
+*.bak
+*.orig
+.cache/
+.pnpm-store/
