@@ -1,0 +1,84 @@
+name: Event Hunter Phase 1
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-and-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install jsonschema referencing PyYAML
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - run: python3 scripts/validate-contracts.py
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l backend)"
+      - run: go -C backend mod verify
+      - run: go -C backend vet ./...
+      - run: go -C backend test ./...
+      - run: pnpm --dir frontend run api:check
+      - run: pnpm --dir frontend run typecheck
+      - run: pnpm --dir frontend run test:run
+      - run: pnpm --dir frontend run build
+
+  vertical-slice:
+    needs: unit-and-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install jsonschema referencing PyYAML
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.32.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: pnpm --dir frontend install --frozen-lockfile
+      - name: Download Karate standalone
+        run: curl --fail --location --output /tmp/event-hunter-karate-2.1.1.jar https://github.com/karatelabs/karate/releases/download/v2.1.1/karate-2.1.1.jar
+      - name: Run Phase 1 exit gate
+        run: bash scripts/test-phase-1-exit.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: event-hunter-phase-1-reports
+          path: |
+            artifacts/e2e/karate
+            build/reports
+          if-no-files-found: warn
