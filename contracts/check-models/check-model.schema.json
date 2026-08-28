@@ -1,0 +1,346 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/check-model.schema.json",
+  "title": "Event Hunter Check Model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "model_id",
+    "version",
+    "kind",
+    "status",
+    "title",
+    "description",
+    "domain",
+    "source",
+    "applies_to",
+    "scope"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "contract_version": { "const": 1 },
+    "model_id": { "$ref": "#/$defs/modelId" },
+    "version": { "type": "integer", "minimum": 1 },
+    "kind": { "enum": ["FLOW", "GLOBAL_CHECK"] },
+    "status": { "enum": ["DRAFT", "ACTIVE", "RETIRED"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "domain": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+    "source": { "$ref": "#/$defs/source" },
+    "applies_to": { "$ref": "#/$defs/appliesTo" },
+    "scope": { "$ref": "#/$defs/scope" },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/flowNode" }
+    },
+    "paths": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/flowPath" }
+    },
+    "expectations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectation" }
+    },
+    "child_models": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/childModel" }
+    },
+    "unmapped_event_policy": { "$ref": "#/$defs/unmappedEventPolicy" },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/globalRule" }
+    },
+    "fixtures": { "$ref": "#/$defs/fixtures" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "FLOW" } }, "required": ["kind"] },
+      "then": {
+        "required": ["nodes", "paths", "expectations", "child_models", "unmapped_event_policy", "fixtures"],
+        "properties": { "rules": false }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "GLOBAL_CHECK" } }, "required": ["kind"] },
+      "then": {
+        "required": ["rules", "fixtures"],
+        "properties": {
+          "nodes": false,
+          "paths": false,
+          "expectations": false,
+          "child_models": false,
+          "unmapped_event_policy": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "modelId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,63}$"
+    },
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{1,63}$"
+    },
+    "eventType": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._-]{1,127}$"
+    },
+    "eventTypes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/eventType" }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authoring", "mutable_at_runtime"],
+      "properties": {
+        "authoring": { "const": "YAML_GIT" },
+        "mutable_at_runtime": { "const": false }
+      }
+    },
+    "eventVersionSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_type", "versions"],
+      "properties": {
+        "event_type": { "$ref": "#/$defs/eventType" },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "appliesTo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aggregate_types", "trigger_event_types", "event_versions"],
+      "properties": {
+        "aggregate_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "trigger_event_types": { "$ref": "#/$defs/eventTypes" },
+        "event_versions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/eventVersionSupport" }
+        }
+      }
+    },
+    "businessKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "json_pointer", "event_types"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" },
+        "json_pointer": { "type": "string", "pattern": "^/payload/[A-Za-z0-9_~/-]+$" },
+        "event_types": { "$ref": "#/$defs/eventTypes" }
+      }
+    },
+    "parentChildRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "parent_aggregate_type", "child_aggregate_type", "business_key"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "parent_aggregate_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "child_aggregate_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "business_key": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_duration_seconds",
+        "max_events",
+        "max_correlations",
+        "max_relationship_depth",
+        "relations",
+        "business_keys",
+        "parent_child_relations"
+      ],
+      "properties": {
+        "max_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 604800 },
+        "max_events": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "max_correlations": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "max_relationship_depth": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "relations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["SAME_CORRELATION", "SAME_AGGREGATE", "CAUSATION", "BUSINESS_KEY", "PARENT_CHILD"]
+          }
+        },
+        "business_keys": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/businessKey" }
+        },
+        "parent_child_relations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parentChildRelation" }
+        }
+      }
+    },
+    "eventMatcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_types"],
+      "properties": {
+        "event_types": { "$ref": "#/$defs/eventTypes" }
+      }
+    },
+    "flowNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "event", "min_occurs", "max_occurs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "event": { "$ref": "#/$defs/eventMatcher" },
+        "min_occurs": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "max_occurs": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "label", "category"],
+      "properties": {
+        "code": { "$ref": "#/$defs/stableId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "enum": ["SUCCESS", "EXPECTED_FAILURE", "COMPENSATED", "INCOMPLETE"] }
+      }
+    },
+    "flowPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "nodes", "terminal", "outcome"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/stableId" }
+        },
+        "forbidden_event_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/eventType" }
+        },
+        "terminal": { "type": "boolean" },
+        "outcome": { "$ref": "#/$defs/outcome" }
+      }
+    },
+    "expectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "trigger",
+        "expected",
+        "temporal_relation",
+        "reminder_after_seconds",
+        "deadline_seconds",
+        "exclusions",
+        "severity",
+        "finding_code",
+        "recommended_query_template_id"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "trigger": { "$ref": "#/$defs/eventMatcher" },
+        "expected": { "$ref": "#/$defs/eventMatcher" },
+        "temporal_relation": { "enum": ["BEFORE_OR_AT", "AFTER_OR_AT"] },
+        "reminder_after_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 },
+        "deadline_seconds": { "type": "integer", "minimum": 0, "maximum": 604800 },
+        "exclusions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["any_event_types"],
+          "properties": {
+            "any_event_types": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/eventType" }
+            }
+          }
+        },
+        "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "finding_code": { "$ref": "#/$defs/stableId" },
+        "recommended_query_template_id": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{2,127}$" }
+      }
+    },
+    "childModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "version", "activate_when", "relation"],
+      "properties": {
+        "model_id": { "$ref": "#/$defs/modelId" },
+        "version": { "type": "integer", "minimum": 1 },
+        "activate_when": { "$ref": "#/$defs/eventMatcher" },
+        "relation": { "enum": ["SAME_CORRELATION", "BUSINESS_KEY", "PARENT_CHILD"] }
+      }
+    },
+    "unmappedEventPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "escalate_event_types"],
+      "properties": {
+        "default": { "enum": ["INFORMATIONAL", "REMINDER", "VIOLATION"] },
+        "escalate_event_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/eventType" }
+        }
+      }
+    },
+    "globalRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "severity", "finding_code"],
+      "properties": {
+        "id": { "$ref": "#/$defs/stableId" },
+        "type": {
+          "enum": [
+            "DUPLICATE_EVENT_ID",
+            "NON_MONOTONIC_AGGREGATE_SEQUENCE",
+            "MISSING_TRACE_CONTEXT"
+          ]
+        },
+        "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "finding_code": { "$ref": "#/$defs/stableId" }
+      }
+    },
+    "fixtures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_file", "case_ids"],
+      "properties": {
+        "scenario_file": { "type": "string", "pattern": "^\\.\\./event-check/fixtures/[a-z0-9._/-]+\\.json$" },
+        "case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" }
+        }
+      }
+    }
+  }
+}

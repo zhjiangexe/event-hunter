@@ -75,3 +75,36 @@ func TestSavedSearchRejectsInvalidTimeModeCombinations(t *testing.T) {
 		}
 	}
 }
+
+func TestEventCheckSavedSearchBuildsCanonicalWorkspaceURL(t *testing.T) {
+	from := time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC)
+	version := uint32(2)
+	search, err := NewSavedSearch("demo-viewer", "order check", SavedSearchEventCheck, SavedSearchQuery{
+		From: from, To: from.Add(time.Hour),
+		IdentifierType: "CORRELATION_ID", IdentifierValue: "ORDER-1001",
+		ModelID: "order-fulfillment", ModelVersion: &version, WorkspaceTab: "findings",
+	}, from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, part := range []string{"/event-check?", "identifier_type=CORRELATION_ID", "identifier=ORDER-1001", "model_id=order-fulfillment", "model_version=2", "tab=findings"} {
+		if !strings.Contains(search.OpenURL, part) {
+			t.Fatalf("open URL %q does not contain %q", search.OpenURL, part)
+		}
+	}
+}
+
+func TestEventCheckSavedSearchRejectsIncompleteIdentifierOrModel(t *testing.T) {
+	from := time.Date(2026, 8, 28, 11, 0, 0, 0, time.UTC)
+	version := uint32(2)
+	for _, query := range []SavedSearchQuery{
+		{From: from, To: from.Add(time.Hour), IdentifierType: "CORRELATION_ID", WorkspaceTab: "summary"},
+		{From: from, To: from.Add(time.Hour), IdentifierType: "SQL", IdentifierValue: "ORDER-1001", WorkspaceTab: "summary"},
+		{From: from, To: from.Add(time.Hour), IdentifierType: "CORRELATION_ID", IdentifierValue: "ORDER-1001", ModelVersion: &version, WorkspaceTab: "summary"},
+		{From: from, To: from.Add(time.Hour), IdentifierType: "CORRELATION_ID", IdentifierValue: "ORDER-1001", WorkspaceTab: "unknown"},
+	} {
+		if _, err := NewSavedSearch("demo-viewer", "invalid", SavedSearchEventCheck, query, from); !errors.Is(err, ErrInvalidSavedSearch) {
+			t.Fatalf("expected invalid Event Check search for %#v, got %v", query, err)
+		}
+	}
+}

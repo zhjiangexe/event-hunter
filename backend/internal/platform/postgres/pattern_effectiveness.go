@@ -18,11 +18,20 @@ func NewPatternEffectivenessReader(db *sql.DB) *PatternEffectivenessReader {
 
 func (reader *PatternEffectivenessReader) Effectiveness(ctx context.Context, from, to time.Time) ([]patterneffectiveness.Metric, error) {
 	const query = `
-SELECT pattern_id, count(*), max(created_at), count(DISTINCT investigation_case_id)
-FROM pattern_findings
-WHERE created_at >= $1 AND created_at < $2
-GROUP BY pattern_id
-ORDER BY pattern_id`
+SELECT finding.pattern_id,
+       count(*),
+       max(finding.created_at),
+       count(DISTINCT finding.investigation_case_id),
+       count(*) FILTER (WHERE feedback.status = 'CONFIRMED'),
+       count(*) FILTER (WHERE feedback.status = 'FALSE_POSITIVE'),
+       count(*) FILTER (WHERE feedback.status = 'NEEDS_REVIEW'),
+       count(*) FILTER (WHERE feedback.finding_id IS NULL),
+       count(feedback.finding_id)
+FROM pattern_findings finding
+LEFT JOIN pattern_finding_feedback feedback ON feedback.finding_id = finding.id
+WHERE finding.created_at >= $1 AND finding.created_at < $2
+GROUP BY finding.pattern_id
+ORDER BY finding.pattern_id`
 	rows, err := reader.db.QueryContext(ctx, query, from, to)
 	if err != nil {
 		return nil, err
@@ -31,7 +40,17 @@ ORDER BY pattern_id`
 	metrics := make([]patterneffectiveness.Metric, 0)
 	for rows.Next() {
 		var metric patterneffectiveness.Metric
-		if err := rows.Scan(&metric.PatternID, &metric.HitCount, &metric.LastHitAt, &metric.InvestigationCount); err != nil {
+		if err := rows.Scan(
+			&metric.PatternID,
+			&metric.HitCount,
+			&metric.LastHitAt,
+			&metric.InvestigationCount,
+			&metric.ConfirmedCount,
+			&metric.FalsePositiveCount,
+			&metric.NeedsReviewCount,
+			&metric.UnreviewedCount,
+			&metric.ReviewedCount,
+		); err != nil {
 			return nil, err
 		}
 		metrics = append(metrics, metric)

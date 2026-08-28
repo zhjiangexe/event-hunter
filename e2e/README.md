@@ -4,8 +4,8 @@ Karate feature files are executable acceptance contracts. They assume the canoni
 `../contracts/fixtures` have already been loaded into the local ClickHouse test database.
 
 ```text
-e2e/backend   HTTP contract、RBAC、Pattern、樂觀鎖、Summary、Evidence manifest
-e2e/frontend  由 data-testid 鎖定的瀏覽器 happy path
+e2e/backend   HTTP contract、RBAC、Event Check、Snapshot／Case handoff、legacy compatibility
+e2e/frontend  由 data-testid 鎖定的 canonical workspace 與瀏覽器相容流程
 e2e/poc       明確執行的 ClickHouse-first ingestion infrastructure acceptance
 artifacts/e2e/karate  Karate HTML／JSON 測試報告（不與 feature files 混放）
 ```
@@ -86,12 +86,13 @@ Infrastructure scenarios：
 - `scenario-lab.feature` 實際執行 S1～S14：S1、S12～S14 呼叫三個 live services；S2～S11 經隔離 `event-lab.events`，所有 PASS／FAIL 由 ClickHouse actual、processing attempts 或 ingestion failures 回查判定。
 - `ingestion-issues.feature` 以唯一 topic 建立 contract、admission、technical 三類安全摘要，驗證 filter、keyset pagination、7 天上限與回應中沒有 raw payload、exception message 或 stack trace。
 - `investigation-boundaries.feature` 驗證 cursor 分頁、query 邊界、案件狀態機、Viewer 全 mutation surface 唯讀與一致 404；自行建立的 OPEN 案件會在 scenario 尾端透過正式 API 結案。
+- `event-check.feature` 驗證五種 identifier、Aggregate qualifier、Model registry／version、custom scope、no-data、Snapshot idempotency、Finding feedback、Case handoff 與 Viewer mutation boundaries。
 
 Live OTel vertical slice 由 `bash scripts/test-live-observability.sh --skip-restart` 執行；它不只確認三服務
 共用 trace 與 Loki canonical fields，也要求 `OrderCreated`、`PaymentCompleted`、`ShipmentCreated` 各有
 具名 `PREPARING`／`COMMITTED` lifecycle pair。移除 `--skip-restart` 時會再驗證 telemetry restart
 persistence。規格見
-[Live Event Observability Contract](../requirements/live-event-observability-contract.md)。
+[Live Event Observability Contract](../requirements/contracts/live-event-observability-contract.md)。
 
 `e2e/poc/clickhouse-mv-ingestion.feature` 與 `clickhouse-mv-processing-attempt.feature` 不屬於預設 API backend suite。它們由
 `bash scripts/test-clickhouse-mv-poc.sh` 明確啟動正式 ingestion dependencies，驗證八筆 admission 輸入的全量
@@ -118,11 +119,22 @@ tables、舊 tables 維持零新增、API readiness 為 200→503→200。兩類
 Kafka Connect worker 的兩個獨立 connectors 傳輸。
 
 完整 `scripts/test-backend-e2e.sh` 保留每個 window 300 requests 的產品限制，只在測試期間把 fixed window
-縮短為 10 秒，避免 108 scenarios 共用同一個本機 IP 時互相污染；腳本結束會自動還原原 runtime window。
+縮短為 10 秒，避免 126 scenarios 共用同一個本機 IP 時互相污染；腳本結束會自動還原原 runtime window。
 fixture mirror 腳本只處理九組固定 synthetic correlations，不能當成 live ingestion 驗收。
 
-目前 Backend 基準為 18 個 feature、108 個 runtime scenarios；案例選擇與分層原則見
-`../requirements/backend-e2e-test-plan.md`。
+目前 Backend 基準為 19 個 feature、126 個 runtime scenarios；案例選擇與分層原則見
+`../requirements/testing/backend-e2e-test-plan.md`。
+
+Event Check 的 dependency-failure 與 persistence 驗收刻意獨立於純 HTTP Karate suite：
+
+```bash
+bash scripts/test-event-check-source-failure.sh
+bash scripts/test-event-check-restart-persistence.sh
+```
+
+前者驗證 partial source 由 contract fixture 得到 `INCONCLUSIVE`，而完全不可讀的 ClickHouse 明確回 503、
+不產生假的 `VIOLATED`；後者驗證 immutable Snapshot 與 Investigation link 經 PostgreSQL／API restart
+後不變。
 
 品質聚合的 fixture → production worker → Karate acceptance 可用單一腳本重現：
 
@@ -165,7 +177,8 @@ java -jar /tmp/event-hunter-karate-2.1.2.jar run --no-pom --configdir=e2e \
   e2e/frontend/investigation-flow.feature
 ```
 
-目前完整 Backend 基準為 108/108、Frontend 基準為 25/25 passed。
+目前完整 Backend 基準為 126/126、Frontend 基準為 26/26 passed。新增案例會從 Event Check 保存
+immutable Snapshot，進入 Saved Results 後分別驗證「建立案件」與「加入案件」，並確認兩條 Case link。
 
 `@p1-1-02-03` 覆蓋後端複合篩選、stable keyset sorting、cursor 排序綁定與可分享 Investigation URL；
 目前 Backend 標籤基準為 7/7、Frontend 標籤基準為 1/1。

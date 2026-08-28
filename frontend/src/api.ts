@@ -44,6 +44,32 @@ export type SearchPreset = Schemas["SearchPreset"];
 export type IngestionIssue = Schemas["IngestionIssue"];
 export type IngestionIssueKind = Schemas["IngestionIssueKind"];
 export type IngestionIssuePage = Schemas["IngestionIssuePage"];
+export type EventCheckEvaluationRequest = Schemas["EvaluationRequest"];
+export type EventCheckEvaluation = Schemas["EvaluationResponse"];
+export type EventCheckIdentifierType = Schemas["IdentifierType"];
+export type EventCheckFinding = Schemas["Finding"];
+export type EventCheckEventReference = Schemas["EventReference"];
+export type EventCheckRelationship = Schemas["Relationship"];
+export type CheckModelRegistryEntry = Schemas["RegistryEntry"];
+export type CreateCheckSnapshotRequest = Schemas["CreateCheckSnapshotRequest"];
+export type CheckSnapshot = Schemas["CheckSnapshot"];
+export type CheckSnapshotSummary = Schemas["CheckSnapshotSummary"];
+export type CheckSnapshotPage = Schemas["CheckSnapshotPage"];
+export type CheckSnapshotFindingFeedback =
+  CheckSnapshot["finding_feedback"][number];
+export type CheckFindingFeedback = Schemas["CheckFindingFeedback"];
+export type CheckFindingFeedbackStatus =
+  Schemas["ClassifyCheckFindingRequest"]["status"];
+export type InvestigationCheckSnapshotLink =
+  Schemas["InvestigationCheckSnapshotLink"];
+
+type CheckSnapshotQuery = NonNullable<
+  operations["listCheckSnapshots"]["parameters"]["query"]
+>;
+export type CheckSnapshotFilters = Pick<
+  CheckSnapshotQuery,
+  "identifier" | "check_status"
+>;
 
 type IngestionIssueQuery = NonNullable<
   operations["listIngestionIssues"]["parameters"]["query"]
@@ -58,6 +84,7 @@ type InvestigationQuery = NonNullable<
 >;
 export type InvestigationFilters = Pick<
   InvestigationQuery,
+  | "query"
   | "status"
   | "severity"
   | "assignee"
@@ -205,6 +232,83 @@ export const api = {
       await client.POST("/api/v1/search/identify", {
         body: { input },
       }),
+    ),
+  evaluateEventCheck: async (body: EventCheckEvaluationRequest) =>
+    unwrap(
+      await client.POST("/api/v1/event-checks/evaluations", {
+        body,
+      }),
+    ),
+  checkModels: async () => unwrap(await client.GET("/api/v1/check-models")),
+  checkModel: async (modelId: string, version: number) =>
+    unwrap(
+      await client.GET("/api/v1/check-models/{modelId}/versions/{version}", {
+        params: { path: { modelId, version } },
+      }),
+    ),
+  createCheckSnapshot: async (
+    body: CreateCheckSnapshotRequest,
+    idempotencyKey: string,
+  ) =>
+    unwrap(
+      await client.POST("/api/v1/check-snapshots", {
+        params: { header: { "Idempotency-Key": idempotencyKey } },
+        body,
+      }),
+    ),
+  checkSnapshots: async (
+    filters: CheckSnapshotFilters = {},
+    cursor?: string,
+    pageSize = 20,
+  ) =>
+    unwrap(
+      await client.GET("/api/v1/check-snapshots", {
+        params: { query: { ...filters, cursor, page_size: pageSize } },
+      }),
+    ),
+  checkSnapshot: async (snapshotId: string) =>
+    unwrap(
+      await client.GET("/api/v1/check-snapshots/{snapshotId}", {
+        params: { path: { snapshotId } },
+      }),
+    ),
+  classifyCheckFinding: async (
+    findingId: string,
+    lockVersion: number,
+    status: CheckFindingFeedbackStatus,
+  ) =>
+    unwrap(
+      await client.PATCH("/api/v1/check-findings/{findingId}/feedback", {
+        params: {
+          path: { findingId },
+          header: { "If-Match": `"v${lockVersion}"` },
+        },
+        body: { status },
+      }),
+    ),
+  investigationCheckSnapshots: async (investigationId: string) =>
+    unwrap(
+      await client.GET(
+        "/api/v1/investigations/{investigationId}/check-snapshots",
+        { params: { path: { investigationId } } },
+      ),
+    ),
+  attachInvestigationCheckSnapshot: async (
+    investigationId: string,
+    snapshotId: string,
+    lockVersion: number,
+  ) =>
+    unwrap(
+      await client.POST(
+        "/api/v1/investigations/{investigationId}/check-snapshots",
+        {
+          params: {
+            path: { investigationId },
+            header: { "If-Match": `"v${lockVersion}"` },
+          },
+          body: { snapshot_id: snapshotId },
+        },
+      ),
     ),
   savedSearches: async () => unwrap(await client.GET("/api/v1/saved-searches")),
   searchPresets: async () => unwrap(await client.GET("/api/v1/search-presets")),

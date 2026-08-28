@@ -1,0 +1,72 @@
+name: event-hunter
+
+# Single-host internal staging/pilot override. Compose v2.24+ !reset removes
+# development host bindings so only the two TLS edges are reachable externally.
+services:
+  postgres: { ports: !reset [] }
+  demo-order-postgres: { ports: !reset [] }
+  demo-payment-postgres: { ports: !reset [] }
+  demo-shipping-postgres: { ports: !reset [] }
+  clickhouse: { ports: !reset [] }
+  redpanda: { ports: !reset [] }
+  redpanda-console: { ports: !reset [] }
+  kafka-connect: { ports: !reset [] }
+  kafka-connect-clickhouse-poc: { ports: !reset [] }
+  technical-dlq-projector: { ports: !reset [] }
+  prometheus: { ports: !reset [] }
+  loki: { ports: !reset [] }
+  tempo: { ports: !reset [] }
+  otel-collector: { ports: !reset [] }
+  grafana: { ports: !reset [] }
+  event-hunter-api: { ports: !reset [] }
+  quality-worker: { ports: !reset [] }
+  event-hunter-frontend:
+    ports: !reset []
+    build:
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_GRAFANA_URL: ${GRAFANA_PUBLIC_URL:?GRAFANA_PUBLIC_URL is required}
+  demo-order-service: { ports: !reset [] }
+  demo-payment-service: { ports: !reset [] }
+  demo-shipping-service: { ports: !reset [] }
+  event-lab: { ports: !reset [] }
+
+  event-hunter-edge:
+    image: nginx:1.29.1-alpine
+    ports:
+      - "${EVENT_HUNTER_TLS_PORT:-28443}:443"
+    volumes:
+      - ./infra/reverse-proxy/event-hunter.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${EVENT_HUNTER_TLS_CERT_PATH:?EVENT_HUNTER_TLS_CERT_PATH is required}:/run/event-hunter-tls/tls.crt:ro
+      - ${EVENT_HUNTER_TLS_KEY_PATH:?EVENT_HUNTER_TLS_KEY_PATH is required}:/run/event-hunter-tls/tls.key:ro
+    depends_on:
+      event-hunter-frontend:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  grafana-edge:
+    image: nginx:1.29.1-alpine
+    ports:
+      - "${GRAFANA_TLS_PORT:-28444}:443"
+    volumes:
+      - ./infra/reverse-proxy/grafana.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${GRAFANA_TLS_CERT_PATH:?GRAFANA_TLS_CERT_PATH is required}:/run/grafana-tls/tls.crt:ro
+      - ${GRAFANA_TLS_KEY_PATH:?GRAFANA_TLS_KEY_PATH is required}:/run/grafana-tls/tls.key:ro
+    depends_on:
+      grafana:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

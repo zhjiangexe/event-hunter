@@ -27,6 +27,9 @@ schema_config:
 limits_config:
   # Loki 原生 OTLP ingestion 會把部分 OpenTelemetry attributes 保存為 structured metadata。
   allow_structured_metadata: true
+  # Phase 1.1 single-host baseline keeps operational logs for seven days. A
+  # target environment may lengthen this only after storage and PII review.
+  retention_period: 168h
 
 # Fixture telemetry 使用固定的歷史時間；loader 會以 correlation-specific instance
 # 隔離 stream。縮短 idle flush 讓歷史 deep link 不必等待預設的長時間 chunk flush，
@@ -44,6 +47,8 @@ ingester:
 
 compactor:
   working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
 
 analytics:
   reporting_enabled: false

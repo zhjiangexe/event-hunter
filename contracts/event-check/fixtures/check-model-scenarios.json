@@ -1,0 +1,246 @@
+{
+  "contract_version": 1,
+  "source_health_profiles": {
+    "healthy": {
+      "status": "HEALTHY",
+      "checked_at": "2026-08-28T02:00:00Z",
+      "coverage_from": "2026-08-28T00:00:00Z",
+      "coverage_to": "2026-08-28T02:00:00Z",
+      "watermark": "2026-08-28T01:59:55Z",
+      "truncated": false,
+      "components": [
+        {"component": "CANONICAL_EVENTS", "status": "HEALTHY", "detail_code": "QUERY_COMPLETE"},
+        {"component": "INGESTION_WATERMARK", "status": "HEALTHY", "detail_code": "WATERMARK_CURRENT"},
+        {"component": "RELATION_INDEX", "status": "HEALTHY", "detail_code": "RELATIONS_COMPLETE"}
+      ]
+    },
+    "partial-source": {
+      "status": "PARTIAL",
+      "checked_at": "2026-08-28T02:00:00Z",
+      "coverage_from": "2026-08-28T00:00:00Z",
+      "coverage_to": "2026-08-28T00:03:00Z",
+      "watermark": "2026-08-28T00:03:00Z",
+      "truncated": false,
+      "components": [
+        {"component": "CANONICAL_EVENTS", "status": "HEALTHY", "detail_code": "QUERY_COMPLETE"},
+        {"component": "INGESTION_WATERMARK", "status": "STALE", "detail_code": "WATERMARK_BEHIND_AS_OF"},
+        {"component": "RELATION_INDEX", "status": "PARTIAL", "detail_code": "RELATION_COVERAGE_PARTIAL"}
+      ]
+    }
+  },
+  "cases": [
+    {
+      "id": "success-happy-path",
+      "description": "完整訂單、付款、出貨、派送與送達應為符合且成功。",
+      "request": {"identifier": {"type": "CORRELATION_ID", "value": "ORDER-ECM-SUCCESS"}, "from": "2026-08-28T00:00:00Z", "to": "2026-08-28T02:00:00Z", "model": {"id": "order-fulfillment", "version": 2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-SUCCESS-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-SUCCESS","causationId":null,"traceId":"11111111111111111111111111111111","aggregateType":"Order","aggregateId":"ORDER-ECM-SUCCESS","sequence":1,"payload":{"orderId":"ORDER-ECM-SUCCESS","customerId":"CUSTOMER-001","totalAmount":100,"currency":"TWD"}},
+        {"eventId":"EVT-SUCCESS-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-SUCCESS","causationId":"EVT-SUCCESS-01","traceId":"11111111111111111111111111111111","aggregateType":"Payment","aggregateId":"PAY-ECM-SUCCESS","sequence":1,"payload":{"paymentId":"PAY-ECM-SUCCESS","orderId":"ORDER-ECM-SUCCESS","amount":100,"currency":"TWD"}},
+        {"eventId":"EVT-SUCCESS-03","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-SUCCESS","causationId":"EVT-SUCCESS-02","traceId":"11111111111111111111111111111111","aggregateType":"Shipment","aggregateId":"SHIP-ECM-SUCCESS","sequence":1,"payload":{"shipmentId":"SHIP-ECM-SUCCESS","orderId":"ORDER-ECM-SUCCESS","provider":"demo-carrier","status":"CREATED"}},
+        {"eventId":"EVT-SUCCESS-04","eventType":"ShipmentDispatched","eventVersion":1,"occurredAt":"2026-08-28T00:02:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-SUCCESS","causationId":"EVT-SUCCESS-03","traceId":"11111111111111111111111111111111","aggregateType":"Shipment","aggregateId":"SHIP-ECM-SUCCESS","sequence":2,"payload":{"shipmentId":"SHIP-ECM-SUCCESS","orderId":"ORDER-ECM-SUCCESS","provider":"demo-carrier","trackingNumber":"TRACK-SUCCESS","status":"DISPATCHED"}},
+        {"eventId":"EVT-SUCCESS-05","eventType":"ShipmentDelivered","eventVersion":1,"occurredAt":"2026-08-28T01:00:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-SUCCESS","causationId":"EVT-SUCCESS-04","traceId":"11111111111111111111111111111111","aggregateType":"Shipment","aggregateId":"SHIP-ECM-SUCCESS","sequence":3,"payload":{"shipmentId":"SHIP-ECM-SUCCESS","orderId":"ORDER-ECM-SUCCESS","deliveredAt":"2026-08-28T01:00:00Z","recipient":"front-desk","status":"DELIVERED"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"CONFORMANT","business_outcome_category":"SUCCESS","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"SATISFIED"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "expected-payment-failure",
+      "description": "付款失敗後正常取消訂單是合理失敗，不是流程偏離。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-PAYFAIL"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-PAYFAIL-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-PAYFAIL","causationId":null,"traceId":"22222222222222222222222222222222","aggregateType":"Order","aggregateId":"ORDER-ECM-PAYFAIL","sequence":1,"payload":{"orderId":"ORDER-ECM-PAYFAIL","customerId":"CUSTOMER-002","totalAmount":200,"currency":"TWD"}},
+        {"eventId":"EVT-PAYFAIL-02","eventType":"PaymentFailed","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-PAYFAIL","causationId":"EVT-PAYFAIL-01","traceId":"22222222222222222222222222222222","aggregateType":"Payment","aggregateId":"PAY-ECM-PAYFAIL","sequence":1,"payload":{"paymentId":"PAY-ECM-PAYFAIL","orderId":"ORDER-ECM-PAYFAIL","reasonCode":"DECLINED","retryable":false,"status":"FAILED"}},
+        {"eventId":"EVT-PAYFAIL-03","eventType":"OrderCancelled","eventVersion":1,"occurredAt":"2026-08-28T00:00:20Z","producer":"order-service","correlationId":"ORDER-ECM-PAYFAIL","causationId":"EVT-PAYFAIL-02","traceId":"22222222222222222222222222222222","aggregateType":"Order","aggregateId":"ORDER-ECM-PAYFAIL","sequence":2,"payload":{"orderId":"ORDER-ECM-PAYFAIL","reason":"payment failed"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"CONFORMANT","business_outcome_category":"EXPECTED_FAILURE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","PAYMENT_FAILURE_REQUIRES_CANCELLATION":"SATISFIED"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "compensated-refund",
+      "description": "付款完成後退款走補償路徑，應符合 Model。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-REFUND"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-REFUND-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-REFUND","causationId":null,"traceId":"33333333333333333333333333333333","aggregateType":"Order","aggregateId":"ORDER-ECM-REFUND","sequence":1,"payload":{"orderId":"ORDER-ECM-REFUND","customerId":"CUSTOMER-003","totalAmount":300,"currency":"TWD"}},
+        {"eventId":"EVT-REFUND-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-REFUND","causationId":"EVT-REFUND-01","traceId":"33333333333333333333333333333333","aggregateType":"Payment","aggregateId":"PAY-ECM-REFUND","sequence":1,"payload":{"paymentId":"PAY-ECM-REFUND","orderId":"ORDER-ECM-REFUND","amount":300,"currency":"TWD"}},
+        {"eventId":"EVT-REFUND-03","eventType":"PaymentRefunded","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"payment-service","correlationId":"ORDER-ECM-REFUND","causationId":"EVT-REFUND-02","traceId":"33333333333333333333333333333333","aggregateType":"Payment","aggregateId":"PAY-ECM-REFUND","sequence":2,"payload":{"paymentId":"PAY-ECM-REFUND","orderId":"ORDER-ECM-REFUND","amount":300,"reason":"customer cancellation"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"CONFORMANT","business_outcome_category":"COMPENSATED","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "in-progress-awaiting-shipment",
+      "description": "付款完成未滿提醒門檻時是等待中。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-WAIT"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:01:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-WAIT-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-WAIT","causationId":null,"traceId":"44444444444444444444444444444444","aggregateType":"Order","aggregateId":"ORDER-ECM-WAIT","sequence":1,"payload":{"orderId":"ORDER-ECM-WAIT","customerId":"CUSTOMER-004","totalAmount":400,"currency":"TWD"}},
+        {"eventId":"EVT-WAIT-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-WAIT","causationId":"EVT-WAIT-01","traceId":"44444444444444444444444444444444","aggregateType":"Payment","aggregateId":"PAY-ECM-WAIT","sequence":1,"payload":{"paymentId":"PAY-ECM-WAIT","orderId":"ORDER-ECM-WAIT","amount":400,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"IN_PROGRESS","business_outcome_category":"INCOMPLETE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"WAITING"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "reminder-awaiting-shipment",
+      "description": "超過提醒門檻但未達違反期限時只提醒，不判偏離。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-REMINDER"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:03:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-REMINDER-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-REMINDER","causationId":null,"traceId":"55555555555555555555555555555555","aggregateType":"Order","aggregateId":"ORDER-ECM-REMINDER","sequence":1,"payload":{"orderId":"ORDER-ECM-REMINDER","customerId":"CUSTOMER-005","totalAmount":500,"currency":"TWD"}},
+        {"eventId":"EVT-REMINDER-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-REMINDER","causationId":"EVT-REMINDER-01","traceId":"55555555555555555555555555555555","aggregateType":"Payment","aggregateId":"PAY-ECM-REMINDER","sequence":1,"payload":{"paymentId":"PAY-ECM-REMINDER","orderId":"ORDER-ECM-REMINDER","amount":500,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"IN_PROGRESS","business_outcome_category":"INCOMPLETE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"REMINDER"},"finding_codes":["MISSING_SHIPMENT_AFTER_PAYMENT"],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "violation-missing-shipment",
+      "description": "健康來源下超過五分鐘仍無 ShipmentCreated 才判違反。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-VIOLATION"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:10:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-VIOLATION-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-VIOLATION","causationId":null,"traceId":"66666666666666666666666666666666","aggregateType":"Order","aggregateId":"ORDER-ECM-VIOLATION","sequence":1,"payload":{"orderId":"ORDER-ECM-VIOLATION","customerId":"CUSTOMER-006","totalAmount":600,"currency":"TWD"}},
+        {"eventId":"EVT-VIOLATION-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-VIOLATION","causationId":"EVT-VIOLATION-01","traceId":"66666666666666666666666666666666","aggregateType":"Payment","aggregateId":"PAY-ECM-VIOLATION","sequence":1,"payload":{"paymentId":"PAY-ECM-VIOLATION","orderId":"ORDER-ECM-VIOLATION","amount":600,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"DEVIATED","business_outcome_category":"INCOMPLETE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"VIOLATED"},"finding_codes":["MISSING_SHIPMENT_AFTER_PAYMENT"],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "late-satisfied-shipment",
+      "description": "ShipmentCreated 在五分鐘期限後到達，保留 late-satisfied 而非改寫歷史。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-LATE"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:15:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-LATE-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-LATE","causationId":null,"traceId":"77777777777777777777777777777777","aggregateType":"Order","aggregateId":"ORDER-ECM-LATE","sequence":1,"payload":{"orderId":"ORDER-ECM-LATE","customerId":"CUSTOMER-007","totalAmount":700,"currency":"TWD"}},
+        {"eventId":"EVT-LATE-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-LATE","causationId":"EVT-LATE-01","traceId":"77777777777777777777777777777777","aggregateType":"Payment","aggregateId":"PAY-ECM-LATE","sequence":1,"payload":{"paymentId":"PAY-ECM-LATE","orderId":"ORDER-ECM-LATE","amount":700,"currency":"TWD"}},
+        {"eventId":"EVT-LATE-03","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:07:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-LATE","causationId":"EVT-LATE-02","traceId":"77777777777777777777777777777777","aggregateType":"Shipment","aggregateId":"SHIP-ECM-LATE","sequence":1,"payload":{"shipmentId":"SHIP-ECM-LATE","orderId":"ORDER-ECM-LATE","provider":"demo-carrier","status":"CREATED"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"DEVIATED","business_outcome_category":"INCOMPLETE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"LATE_SATISFIED"},"finding_codes":["MISSING_SHIPMENT_AFTER_PAYMENT"],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "informational-unmapped-event",
+      "description": "Flow Model 未使用的已知 ShipmentInTransit 只列為 unmapped，不自動判偏離。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-UNMAPPED"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:02:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-UNMAPPED-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-UNMAPPED","causationId":null,"traceId":"88888888888888888888888888888888","aggregateType":"Order","aggregateId":"ORDER-ECM-UNMAPPED","sequence":1,"payload":{"orderId":"ORDER-ECM-UNMAPPED","customerId":"CUSTOMER-008","totalAmount":800,"currency":"TWD"}},
+        {"eventId":"EVT-UNMAPPED-02","eventType":"ShipmentInTransit","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-UNMAPPED","causationId":"EVT-UNMAPPED-01","traceId":"88888888888888888888888888888888","aggregateType":"Shipment","aggregateId":"SHIP-ECM-UNMAPPED","sequence":2,"payload":{"shipmentId":"SHIP-ECM-UNMAPPED","orderId":"ORDER-ECM-UNMAPPED","location":"hub-a","status":"IN_TRANSIT"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"IN_PROGRESS","business_outcome_category":"INCOMPLETE","expectation_states":{},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":["ShipmentInTransit"]}
+    },
+    {
+      "id": "reasonable-repeat",
+      "description": "不同 Event ID 的 ShipmentDispatched 可依 Model cardinality 合理重複。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-REPEAT"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-REPEAT-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-REPEAT","causationId":null,"traceId":"99999999999999999999999999999999","aggregateType":"Order","aggregateId":"ORDER-ECM-REPEAT","sequence":1,"payload":{"orderId":"ORDER-ECM-REPEAT","customerId":"CUSTOMER-009","totalAmount":900,"currency":"TWD"}},
+        {"eventId":"EVT-REPEAT-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-REPEAT","causationId":"EVT-REPEAT-01","traceId":"99999999999999999999999999999999","aggregateType":"Payment","aggregateId":"PAY-ECM-REPEAT","sequence":1,"payload":{"paymentId":"PAY-ECM-REPEAT","orderId":"ORDER-ECM-REPEAT","amount":900,"currency":"TWD"}},
+        {"eventId":"EVT-REPEAT-03","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-REPEAT","causationId":"EVT-REPEAT-02","traceId":"99999999999999999999999999999999","aggregateType":"Shipment","aggregateId":"SHIP-ECM-REPEAT","sequence":1,"payload":{"shipmentId":"SHIP-ECM-REPEAT","orderId":"ORDER-ECM-REPEAT","provider":"demo-carrier","status":"CREATED"}},
+        {"eventId":"EVT-REPEAT-04","eventType":"ShipmentDispatched","eventVersion":1,"occurredAt":"2026-08-28T00:02:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-REPEAT","causationId":"EVT-REPEAT-03","traceId":"99999999999999999999999999999999","aggregateType":"Shipment","aggregateId":"SHIP-ECM-REPEAT","sequence":2,"payload":{"shipmentId":"SHIP-ECM-REPEAT","orderId":"ORDER-ECM-REPEAT","provider":"demo-carrier","trackingNumber":"TRACK-R1","status":"DISPATCHED"}},
+        {"eventId":"EVT-REPEAT-05","eventType":"ShipmentDispatched","eventVersion":1,"occurredAt":"2026-08-28T00:03:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-REPEAT","causationId":"EVT-REPEAT-04","traceId":"99999999999999999999999999999999","aggregateType":"Shipment","aggregateId":"SHIP-ECM-REPEAT","sequence":3,"payload":{"shipmentId":"SHIP-ECM-REPEAT","orderId":"ORDER-ECM-REPEAT","provider":"demo-carrier","trackingNumber":"TRACK-R2","status":"DISPATCHED"}},
+        {"eventId":"EVT-REPEAT-06","eventType":"ShipmentDelivered","eventVersion":1,"occurredAt":"2026-08-28T01:00:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-REPEAT","causationId":"EVT-REPEAT-05","traceId":"99999999999999999999999999999999","aggregateType":"Shipment","aggregateId":"SHIP-ECM-REPEAT","sequence":4,"payload":{"shipmentId":"SHIP-ECM-REPEAT","orderId":"ORDER-ECM-REPEAT","deliveredAt":"2026-08-28T01:00:00Z","recipient":"front-desk","status":"DELIVERED"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"CONFORMANT","business_outcome_category":"SUCCESS","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"SATISFIED"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "duplicate-event-id",
+      "description": "相同 Event ID 重複出現由 Global Check 判定，不和合理 event type 重複混淆。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-DUP"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:10:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-DUP-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-DUP","causationId":null,"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","aggregateType":"Order","aggregateId":"ORDER-ECM-DUP","sequence":1,"payload":{"orderId":"ORDER-ECM-DUP","customerId":"CUSTOMER-010","totalAmount":1000,"currency":"TWD"}},
+        {"eventId":"EVT-DUP-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-DUP","causationId":null,"traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","aggregateType":"Order","aggregateId":"ORDER-ECM-DUP","sequence":1,"payload":{"orderId":"ORDER-ECM-DUP","customerId":"CUSTOMER-010","totalAmount":1000,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"DEVIATED","business_outcome_category":"INCOMPLETE","expectation_states":{},"finding_codes":["DUPLICATE_EVENT_ID"],"activated_child_models":[],"global_finding_codes":["DUPLICATE_EVENT_ID"],"unmapped_event_types":[]}
+    },
+    {
+      "id": "cross-correlation-child-flow",
+      "description": "Return 子流程以受治理 orderId 跨 correlation 納入，並保留 BUSINESS_KEY provenance。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-RETURN"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-RETURN-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-RETURN","causationId":null,"traceId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","aggregateType":"Order","aggregateId":"ORDER-ECM-RETURN","sequence":1,"payload":{"orderId":"ORDER-ECM-RETURN","customerId":"CUSTOMER-011","totalAmount":1100,"currency":"TWD"}},
+        {"eventId":"EVT-RETURN-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-RETURN","causationId":"EVT-RETURN-01","traceId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","aggregateType":"Payment","aggregateId":"PAY-ECM-RETURN","sequence":1,"payload":{"paymentId":"PAY-ECM-RETURN","orderId":"ORDER-ECM-RETURN","amount":1100,"currency":"TWD"}},
+        {"eventId":"EVT-RETURN-03","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-RETURN","causationId":"EVT-RETURN-02","traceId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","aggregateType":"Shipment","aggregateId":"SHIP-ECM-RETURN","sequence":1,"payload":{"shipmentId":"SHIP-ECM-RETURN","orderId":"ORDER-ECM-RETURN","provider":"demo-carrier","status":"CREATED"}},
+        {"eventId":"EVT-RETURN-04","eventType":"ShipmentDelivered","eventVersion":1,"occurredAt":"2026-08-28T00:30:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-RETURN","causationId":"EVT-RETURN-03","traceId":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","aggregateType":"Shipment","aggregateId":"SHIP-ECM-RETURN","sequence":2,"payload":{"shipmentId":"SHIP-ECM-RETURN","orderId":"ORDER-ECM-RETURN","deliveredAt":"2026-08-28T00:30:00Z","recipient":"customer","status":"DELIVERED"}},
+        {"eventId":"EVT-RETURN-05","eventType":"ReturnRequested","eventVersion":1,"occurredAt":"2026-08-28T00:40:00Z","producer":"shipping-service","correlationId":"RETURN-ECM-001","causationId":"EVT-RETURN-04","traceId":"cccccccccccccccccccccccccccccccc","aggregateType":"Return","aggregateId":"RET-ECM-001","sequence":1,"payload":{"returnId":"RET-ECM-001","orderId":"ORDER-ECM-RETURN","shipmentId":"SHIP-ECM-RETURN","reason":"damaged","status":"REQUESTED"}},
+        {"eventId":"EVT-RETURN-06","eventType":"ReturnReceived","eventVersion":1,"occurredAt":"2026-08-28T01:00:00Z","producer":"shipping-service","correlationId":"RETURN-ECM-001","causationId":"EVT-RETURN-05","traceId":"cccccccccccccccccccccccccccccccc","aggregateType":"Return","aggregateId":"RET-ECM-001","sequence":2,"payload":{"returnId":"RET-ECM-001","orderId":"ORDER-ECM-RETURN","receivedAt":"2026-08-28T01:00:00Z","condition":"damaged","status":"RECEIVED"}},
+        {"eventId":"EVT-RETURN-07","eventType":"PaymentRefunded","eventVersion":1,"occurredAt":"2026-08-28T01:10:00Z","producer":"payment-service","correlationId":"RETURN-ECM-001","causationId":"EVT-RETURN-06","traceId":"cccccccccccccccccccccccccccccccc","aggregateType":"Payment","aggregateId":"PAY-ECM-RETURN","sequence":2,"payload":{"paymentId":"PAY-ECM-RETURN","orderId":"ORDER-ECM-RETURN","amount":1100,"reason":"return received"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"CONFORMANT","business_outcome_category":"COMPENSATED","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"SATISFIED","RETURN_RECEIPT_REQUIRES_REFUND":"SATISFIED"},"finding_codes":[],"activated_child_models":["order-return"],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "inconclusive-source-partial",
+      "description": "超過期限但來源不完整時不能把缺少 ShipmentCreated 判成違反。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-PARTIAL"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T00:10:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "partial-source",
+      "events": [
+        {"eventId":"EVT-PARTIAL-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-PARTIAL","causationId":null,"traceId":"dddddddddddddddddddddddddddddddd","aggregateType":"Order","aggregateId":"ORDER-ECM-PARTIAL","sequence":1,"payload":{"orderId":"ORDER-ECM-PARTIAL","customerId":"CUSTOMER-012","totalAmount":1200,"currency":"TWD"}},
+        {"eventId":"EVT-PARTIAL-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-PARTIAL","causationId":"EVT-PARTIAL-01","traceId":"dddddddddddddddddddddddddddddddd","aggregateType":"Payment","aggregateId":"PAY-ECM-PARTIAL","sequence":1,"payload":{"paymentId":"PAY-ECM-PARTIAL","orderId":"ORDER-ECM-PARTIAL","amount":1200,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"INCONCLUSIVE","business_outcome_category":"INCOMPLETE","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"WAITING"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "ambiguous-terminal-outcomes",
+      "description": "同一 as-of 同時符合成功與付款失敗終態時必須回 ambiguous。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-AMBIG"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-AMBIG-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-AMBIG","causationId":null,"traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Order","aggregateId":"ORDER-ECM-AMBIG","sequence":1,"payload":{"orderId":"ORDER-ECM-AMBIG","customerId":"CUSTOMER-013","totalAmount":1300,"currency":"TWD"}},
+        {"eventId":"EVT-AMBIG-02","eventType":"PaymentFailed","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-AMBIG","causationId":"EVT-AMBIG-01","traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Payment","aggregateId":"PAY-ECM-AMBIG","sequence":1,"payload":{"paymentId":"PAY-ECM-AMBIG","orderId":"ORDER-ECM-AMBIG","reasonCode":"TIMEOUT","retryable":true,"status":"FAILED"}},
+        {"eventId":"EVT-AMBIG-03","eventType":"OrderCancelled","eventVersion":1,"occurredAt":"2026-08-28T00:00:20Z","producer":"order-service","correlationId":"ORDER-ECM-AMBIG","causationId":"EVT-AMBIG-02","traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Order","aggregateId":"ORDER-ECM-AMBIG","sequence":2,"payload":{"orderId":"ORDER-ECM-AMBIG","reason":"payment failure"}},
+        {"eventId":"EVT-AMBIG-04","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"payment-service","correlationId":"ORDER-ECM-AMBIG","causationId":"EVT-AMBIG-01","traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Payment","aggregateId":"PAY-ECM-AMBIG","sequence":2,"payload":{"paymentId":"PAY-ECM-AMBIG","orderId":"ORDER-ECM-AMBIG","amount":1300,"currency":"TWD"}},
+        {"eventId":"EVT-AMBIG-05","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:02:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-AMBIG","causationId":"EVT-AMBIG-04","traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Shipment","aggregateId":"SHIP-ECM-AMBIG","sequence":1,"payload":{"shipmentId":"SHIP-ECM-AMBIG","orderId":"ORDER-ECM-AMBIG","provider":"demo-carrier","status":"CREATED"}},
+        {"eventId":"EVT-AMBIG-06","eventType":"ShipmentDelivered","eventVersion":1,"occurredAt":"2026-08-28T01:00:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-AMBIG","causationId":"EVT-AMBIG-05","traceId":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","aggregateType":"Shipment","aggregateId":"SHIP-ECM-AMBIG","sequence":2,"payload":{"shipmentId":"SHIP-ECM-AMBIG","orderId":"ORDER-ECM-AMBIG","deliveredAt":"2026-08-28T01:00:00Z","recipient":"customer","status":"DELIVERED"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"AMBIGUOUS","business_outcome_category":null,"expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"SATISFIED","PAYMENT_FAILURE_REQUIRES_CANCELLATION":"SATISFIED"},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "no-data",
+      "description": "沒有事件時不執行 Model，並和來源錯誤分開。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-NO-DATA"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z"},
+      "source_health_profile": "healthy",
+      "events": [],
+      "expected": {"resolution_status":"NO_DATA","check_status":null,"business_outcome_category":null,"expectation_states":{},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "no-applicable-model",
+      "description": "只有不屬於任何 Flow trigger 的事件時仍可看 Timeline，但不硬套 Model。",
+      "request": {"identifier":{"type":"EVENT_ID","value":"EVT-NOMODEL-01"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z"},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-NOMODEL-01","eventType":"ShipmentInTransit","eventVersion":1,"occurredAt":"2026-08-28T00:10:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-NOMODEL","causationId":null,"traceId":"ffffffffffffffffffffffffffffffff","aggregateType":"Shipment","aggregateId":"SHIP-ECM-NOMODEL","sequence":2,"payload":{"shipmentId":"SHIP-ECM-NOMODEL","orderId":"ORDER-ECM-NOMODEL","location":"hub-z","status":"IN_TRANSIT"}}
+      ],
+      "expected": {"resolution_status":"NO_APPLICABLE_MODEL","check_status":null,"business_outcome_category":null,"expectation_states":{},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":["ShipmentInTransit"]}
+    },
+    {
+      "id": "model-selection-required",
+      "description": "以單一 ShipmentCreated 起查時 order-fulfillment 與 shipment-delivery 都適用，必須請使用者選主要 Model。",
+      "request": {"identifier":{"type":"EVENT_ID","value":"EVT-MODELSELECT-01"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z"},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-MODELSELECT-01","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:10:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-MODELSELECT","causationId":null,"traceId":"10101010101010101010101010101010","aggregateType":"Shipment","aggregateId":"SHIP-ECM-MODELSELECT","sequence":1,"payload":{"shipmentId":"SHIP-ECM-MODELSELECT","orderId":"ORDER-ECM-MODELSELECT","provider":"demo-carrier","status":"CREATED"}}
+      ],
+      "expected": {"resolution_status":"MODEL_SELECTION_REQUIRED","check_status":null,"business_outcome_category":null,"expectation_states":{},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "identifier-selection-required",
+      "description": "AUTO 值同時精確命中 Event ID 與 Correlation ID 時必須請使用者選類型，不靠字串外觀猜測。",
+      "request": {"identifier":{"type":"AUTO","value":"AMBIGUOUS-ID"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z"},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"AMBIGUOUS-ID","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"AMBIGUOUS-ID","causationId":null,"traceId":"14141414141414141414141414141414","aggregateType":"Order","aggregateId":"ORDER-ECM-IDSELECT","sequence":1,"payload":{"orderId":"ORDER-ECM-IDSELECT","customerId":"CUSTOMER-015","totalAmount":1500,"currency":"TWD"}}
+      ],
+      "expected": {"resolution_status":"IDENTIFIER_SELECTION_REQUIRED","check_status":null,"business_outcome_category":null,"expectation_states":{},"finding_codes":[],"activated_child_models":[],"global_finding_codes":[],"unmapped_event_types":[]}
+    },
+    {
+      "id": "source-trace-missing",
+      "description": "業務流程可成功，但缺少 trace context 由 Global Check 另列品質 finding。",
+      "request": {"identifier":{"type":"CORRELATION_ID","value":"ORDER-ECM-NOTRACE"},"from":"2026-08-28T00:00:00Z","to":"2026-08-28T02:00:00Z","model":{"id":"order-fulfillment","version":2}},
+      "source_health_profile": "healthy",
+      "events": [
+        {"eventId":"EVT-NOTRACE-01","eventType":"OrderCreated","eventVersion":1,"occurredAt":"2026-08-28T00:00:00Z","producer":"order-service","correlationId":"ORDER-ECM-NOTRACE","causationId":null,"traceId":null,"aggregateType":"Order","aggregateId":"ORDER-ECM-NOTRACE","sequence":1,"payload":{"orderId":"ORDER-ECM-NOTRACE","customerId":"CUSTOMER-014","totalAmount":1400,"currency":"TWD"}},
+        {"eventId":"EVT-NOTRACE-02","eventType":"PaymentCompleted","eventVersion":1,"occurredAt":"2026-08-28T00:00:10Z","producer":"payment-service","correlationId":"ORDER-ECM-NOTRACE","causationId":"EVT-NOTRACE-01","traceId":"12121212121212121212121212121212","aggregateType":"Payment","aggregateId":"PAY-ECM-NOTRACE","sequence":1,"payload":{"paymentId":"PAY-ECM-NOTRACE","orderId":"ORDER-ECM-NOTRACE","amount":1400,"currency":"TWD"}},
+        {"eventId":"EVT-NOTRACE-03","eventType":"ShipmentCreated","eventVersion":1,"occurredAt":"2026-08-28T00:01:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-NOTRACE","causationId":"EVT-NOTRACE-02","traceId":"12121212121212121212121212121212","aggregateType":"Shipment","aggregateId":"SHIP-ECM-NOTRACE","sequence":1,"payload":{"shipmentId":"SHIP-ECM-NOTRACE","orderId":"ORDER-ECM-NOTRACE","provider":"demo-carrier","status":"CREATED"}},
+        {"eventId":"EVT-NOTRACE-04","eventType":"ShipmentDelivered","eventVersion":1,"occurredAt":"2026-08-28T01:00:00Z","producer":"shipping-service","correlationId":"ORDER-ECM-NOTRACE","causationId":"EVT-NOTRACE-03","traceId":"12121212121212121212121212121212","aggregateType":"Shipment","aggregateId":"SHIP-ECM-NOTRACE","sequence":2,"payload":{"shipmentId":"SHIP-ECM-NOTRACE","orderId":"ORDER-ECM-NOTRACE","deliveredAt":"2026-08-28T01:00:00Z","recipient":"customer","status":"DELIVERED"}}
+      ],
+      "expected": {"resolution_status":"EVALUATED","check_status":"DEVIATED","business_outcome_category":"SUCCESS","expectation_states":{"PAYMENT_REQUIRES_ORDER":"SATISFIED","SHIPMENT_REQUIRES_PAYMENT":"SATISFIED","PAYMENT_REQUIRES_SHIPMENT":"SATISFIED"},"finding_codes":["MISSING_TRACE_CONTEXT"],"activated_child_models":[],"global_finding_codes":["MISSING_TRACE_CONTEXT"],"unmapped_event_types":[]}
+    }
+  ]
+}

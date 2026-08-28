@@ -1,0 +1,71 @@
+$schema: ./check-model.schema.json
+contract_version: 1
+model_id: order-return
+version: 1
+kind: FLOW
+status: ACTIVE
+title: Order Return
+description: 以退貨收件與退款事件檢查訂單退貨子流程。
+domain: logistics
+source:
+  authoring: YAML_GIT
+  mutable_at_runtime: false
+applies_to:
+  aggregate_types: [Return, Payment]
+  trigger_event_types: [ReturnRequested, ReturnReceived]
+  event_versions:
+    - {event_type: ReturnRequested, versions: [1]}
+    - {event_type: ReturnReceived, versions: [1]}
+    - {event_type: PaymentRefunded, versions: [1]}
+scope:
+  max_duration_seconds: 604800
+  max_events: 1000
+  max_correlations: 5
+  max_relationship_depth: 2
+  relations: [SAME_CORRELATION, CAUSATION, BUSINESS_KEY, PARENT_CHILD]
+  business_keys:
+    - name: order_id
+      json_pointer: /payload/orderId
+      event_types: [ReturnRequested, ReturnReceived, PaymentRefunded]
+  parent_child_relations: []
+nodes:
+  - id: RETURN_REQUESTED
+    label: 已申請退貨
+    event: {event_types: [ReturnRequested]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: RETURN_RECEIVED
+    label: 已收到退貨
+    event: {event_types: [ReturnReceived]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: PAYMENT_REFUNDED
+    label: 已退款
+    event: {event_types: [PaymentRefunded]}
+    min_occurs: 1
+    max_occurs: 1
+paths:
+  - id: RETURN_AND_REFUND
+    label: 退貨完成並退款
+    nodes: [RETURN_REQUESTED, RETURN_RECEIVED, PAYMENT_REFUNDED]
+    terminal: true
+    outcome: {code: RETURNED_AND_REFUNDED, label: 已退貨並退款, category: COMPENSATED}
+expectations:
+  - id: RETURN_RECEIPT_REQUIRES_REFUND
+    label: 收到退貨後應完成退款
+    trigger: {event_types: [ReturnReceived]}
+    expected: {event_types: [PaymentRefunded]}
+    temporal_relation: AFTER_OR_AT
+    reminder_after_seconds: 3600
+    deadline_seconds: 86400
+    exclusions: {any_event_types: []}
+    severity: HIGH
+    finding_code: MISSING_REFUND_AFTER_RETURN
+    recommended_query_template_id: payment.events.by_order.v1
+child_models: []
+unmapped_event_policy:
+  default: INFORMATIONAL
+  escalate_event_types: []
+fixtures:
+  scenario_file: ../event-check/fixtures/check-model-scenarios.json
+  case_ids: [cross-correlation-child-flow]

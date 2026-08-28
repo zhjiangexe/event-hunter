@@ -4,10 +4,10 @@
 
 When artifacts conflict, use this order:
 
-1. `requirements/project-scope.yaml` and `requirements/traceability.yaml`
+1. `requirements/product/project-scope.yaml` and `requirements/governance/traceability.yaml`
 2. `openapi.yaml`, `contracts/asyncapi.yaml`, and contracts under `contracts/events`, `contracts/platform`, `contracts/quality`, `contracts/integrations`, `contracts/telemetry`, and `contracts/demo-services`
 3. `backend/migrations/**` and `e2e/**/*.feature`
-4. Markdown documents and `requirements/ui-prototype.html`
+4. Markdown documents and `requirements/product/prototypes/ui-prototype.html`
 
 Do not silently reconcile a conflict. Update the lower-precedence artifact in the same change.
 
@@ -48,4 +48,4 @@ Implement only `REQ-EH-001` through `REQ-EH-009` unless the user explicitly expa
 
 ## Implementation order
 
-Follow `requirements/implementation-plan.yaml`. Do not start a task while an item in `depends_on` is incomplete.
+Follow `requirements/delivery/implementation-plan.yaml`. Do not start a task while an item in `depends_on` is incomplete.

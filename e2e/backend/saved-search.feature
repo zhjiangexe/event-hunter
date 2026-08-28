@@ -95,9 +95,49 @@ Feature: REQ-EH-013 個人 Saved Search 與唯讀內建 Preset
     When method delete
     Then status 204
 
+  Scenario: Viewer 可保存可重現的 Event Check bounded request
+    * def searchName = 'event-check-' + runId
+    Given path 'api', 'v1', 'saved-searches'
+    And request
+      """
+      {
+        name: '#(searchName)',
+        target: 'EVENT_CHECK',
+        query: {
+          from: '2026-08-20T11:00:00Z',
+          to: '2026-08-20T11:06:00Z',
+          identifier_type: 'CORRELATION_ID',
+          identifier_value: 'ORDER-2001',
+          model_id: 'order-fulfillment',
+          model_version: 2,
+          workspace_tab: 'findings',
+          include_processing_attempts: false
+        }
+      }
+      """
+    When method post
+    Then status 201
+    And match response.target == 'EVENT_CHECK'
+    And match response.open_url == '#regex /event-check\\?.*'
+    And match response.open_url contains 'identifier_type=CORRELATION_ID'
+    And match response.open_url contains 'identifier=ORDER-2001'
+    And match response.open_url contains 'model_id=order-fulfillment'
+    And match response.open_url contains 'tab=findings'
+    * def eventCheckSearchId = response.id
+
+    Given path 'api', 'v1', 'saved-searches', eventCheckSearchId
+    When method delete
+    Then status 204
+
   Scenario: 不接受無界 Journey、超過七天或 payload 欄位
     Given path 'api', 'v1', 'saved-searches'
     And request { name: 'missing-correlation', target: 'JOURNEY', query: { from: '2026-08-20T11:00:00Z', to: '2026-08-20T11:06:00Z', include_processing_attempts: false } }
+    When method post
+    Then status 422
+    And match response.code == 'INVALID_SAVED_SEARCH'
+
+    Given path 'api', 'v1', 'saved-searches'
+    And request { name: 'event-check-missing-identifier', target: 'EVENT_CHECK', query: { from: '2026-08-20T11:00:00Z', to: '2026-08-20T11:06:00Z', identifier_type: 'CORRELATION_ID', workspace_tab: 'summary', include_processing_attempts: false } }
     When method post
     Then status 422
     And match response.code == 'INVALID_SAVED_SEARCH'

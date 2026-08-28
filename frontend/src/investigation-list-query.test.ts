@@ -4,10 +4,11 @@ import { parseInvestigationListQuery } from "./investigation-list-query";
 describe("parseInvestigationListQuery", () => {
   it("restores compound filters and stable sorting", () => {
     const state = parseInvestigationListQuery(
-      "?status=INVESTIGATING&severity=HIGH&priority=P0&assignee=%20shipping-oncall%20&tag=urgent&correlation_id=ORDER-2001&sort_by=updated_at&sort_order=asc",
+      "?query=%20MANUAL-4002%20&status=INVESTIGATING&severity=HIGH&priority=P0&assignee=%20shipping-oncall%20&tag=urgent&correlation_id=ORDER-2001&sort_by=updated_at&sort_order=asc",
     );
 
     expect(state.filters).toEqual({
+      query: "MANUAL-4002",
       status: "INVESTIGATING",
       severity: "HIGH",
       priority: "P0",
@@ -25,6 +26,7 @@ describe("parseInvestigationListQuery", () => {
     );
 
     expect(state.filters).toEqual({
+      query: undefined,
       status: undefined,
       severity: undefined,
       priority: undefined,

@@ -40,7 +40,7 @@ bash scripts/verify-persistence.sh
 ```
 
 完整日常檢查、故障恢復、cold backup／restore、retention 與 secret rotation 步驟見
-[`requirements/operations-runbook.md`](../requirements/operations-runbook.md)。可先執行唯讀 smoke：
+[`requirements/operations/operations-runbook.md`](../requirements/operations/operations-runbook.md)。可先執行唯讀 smoke：
 
 ```bash
 bash scripts/verify-operations-runbook.sh
@@ -107,7 +107,7 @@ bash scripts/reconcile-processing-attempt-ingestion-mode.sh --mode status
 
 設定來源位於 `infra/kafka-connect-clickhouse/`，ClickHouse DDL 位於
 `backend/migrations/clickhouse/00006_clickhouse_mv_ingestion_poc.sql`，完整範圍與風險見
-`requirements/clickhouse-mv-ingestion-poc.md`。raw payload 只進入未授權給 `grafana_reader` 的
+`requirements/decisions/adr-001-clickhouse-first-ingestion.md`。raw payload 只進入未授權給 `grafana_reader` 的
 `event_hunter_poc` database 並保留 7 天；Grafana 只讀安全的 failure summary。
 `technical-dlq-projector` 讀取獨立 technical DLQ，成功寫入 `ingestion_technical_failures` 後才 commit；
 `/ingestion-issues` 會把 contract、admission 與 technical 三類問題統一呈現，但不具 raw database 權限。

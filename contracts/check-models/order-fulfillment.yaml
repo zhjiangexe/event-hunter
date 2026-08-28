@@ -1,0 +1,214 @@
+$schema: ./check-model.schema.json
+contract_version: 1
+model_id: order-fulfillment
+version: 2
+kind: FLOW
+status: ACTIVE
+title: Order Fulfillment
+description: 以訂單、付款、出貨與送達事件檢查正常完成、合理失敗、補償與流程偏離。
+domain: logistics
+source:
+  authoring: YAML_GIT
+  mutable_at_runtime: false
+applies_to:
+  aggregate_types: [Order, Payment, Shipment]
+  trigger_event_types: [OrderCreated, PaymentCompleted, PaymentFailed, ShipmentCreated]
+  event_versions:
+    - {event_type: OrderCreated, versions: [1]}
+    - {event_type: OrderCancelled, versions: [1]}
+    - {event_type: PaymentCompleted, versions: [1]}
+    - {event_type: PaymentFailed, versions: [1]}
+    - {event_type: PaymentRefunded, versions: [1]}
+    - {event_type: PaymentVoided, versions: [1]}
+    - {event_type: ShipmentCreated, versions: [1]}
+    - {event_type: ShipmentDispatchFailed, versions: [1]}
+    - {event_type: ShipmentDispatched, versions: [1]}
+    - {event_type: ShipmentInTransit, versions: [1]}
+    - {event_type: ShipmentDelivered, versions: [1]}
+    - {event_type: ReturnRequested, versions: [1]}
+    - {event_type: ReturnReceived, versions: [1]}
+scope:
+  max_duration_seconds: 604800
+  max_events: 10000
+  max_correlations: 20
+  max_relationship_depth: 3
+  relations: [SAME_CORRELATION, SAME_AGGREGATE, CAUSATION, BUSINESS_KEY, PARENT_CHILD]
+  business_keys:
+    - name: order_id
+      json_pointer: /payload/orderId
+      event_types:
+        - OrderCreated
+        - OrderCancelled
+        - PaymentCompleted
+        - PaymentFailed
+        - PaymentRefunded
+        - PaymentVoided
+        - ShipmentCreated
+        - ShipmentDispatchFailed
+        - ShipmentDispatched
+        - ShipmentInTransit
+        - ShipmentDelivered
+        - ReturnRequested
+        - ReturnReceived
+  parent_child_relations:
+    - id: ORDER_TO_PAYMENT
+      parent_aggregate_type: Order
+      child_aggregate_type: Payment
+      business_key: order_id
+    - id: ORDER_TO_SHIPMENT
+      parent_aggregate_type: Order
+      child_aggregate_type: Shipment
+      business_key: order_id
+
+nodes:
+  - id: ORDER_CREATED
+    label: 訂單建立
+    event: {event_types: [OrderCreated]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: PAYMENT_COMPLETED
+    label: 付款完成
+    event: {event_types: [PaymentCompleted]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: PAYMENT_FAILED
+    label: 付款失敗
+    event: {event_types: [PaymentFailed]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: ORDER_CANCELLED
+    label: 訂單取消
+    event: {event_types: [OrderCancelled]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: SHIPMENT_CREATED
+    label: 出貨建立
+    event: {event_types: [ShipmentCreated]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: SHIPMENT_DISPATCHED
+    label: 已派送
+    event: {event_types: [ShipmentDispatched]}
+    min_occurs: 0
+    max_occurs: 20
+  - id: SHIPMENT_DELIVERED
+    label: 已送達
+    event: {event_types: [ShipmentDelivered]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: SHIPMENT_DISPATCH_FAILED
+    label: 派送失敗
+    event: {event_types: [ShipmentDispatchFailed]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: PAYMENT_REFUNDED
+    label: 已退款
+    event: {event_types: [PaymentRefunded]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: PAYMENT_VOIDED
+    label: 付款已撤銷
+    event: {event_types: [PaymentVoided]}
+    min_occurs: 1
+    max_occurs: 1
+
+paths:
+  - id: HAPPY_PATH
+    label: 正常完成
+    nodes: [ORDER_CREATED, PAYMENT_COMPLETED, SHIPMENT_CREATED, SHIPMENT_DISPATCHED, SHIPMENT_DELIVERED]
+    terminal: true
+    outcome: {code: DELIVERED, label: 已完成配送, category: SUCCESS}
+  - id: PAYMENT_FAILURE_PATH
+    label: 付款失敗並取消
+    nodes: [ORDER_CREATED, PAYMENT_FAILED, ORDER_CANCELLED]
+    terminal: true
+    outcome: {code: PAYMENT_FAILED_AND_CANCELLED, label: 付款失敗並取消訂單, category: EXPECTED_FAILURE}
+  - id: DISPATCH_FAILURE_PATH
+    label: 派送失敗
+    nodes: [ORDER_CREATED, PAYMENT_COMPLETED, SHIPMENT_CREATED, SHIPMENT_DISPATCH_FAILED]
+    terminal: true
+    outcome: {code: DISPATCH_FAILED, label: 出貨派送失敗, category: EXPECTED_FAILURE}
+  - id: REFUND_PATH
+    label: 付款完成後退款
+    nodes: [ORDER_CREATED, PAYMENT_COMPLETED, PAYMENT_REFUNDED]
+    forbidden_event_types: [ShipmentDelivered]
+    terminal: true
+    outcome: {code: PAYMENT_REFUNDED, label: 已退款, category: COMPENSATED}
+  - id: VOID_PATH
+    label: 付款撤銷
+    nodes: [ORDER_CREATED, PAYMENT_COMPLETED, PAYMENT_VOIDED]
+    forbidden_event_types: [ShipmentCreated, ShipmentDelivered]
+    terminal: true
+    outcome: {code: PAYMENT_VOIDED, label: 付款已撤銷, category: COMPENSATED}
+
+expectations:
+  - id: PAYMENT_REQUIRES_ORDER
+    label: 付款事件應有前置 OrderCreated
+    trigger: {event_types: [PaymentCompleted, PaymentFailed]}
+    expected: {event_types: [OrderCreated]}
+    temporal_relation: BEFORE_OR_AT
+    reminder_after_seconds: 0
+    deadline_seconds: 0
+    exclusions: {any_event_types: []}
+    severity: HIGH
+    finding_code: MISSING_ORDER_CREATED
+    recommended_query_template_id: events.by_correlation.v1
+  - id: SHIPMENT_REQUIRES_PAYMENT
+    label: ShipmentCreated 應有前置 PaymentCompleted
+    trigger: {event_types: [ShipmentCreated]}
+    expected: {event_types: [PaymentCompleted]}
+    temporal_relation: BEFORE_OR_AT
+    reminder_after_seconds: 0
+    deadline_seconds: 0
+    exclusions: {any_event_types: []}
+    severity: HIGH
+    finding_code: SHIPMENT_WITHOUT_PAYMENT
+    recommended_query_template_id: events.by_correlation.v1
+  - id: PAYMENT_REQUIRES_SHIPMENT
+    label: 付款完成後應建立出貨
+    trigger: {event_types: [PaymentCompleted]}
+    expected: {event_types: [ShipmentCreated]}
+    temporal_relation: AFTER_OR_AT
+    reminder_after_seconds: 120
+    deadline_seconds: 300
+    exclusions: {any_event_types: [OrderCancelled, PaymentRefunded, PaymentVoided]}
+    severity: HIGH
+    finding_code: MISSING_SHIPMENT_AFTER_PAYMENT
+    recommended_query_template_id: shipping.events.by_order.v1
+  - id: PAYMENT_FAILURE_REQUIRES_CANCELLATION
+    label: 付款失敗後應取消訂單
+    trigger: {event_types: [PaymentFailed]}
+    expected: {event_types: [OrderCancelled]}
+    temporal_relation: AFTER_OR_AT
+    reminder_after_seconds: 120
+    deadline_seconds: 300
+    exclusions: {any_event_types: []}
+    severity: HIGH
+    finding_code: MISSING_CANCELLATION_AFTER_PAYMENT_FAILURE
+    recommended_query_template_id: order.events.by_correlation.v1
+
+child_models:
+  - model_id: order-return
+    version: 1
+    activate_when: {event_types: [ReturnRequested, ReturnReceived]}
+    relation: BUSINESS_KEY
+
+unmapped_event_policy:
+  default: INFORMATIONAL
+  escalate_event_types: []
+
+fixtures:
+  scenario_file: ../event-check/fixtures/check-model-scenarios.json
+  case_ids:
+    - success-happy-path
+    - expected-payment-failure
+    - compensated-refund
+    - in-progress-awaiting-shipment
+    - reminder-awaiting-shipment
+    - violation-missing-shipment
+    - late-satisfied-shipment
+    - informational-unmapped-event
+    - reasonable-repeat
+    - cross-correlation-child-flow
+    - inconclusive-source-partial
+    - ambiguous-terminal-outcomes

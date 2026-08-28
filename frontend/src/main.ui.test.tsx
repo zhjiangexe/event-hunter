@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BusinessJourneyPage,
   DashboardPage,
@@ -395,7 +395,7 @@ describe("FeatureGuidePage", () => {
     expect(screen.getByTestId("feature-guide-title")).toHaveTextContent(
       "Getting Started & Integration",
     );
-    expect(screen.getByText("5 篇導覽")).toBeInTheDocument();
+    expect(screen.getByText("8 篇導覽")).toBeInTheDocument();
     expect(screen.getByTestId("integration-guide")).toHaveTextContent(
       "Minimum",
     );
@@ -421,7 +421,7 @@ describe("FeatureGuidePage", () => {
       "照這個順序查",
     );
     expect(screen.getByTestId("integration-data-plane")).toHaveTextContent(
-      "Business Timeline 不直接從 Kafka",
+      "Event Check 不直接從 Kafka",
     );
     expect(screen.getByTestId("integration-admission-gates")).toHaveTextContent(
       "五關都通過",
@@ -441,18 +441,13 @@ describe("FeatureGuidePage", () => {
     expect(screen.getByText("目前仍缺少")).toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("feature-guide-select"), {
-      target: { value: "journey" },
+      target: { value: "check-models" },
     });
 
-    expect(
-      await screen.findByTestId("journey-interpretation-guide"),
-    ).toHaveTextContent("為什麼「進行中」卻沒有該里程碑事件");
-    expect(
-      screen.getByTestId("journey-interpretation-guide"),
-    ).toHaveTextContent("ShipmentCreated 是 Delivery 的啟動條件");
-    expect(
-      screen.getByTestId("journey-interpretation-guide"),
-    ).toHaveTextContent("退貨是選配支線");
+    expect(await screen.findByTestId("feature-guide-title")).toHaveTextContent(
+      "Check Models",
+    );
+    expect(screen.getByText(/唯一正式判定來源/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("feature-guide-select"), {
       target: { value: "investigations" },
@@ -472,14 +467,16 @@ describe("FeatureGuidePage", () => {
   });
 
   it("opens a feature-specific introduction directly from the URL", () => {
-    renderFeatureGuidePage("/guide?feature=patterns");
+    renderFeatureGuidePage("/guide?feature=event-check");
 
-    expect(screen.getByTestId("feature-guide-select")).toHaveValue("patterns");
+    expect(screen.getByTestId("feature-guide-select")).toHaveValue(
+      "event-check",
+    );
     expect(screen.getByTestId("feature-guide-title")).toHaveTextContent(
-      "Pattern Library",
+      "Event Check",
     );
     expect(
-      screen.getByText(/NO_EVENTS 與 NO_MATCH 明確區分/),
+      screen.getByText(/Snapshot 固定 Model checksum/),
     ).toBeInTheDocument();
   });
 });
@@ -553,7 +550,7 @@ describe("DashboardPage", () => {
     );
     expect(
       screen.getByText("payment-completed-without-shipment").closest("a"),
-    ).toHaveAttribute("href", expect.stringContaining("/patterns?pattern_id="));
+    ).toHaveAttribute("href", expect.stringContaining("/check-models?"));
     expect(screen.getByText("CRITICAL").closest("a")).toHaveAttribute(
       "href",
       "/investigations?severity=CRITICAL",
@@ -638,6 +635,12 @@ describe("BusinessJourneyPage", () => {
     to: "2026-08-20T11:06:00Z",
     status: "IN_PROGRESS",
     event_count: 2,
+    completed_milestone_count: 1,
+    total_milestone_count: 2,
+    current_milestone_id: "SHIPPING",
+    next_milestone_id: null,
+    next_expected_event_types: ["ShipmentCreated"],
+    trace_ids: ["4".repeat(32)],
     started_at: "2026-08-20T11:00:00Z",
     ended_at: "2026-08-20T11:00:30Z",
     duration_ms: 30_000,
@@ -895,7 +898,13 @@ describe("ScenarioLabPage", () => {
     accepted_at: "2026-08-21T00:00:00Z",
     started_at: null,
     completed_at: null,
+    duration_ms: null,
+    current_step: "等待執行",
   };
+
+  beforeEach(() => {
+    vi.spyOn(scenarioApi, "history").mockResolvedValue({ items: [] });
+  });
 
   it("shows identifiers from the single start request without polling", async () => {
     vi.spyOn(scenarioApi, "catalog").mockResolvedValue({ items: [scenario] });
@@ -953,11 +962,54 @@ describe("ScenarioLabPage", () => {
     expect(dialog).toHaveTextContent(accepted.run_id);
     expect(dialog).toHaveTextContent(accepted.correlation_id);
     expect(dialog).not.toHaveTextContent("Trace ID");
-    expect(screen.queryByTestId("scenario-event-id-note")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("scenario-event-id-note"),
+    ).not.toBeInTheDocument();
     expect(runRequest).not.toHaveBeenCalled();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByTestId("scenario-run-modal")).not.toBeInTheDocument();
+  });
+
+  it("reopens a persisted completed run from manually loaded history", async () => {
+    const completed: ScenarioRun = {
+      ...accepted,
+      status: "PASSED",
+      trace_id: "b".repeat(32),
+      actual: {
+        ...accepted.actual,
+        trace_id: "b".repeat(32),
+        event_count: 3,
+        event_types: scenario.expected_event_types,
+      },
+      links: {
+        ...accepted.links,
+        tempo: "http://localhost:28300/explore?trace_id=completed",
+      },
+      started_at: "2026-08-21T00:00:00.100Z",
+      completed_at: "2026-08-21T00:00:01Z",
+      duration_ms: 900,
+      current_step: "驗收通過",
+    };
+    vi.mocked(scenarioApi.history).mockResolvedValue({ items: [completed] });
+    vi.spyOn(scenarioApi, "catalog").mockResolvedValue({ items: [scenario] });
+    const runRequest = vi.spyOn(scenarioApi, "run");
+
+    renderScenarioLabPage();
+
+    fireEvent.click(
+      await screen.findByTestId(`scenario-history-run-${completed.run_id}`),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "S8 · 付款失敗並取消",
+    });
+    expect(dialog).toHaveTextContent("PASSED");
+    expect(dialog).toHaveTextContent(completed.trace_id!);
+    expect(screen.getByTestId("scenario-link-tempo")).toHaveAttribute(
+      "href",
+      completed.links.tempo,
+    );
+    expect(runRequest).not.toHaveBeenCalled();
   });
 
   it("keeps Viewer access read-only", async () => {
@@ -1032,6 +1084,7 @@ describe("QueryShortcutsDrawer", () => {
     const remove = vi
       .spyOn(api, "deleteSavedSearch")
       .mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
 
     renderTimelinePage("VIEWER");
     fireEvent.click(screen.getByTestId("query-shortcuts-open"));
@@ -1666,6 +1719,12 @@ describe("PatternsPage", () => {
           hit_count: 12,
           last_hit_at: "2026-08-23T10:00:00Z",
           investigation_count: 7,
+          confirmed_count: 5,
+          false_positive_count: 1,
+          needs_review_count: 1,
+          unreviewed_count: 5,
+          reviewed_count: 7,
+          false_positive_rate: 1 / 7,
         },
       ],
     });
@@ -1678,21 +1737,24 @@ describe("PatternsPage", () => {
     expect(screen.getByTestId("pattern-active-count")).toHaveTextContent(
       "1 active",
     );
-    expect(screen.getByTestId("pattern-row-0")).toHaveTextContent(
-      "events.by_correlation.v1",
-    );
-    expect(screen.getByTestId("pattern-row-0")).toHaveTextContent(
-      "PaymentVoided",
-    );
     expect(screen.getByTestId("pattern-0-hit-count")).toHaveTextContent("12");
     expect(screen.getByTestId("pattern-0-case-count")).toHaveTextContent("7");
-    expect(screen.getByTestId("pattern-0-last-hit")).not.toHaveTextContent(
-      "不可用",
+    expect(screen.getByTestId("pattern-0-review-count")).toHaveTextContent(
+      "7 reviewed / 5 unreviewed",
     );
+    expect(
+      screen.getByTestId("pattern-0-false-positive-rate"),
+    ).toHaveTextContent("14.3%");
     expect(screen.getByTestId("pattern-0-fixture-coverage")).toHaveTextContent(
       "1 match / 2 non-match",
     );
-    expect(screen.getByTestId("pattern-row-0")).toHaveTextContent(
+    fireEvent.click(screen.getByTestId("pattern-row-0"));
+    const detail = screen.getByRole("dialog", {
+      name: "Payment completed without shipment",
+    });
+    expect(detail).toHaveTextContent("events.by_correlation.v1");
+    expect(detail).toHaveTextContent("PaymentVoided");
+    expect(detail).toHaveTextContent(
       "contracts/patterns/payment-completed-without-shipment.yaml",
     );
     expect(screen.queryByRole("button", { name: /新增|編輯|刪除/ })).toBeNull();
@@ -1731,6 +1793,12 @@ describe("PatternsPage", () => {
           hit_count: 0,
           last_hit_at: null,
           investigation_count: 0,
+          confirmed_count: 0,
+          false_positive_count: 0,
+          needs_review_count: 0,
+          unreviewed_count: 0,
+          reviewed_count: 0,
+          false_positive_rate: null,
         },
       ],
     });
@@ -1775,7 +1843,7 @@ describe("PatternsPage", () => {
 
     expect(
       await screen.findByTestId("pattern-effectiveness-error"),
-    ).toHaveTextContent("不可用");
+    ).toHaveTextContent("暫時無法使用");
     expect(screen.getByTestId("pattern-0-hit-count")).toHaveTextContent(
       "不可用",
     );
@@ -1920,7 +1988,7 @@ describe("InvestigationsPage", () => {
 
     expect(
       await screen.findByTestId("case-evidence-window-notice"),
-    ).toHaveTextContent("Evidence 與案件 Timeline 使用不同時間窗");
+    ).toHaveTextContent("Evidence 與案件 Event Check 使用不同時間窗");
     expect(screen.getByTestId("case-timeline")).toHaveTextContent(
       "目前案件基準時間窗內沒有事件",
     );
@@ -2074,9 +2142,11 @@ describe("InvestigationsPage", () => {
     expect(await screen.findByTestId("evidence-manifest")).toHaveTextContent(
       "PATTERN_FINDING",
     );
-    expect(screen.getByRole("link", { name: /開啟 Pattern/ })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: /開啟 Check Model/ }),
+    ).toHaveAttribute(
       "href",
-      "/patterns?pattern_id=payment-completed-without-shipment#pattern-payment-completed-without-shipment",
+      expect.stringContaining("focus=PAYMENT_REQUIRES_SHIPMENT"),
     );
     expect(screen.getByRole("link", { name: /開啟 Alert/ })).toHaveAttribute(
       "href",

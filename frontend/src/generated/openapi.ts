@@ -42,6 +42,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/event-checks/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 即時解析事件範圍並執行 Check Model
+         * @description Stateless query-time evaluation。NO_DATA、IDENTIFIER_SELECTION_REQUIRED、 MODEL_SELECTION_REQUIRED 與 NO_APPLICABLE_MODEL 都以 200 回傳可操作的產品狀態； 本 operation 不建立 PostgreSQL Snapshot，也不接受 SQL、任意 URL 或 production command。
+         */
+        post: operations["evaluateEventCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/check-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出 immutable Check Model Registry
+         * @description 回傳已發布 Flow Models 與 Global Checks；本階段不提供 runtime CRUD 或發布 API。
+         */
+        get: operations["listCheckModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/check-models/{modelId}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得指定 Check Model immutable version */
+        get: operations["getCheckModelVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/check-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出已保存的 immutable Event Check 結果
+         * @description Saved Results read-model。以建立時間與 UUID 進行穩定 keyset 分頁，可依識別碼或 Check status 篩選；僅回傳摘要、固定 evaluation request 與案件連結數，不包含 event payload。
+         */
+        get: operations["listCheckSnapshots"];
+        put?: never;
+        /**
+         * 驗證 evaluation hashes 並保存 immutable Snapshot
+         * @description 只允許 INVESTIGATOR／ADMIN。伺服器使用相同 as_of 與 pinned Model version 重算； event set 或 result 改變時回 409 EVALUATION_CHANGED，不接受前端 result JSON 作為正式資料。
+         */
+        post: operations["createCheckSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/check-snapshots/{snapshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取得 immutable Check Snapshot */
+        get: operations["getCheckSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/check-findings/{findingId}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Persisted generalized Check Finding UUID。 */
+                findingId: components["parameters"]["CheckFindingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * 更新 generalized Check Finding 的人工判定
+         * @description Finding 本身 append-only；只更新 feedback current state。相容期舊 classifyPatternFinding 透過 adapter 操作同一筆 feedback，不建立第二套狀態。
+         */
+        patch: operations["classifyCheckFinding"];
+        trace?: never;
+    };
+    "/api/v1/investigations/{investigationId}/check-snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 調查案件 UUID。 */
+                investigationId: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        /** 列出案件已連結的 Check Snapshots */
+        get: operations["listInvestigationCheckSnapshots"];
+        put?: never;
+        /** 以 optimistic lock 將 Snapshot 加入案件 */
+        post: operations["attachInvestigationCheckSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/patterns": {
         parameters: {
             query?: never;
@@ -51,7 +193,8 @@ export interface paths {
         };
         /**
          * 列出可執行的確定性 Pattern
-         * @description 回傳由 Go 程式碼註冊的 Pattern metadata；MVP 不提供新增、修改或刪除 API。
+         * @deprecated
+         * @description 相容 endpoint；正式判定來源已遷移至 Check Model Registry，待 compatibility acceptance 後移除。
          */
         get: operations["listPatterns"];
         put?: never;
@@ -71,6 +214,7 @@ export interface paths {
         };
         /**
          * 取得 Pattern 成效摘要
+         * @deprecated
          * @description 由後端在固定 30 天窗口彙總 PostgreSQL pattern findings；資料來源失敗時回傳 503， 不以零值偽裝成沒有命中。Pattern definition 仍由 Git-managed YAML registry 提供。
          */
         get: operations["getPatternEffectiveness"];
@@ -314,7 +458,8 @@ export interface paths {
         };
         /**
          * 依 correlationId 重建業務時間線
-         * @description 從 ClickHouse 唯讀查詢相關事件、Trace 連結與服務版本，提供調查與證據呈現；不會重送事件或修改正式系統。
+         * @deprecated
+         * @description 相容 endpoint；新產品入口為 Event Check。此 API 仍唯讀且不會重送事件或修改正式系統。
          */
         get: operations["getBusinessTimeline"];
         put?: never;
@@ -337,8 +482,10 @@ export interface paths {
         };
         /**
          * 依 correlationId 組織唯讀 Business Journey
+         * @deprecated
          * @description 將既有 canonical events 依物流業務 milestone 組織成 expected/actual、跨服務 duration
          *     與確定性異常提示；目前物流 profile 只有出現 ShipmentDelivered 才標示 COMPLETED。
+         *     相容 endpoint；正式流程判讀已由 Event Check Flow 與版本化 Check Model 取代。
          *     此操作只讀取 ClickHouse，不建立 projection、不重送事件，也不修改正式系統。
          */
         get: operations["getBusinessJourney"];
@@ -359,7 +506,9 @@ export interface paths {
         };
         /**
          * 列出目前 API build 內的 Journey Profiles
-         * @description 回傳由 `contracts/journeys/*.yaml` 產生並編譯進目前 API build 的 immutable registry。
+         * @deprecated
+         * @description 相容 endpoint；正式 registry 為 `/api/v1/check-models`。
+         *     回傳由 `contracts/journeys/*.yaml` 產生並編譯進目前 API build 的 immutable registry。
          *     `source_path` 與 `checksum` 用來辨識來源版本；此 endpoint 不代表已提供 runtime 編輯、
          *     版本選擇或發布能力。
          */
@@ -553,7 +702,7 @@ export interface paths {
         };
         /**
          * 列出調查案件
-         * @description 依狀態、嚴重度、priority、owner、tag 或 correlationId 查詢 PostgreSQL 控制面案件。
+         * @description 依案件編號／標題關鍵字、狀態、嚴重度、priority、owner、tag 或 correlationId 查詢 PostgreSQL 控制面案件。
          */
         get: operations["listInvestigations"];
         put?: never;
@@ -631,7 +780,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * 將 Timeline event 加入既有案件
+         * 將 Timeline event 加入案件
          * @description 以 bounded `from`/`to` 到 ClickHouse 精確驗證 event 後，只將 EVENT reference 與
          *     checksum 附加到案件，不複製 event payload。同一案件重複附加同一 event 為
          *     idempotent no-op；新 evidence、related correlation 與 lock_version 在同一個
@@ -955,6 +1104,21 @@ export interface components {
             last_hit_at: string | null;
             /** Format: int64 */
             investigation_count: number;
+            /** Format: int64 */
+            confirmed_count: number;
+            /** Format: int64 */
+            false_positive_count: number;
+            /** Format: int64 */
+            needs_review_count: number;
+            /** Format: int64 */
+            unreviewed_count: number;
+            /** Format: int64 */
+            reviewed_count: number;
+            /**
+             * Format: double
+             * @description FALSE_POSITIVE / reviewed_count；沒有人工判定時為 null，不假裝為 0。
+             */
+            false_positive_rate: number | null;
         };
         /**
          * @description 事件或 Schema 的生命週期。
@@ -1086,8 +1250,11 @@ export interface components {
             /** @enum {string} */
             message: "EMPTY_INPUT" | "INPUT_TOO_SHORT" | "INPUT_TOO_LONG" | "INVALID_EXPLICIT_IDENTIFIER" | "UNSUPPORTED_IDENTIFIER_FORMAT" | "IDENTIFIER_CONFIRMED" | "SELECT_IDENTIFIER_TYPE";
         };
-        /** @enum {string} */
-        SavedSearchTarget: "TIMELINE" | "JOURNEY";
+        /**
+         * @description EVENT_CHECK 是正式目標；TIMELINE 與 JOURNEY 僅供既有查詢捷徑相容。
+         * @enum {string}
+         */
+        SavedSearchTarget: "EVENT_CHECK" | "TIMELINE" | "JOURNEY";
         SavedSearchQuery: {
             /**
              * @description 未提供時視為 ABSOLUTE，以相容既有 Saved Search。
@@ -1123,6 +1290,22 @@ export interface components {
             severity?: components["schemas"]["Severity"];
             /** @default false */
             include_processing_attempts: boolean;
+            /**
+             * @description target=EVENT_CHECK 時必填。
+             * @enum {string}
+             */
+            identifier_type?: "AUTO" | "CORRELATION_ID" | "EVENT_ID" | "TRACE_ID" | "AGGREGATE_ID" | "BUSINESS_KEY";
+            /** @description target=EVENT_CHECK 時必填。 */
+            identifier_value?: string;
+            aggregate_type?: string;
+            business_key_name?: string;
+            model_id?: string;
+            model_version?: number;
+            /**
+             * @description target=EVENT_CHECK 時預設為 summary。
+             * @enum {string}
+             */
+            workspace_tab?: "summary" | "timeline" | "flow" | "findings" | "cases";
         };
         CreateSavedSearchRequest: {
             name: string;
@@ -1233,6 +1416,57 @@ export interface components {
             current_resource?: {
                 [key: string]: unknown;
             };
+        };
+        EventCheckConflictError: components["schemas"]["Error"] & {
+            /** @enum {string} */
+            code: "EVALUATION_CHANGED" | "MODEL_VERSION_UNAVAILABLE" | "IDEMPOTENCY_KEY_REUSED";
+            current_event_set_hash?: string | null;
+            current_evaluation_hash?: string | null;
+        };
+        CheckSnapshotSummary: {
+            /** Format: uuid */
+            id: string;
+            created_by: string;
+            /** @enum {string} */
+            created_by_role: "INVESTIGATOR" | "ADMIN";
+            /** Format: date-time */
+            created_at: string;
+            evaluation_request: components["schemas"]["EvaluationRequest"];
+            /** Format: date-time */
+            as_of: string;
+            /** @enum {string} */
+            source_health_status: "HEALTHY" | "STALE" | "PARTIAL" | "UNAVAILABLE";
+            model: {
+                id: string;
+                version: number;
+                /** @enum {string} */
+                kind: "FLOW" | "GLOBAL_CHECK";
+            };
+            /** @enum {string} */
+            check_status: "NO_DATA" | "IN_PROGRESS" | "CONFORMANT" | "DEVIATED" | "INCONCLUSIVE" | "AMBIGUOUS";
+            event_count: number;
+            finding_count: number;
+            linked_case_count: number;
+        };
+        CheckSnapshotPage: {
+            items: components["schemas"]["CheckSnapshotSummary"][];
+            page_size: number;
+            next_cursor: string | null;
+        };
+        AttachInvestigationCheckSnapshotRequest: {
+            /** Format: uuid */
+            snapshot_id: string;
+        };
+        InvestigationCheckSnapshotLink: {
+            /** Format: uuid */
+            investigation_id: string;
+            /** Format: uuid */
+            snapshot_id: string;
+            linked_by: string;
+            /** @enum {string} */
+            linked_by_role: "INVESTIGATOR" | "ADMIN";
+            /** Format: date-time */
+            linked_at: string;
         };
         EventDefinition: {
             /** @example PaymentCompleted */
@@ -1495,6 +1729,17 @@ export interface components {
             /** @enum {string} */
             status: "EMPTY" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "COMPENSATED";
             event_count: number;
+            /** @description 目前狀態為 COMPLETED 的里程碑數；失敗與補償不計入。 */
+            completed_milestone_count: number;
+            total_milestone_count: number;
+            /** @description 第一個進行中里程碑；失敗或補償時則為造成終止狀態的里程碑。 */
+            current_milestone_id: string | null;
+            /** @description Profile 排序中目前里程碑的下一個定義；可能是選用支線，不代表一定會發生。 */
+            next_milestone_id: string | null;
+            /** @description 目前里程碑正在等待或可接受的事件類型。 */
+            next_expected_event_types: string[];
+            /** @description 此查詢窗口內 canonical events 所帶的相異 trace ID，依事件時間首次出現排序。 */
+            trace_ids: string[];
             /** Format: date-time */
             started_at?: string | null;
             /** Format: date-time */
@@ -1636,6 +1881,8 @@ export interface components {
             /** Format: int64 */
             lock_version: number;
         };
+        ClassifyCheckFindingRequest: components["schemas"]["ClassifyPatternFindingRequest"];
+        CheckFindingFeedback: components["schemas"]["PatternFindingFeedback"];
         Evidence: {
             /** Format: uuid */
             id: string;
@@ -2025,6 +2272,509 @@ export interface components {
             /** @description 下一頁游標；沒有下一頁時為 null。 */
             next_cursor: string | null;
         };
+        /** @enum {unknown} */
+        IdentifierType: "EVENT_ID" | "TRACE_ID" | "CORRELATION_ID" | "AGGREGATE_ID" | "BUSINESS_KEY" | "AUTO";
+        IdentifierQualifier: {
+            aggregate_type?: string;
+            business_key_name?: string;
+        };
+        Identifier: {
+            type: components["schemas"]["IdentifierType"];
+            value: string;
+            qualifier?: components["schemas"]["IdentifierQualifier"];
+        };
+        RequestedModel: {
+            id: string;
+            version: number;
+        };
+        ScopeAdjustment: {
+            event_id: string;
+            reason: string;
+        };
+        ScopeAdjustments: {
+            include: components["schemas"]["ScopeAdjustment"][];
+            exclude: components["schemas"]["ScopeAdjustment"][];
+        };
+        EvaluationRequest: {
+            identifier: components["schemas"]["Identifier"];
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            model?: components["schemas"]["RequestedModel"];
+            scope_adjustments?: components["schemas"]["ScopeAdjustments"];
+        };
+        Sha256: string;
+        ModelRef: {
+            id: string;
+            version: number;
+            /** @enum {unknown} */
+            kind: "FLOW" | "GLOBAL_CHECK";
+            source_path: string;
+            checksum: components["schemas"]["Sha256"];
+        };
+        BusinessOutcome: {
+            /** @enum {unknown} */
+            category: "SUCCESS" | "EXPECTED_FAILURE" | "COMPENSATED" | "INCOMPLETE";
+            code: string;
+            label: string;
+        };
+        ExpectationResult: {
+            id: string;
+            /** @enum {unknown} */
+            state: "SATISFIED" | "WAITING" | "REMINDER" | "VIOLATED" | "LATE_SATISFIED";
+            trigger_event_ids: string[];
+            satisfying_event_ids: string[];
+            /** Format: date-time */
+            reminder_at: string | null;
+            /** Format: date-time */
+            deadline_at: string | null;
+        };
+        FlowResult: {
+            model: components["schemas"]["ModelRef"];
+            /** @enum {unknown} */
+            role: "ROOT" | "CHILD";
+            /** @enum {unknown} */
+            status: "IN_PROGRESS" | "CONFORMANT" | "DEVIATED" | "INCONCLUSIVE" | "AMBIGUOUS";
+            candidate_path_ids: string[];
+            matched_path_id: string | null;
+            outcome: components["schemas"]["BusinessOutcome"] | null;
+        };
+        GlobalCheckResult: {
+            model: components["schemas"]["ModelRef"];
+            /** @enum {unknown} */
+            status: "CONFORMANT" | "DEVIATED" | "INCONCLUSIVE";
+            finding_codes: string[];
+        };
+        EvidenceReference: {
+            /** @enum {unknown} */
+            type: "EVENT" | "TRACE" | "LOG_QUERY" | "TIMELINE_QUERY" | "SOURCE_HEALTH";
+            value: string;
+        };
+        Finding: {
+            /** Format: uuid */
+            id: string | null;
+            /** @enum {unknown} */
+            rule_kind: "FLOW_EXPECTATION" | "MODEL_RULE" | "GLOBAL_CHECK";
+            rule_id: string;
+            rule_version: number;
+            rule_checksum: components["schemas"]["Sha256"];
+            /** @enum {unknown} */
+            severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            code: string;
+            /** @enum {string|null} */
+            expectation_state: "SATISFIED" | "WAITING" | "REMINDER" | "VIOLATED" | "LATE_SATISFIED" | null;
+            evidence_references: components["schemas"]["EvidenceReference"][];
+            recommended_query_template_id: string | null;
+        };
+        CheckResult: {
+            /** @enum {unknown} */
+            check_status: "NO_DATA" | "IN_PROGRESS" | "CONFORMANT" | "DEVIATED" | "INCONCLUSIVE" | "AMBIGUOUS";
+            business_outcome: components["schemas"]["BusinessOutcome"] | null;
+            expectations: components["schemas"]["ExpectationResult"][];
+            flows: components["schemas"]["FlowResult"][];
+            global_checks: components["schemas"]["GlobalCheckResult"][];
+            findings: components["schemas"]["Finding"][];
+            unmapped_event_ids: string[];
+            /** @constant */
+            evaluator_contract_version: 1;
+            evaluator_build_version: string;
+        };
+        SourceComponentHealth: {
+            /** @enum {unknown} */
+            component: "CANONICAL_EVENTS" | "INGESTION_WATERMARK" | "RELATION_INDEX";
+            /** @enum {unknown} */
+            status: "HEALTHY" | "STALE" | "PARTIAL" | "UNAVAILABLE";
+            detail_code: string;
+        };
+        "$defs-SourceHealth": {
+            /** @enum {unknown} */
+            status: "HEALTHY" | "STALE" | "PARTIAL" | "UNAVAILABLE";
+            /** Format: date-time */
+            checked_at: string;
+            /** Format: date-time */
+            coverage_from: string;
+            /** Format: date-time */
+            coverage_to: string;
+            /** Format: date-time */
+            watermark: string | null;
+            truncated: boolean;
+            components: components["schemas"]["SourceComponentHealth"][];
+        };
+        EventReferenceCore: {
+            event_id: string;
+            event_type: string;
+            event_version: number;
+            /** Format: date-time */
+            occurred_at: string;
+            producer: string;
+            aggregate_type: string;
+            aggregate_id: string;
+            sequence: number;
+            correlation_id: string;
+            trace_id: string | null;
+            payload_sha256: components["schemas"]["Sha256"];
+            ordinal: number;
+            masked_payload?: Record<string, never> | null;
+        };
+        EventReference: components["schemas"]["EventReferenceCore"];
+        ExcludedEventReference: components["schemas"]["EventReferenceCore"] & {
+            reason: string;
+        };
+        Relationship: {
+            ordinal: number;
+            from_event_id: string | null;
+            to_event_id: string;
+            /** @enum {unknown} */
+            relation_type: "SEED" | "SAME_CORRELATION" | "SAME_AGGREGATE" | "CAUSATION" | "BUSINESS_KEY" | "PARENT_CHILD" | "CUSTOM_INCLUDE";
+            source_field: string | null;
+            source_model_id: string | null;
+            source_rule_id: string | null;
+        };
+        ScopeLimits: {
+            max_duration_seconds: number;
+            max_events: number;
+            max_correlations: number;
+            max_relationship_depth: number;
+        };
+        ResolvedScope: {
+            /** @enum {unknown} */
+            mode: "STANDARD_SCOPE" | "CUSTOM_SCOPE";
+            seeds: string[];
+            events: components["schemas"]["EventReference"][];
+            excluded_events: components["schemas"]["ExcludedEventReference"][];
+            relationships: components["schemas"]["Relationship"][];
+            limits: components["schemas"]["ScopeLimits"];
+        };
+        IdentifierCandidate: {
+            type: components["schemas"]["IdentifierType"];
+            /** @enum {unknown} */
+            confidence: "HIGH" | "MEDIUM" | "LOW";
+            reason_code: string;
+        };
+        ModelCandidate: {
+            model: components["schemas"]["ModelRef"];
+            /** @enum {unknown} */
+            confidence: "HIGH" | "MEDIUM" | "LOW";
+            reason_codes: string[];
+        };
+        EvaluationResponse: {
+            /** @enum {unknown} */
+            resolution_status: "NO_DATA" | "IDENTIFIER_SELECTION_REQUIRED" | "MODEL_SELECTION_REQUIRED" | "NO_APPLICABLE_MODEL" | "EVALUATED";
+            normalized_request: components["schemas"]["EvaluationRequest"];
+            source_health: components["schemas"]["$defs-SourceHealth"];
+            scope: components["schemas"]["ResolvedScope"];
+            identifier_candidates: components["schemas"]["IdentifierCandidate"][];
+            model_candidates: components["schemas"]["ModelCandidate"][];
+            model: components["schemas"]["ModelRef"] | null;
+            result: components["schemas"]["CheckResult"] | null;
+            event_set_hash: components["schemas"]["Sha256"] | null;
+            evaluation_hash: components["schemas"]["Sha256"] | null;
+            warnings: string[];
+        } & (unknown & unknown);
+        eventType: string;
+        eventTypes: components["schemas"]["eventType"][];
+        eventVersionSupport: {
+            event_type: components["schemas"]["eventType"];
+            versions: number[];
+        };
+        stableId: string;
+        businessKey: {
+            name: string;
+            json_pointer: string;
+            event_types: components["schemas"]["eventTypes"];
+        };
+        parentChildRelation: {
+            id: components["schemas"]["stableId"];
+            parent_aggregate_type: string;
+            child_aggregate_type: string;
+            business_key: string;
+        };
+        eventMatcher: {
+            event_types: components["schemas"]["eventTypes"];
+        };
+        outcome: {
+            code: components["schemas"]["stableId"];
+            label: string;
+            /** @enum {unknown} */
+            category: "SUCCESS" | "EXPECTED_FAILURE" | "COMPENSATED" | "INCOMPLETE";
+        };
+        modelId: string;
+        source: {
+            /** @constant */
+            authoring: "YAML_GIT";
+            /** @constant */
+            mutable_at_runtime: false;
+        };
+        appliesTo: {
+            aggregate_types: string[];
+            trigger_event_types: components["schemas"]["eventTypes"];
+            event_versions: components["schemas"]["eventVersionSupport"][];
+        };
+        scope: {
+            max_duration_seconds: number;
+            max_events: number;
+            max_correlations: number;
+            max_relationship_depth: number;
+            relations: ("SAME_CORRELATION" | "SAME_AGGREGATE" | "CAUSATION" | "BUSINESS_KEY" | "PARENT_CHILD")[];
+            business_keys: components["schemas"]["businessKey"][];
+            parent_child_relations: components["schemas"]["parentChildRelation"][];
+        };
+        flowNode: {
+            id: components["schemas"]["stableId"];
+            label: string;
+            event: components["schemas"]["eventMatcher"];
+            min_occurs: number;
+            max_occurs: number;
+        };
+        flowPath: {
+            id: components["schemas"]["stableId"];
+            label: string;
+            nodes: components["schemas"]["stableId"][];
+            forbidden_event_types?: components["schemas"]["eventType"][];
+            terminal: boolean;
+            outcome: components["schemas"]["outcome"];
+        };
+        expectation: {
+            id: components["schemas"]["stableId"];
+            label: string;
+            trigger: components["schemas"]["eventMatcher"];
+            expected: components["schemas"]["eventMatcher"];
+            /** @enum {unknown} */
+            temporal_relation: "BEFORE_OR_AT" | "AFTER_OR_AT";
+            reminder_after_seconds: number;
+            deadline_seconds: number;
+            exclusions: {
+                any_event_types: components["schemas"]["eventType"][];
+            };
+            /** @enum {unknown} */
+            severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            finding_code: components["schemas"]["stableId"];
+            recommended_query_template_id: string;
+        };
+        childModel: {
+            model_id: components["schemas"]["modelId"];
+            version: number;
+            activate_when: components["schemas"]["eventMatcher"];
+            /** @enum {unknown} */
+            relation: "SAME_CORRELATION" | "BUSINESS_KEY" | "PARENT_CHILD";
+        };
+        unmappedEventPolicy: {
+            /** @enum {unknown} */
+            default: "INFORMATIONAL" | "REMINDER" | "VIOLATION";
+            escalate_event_types: components["schemas"]["eventType"][];
+        };
+        globalRule: {
+            id: components["schemas"]["stableId"];
+            /** @enum {unknown} */
+            type: "DUPLICATE_EVENT_ID" | "NON_MONOTONIC_AGGREGATE_SEQUENCE" | "MISSING_TRACE_CONTEXT";
+            /** @enum {unknown} */
+            severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+            finding_code: components["schemas"]["stableId"];
+        };
+        fixtures: {
+            scenario_file: string;
+            case_ids: string[];
+        };
+        /** Event Hunter Check Model */
+        "check-model.schema": {
+            $schema?: string;
+            /** @constant */
+            contract_version: 1;
+            model_id: components["schemas"]["modelId"];
+            version: number;
+            /** @enum {unknown} */
+            kind: "FLOW" | "GLOBAL_CHECK";
+            /** @enum {unknown} */
+            status: "DRAFT" | "ACTIVE" | "RETIRED";
+            title: string;
+            description: string;
+            domain: string;
+            source: components["schemas"]["source"];
+            applies_to: components["schemas"]["appliesTo"];
+            scope: components["schemas"]["scope"];
+            nodes?: components["schemas"]["flowNode"][];
+            paths?: components["schemas"]["flowPath"][];
+            expectations?: components["schemas"]["expectation"][];
+            child_models?: components["schemas"]["childModel"][];
+            unmapped_event_policy?: components["schemas"]["unmappedEventPolicy"];
+            rules?: components["schemas"]["globalRule"][];
+            fixtures?: components["schemas"]["fixtures"];
+            $defs: {
+                modelId: string;
+                stableId: string;
+                eventType: string;
+                eventTypes: components["schemas"]["eventType"][];
+                source: {
+                    /** @constant */
+                    authoring: "YAML_GIT";
+                    /** @constant */
+                    mutable_at_runtime: false;
+                };
+                eventVersionSupport: {
+                    event_type: components["schemas"]["eventType"];
+                    versions: number[];
+                };
+                appliesTo: {
+                    aggregate_types: string[];
+                    trigger_event_types: components["schemas"]["eventTypes"];
+                    event_versions: components["schemas"]["eventVersionSupport"][];
+                };
+                businessKey: {
+                    name: string;
+                    json_pointer: string;
+                    event_types: components["schemas"]["eventTypes"];
+                };
+                parentChildRelation: {
+                    id: components["schemas"]["stableId"];
+                    parent_aggregate_type: string;
+                    child_aggregate_type: string;
+                    business_key: string;
+                };
+                scope: {
+                    max_duration_seconds: number;
+                    max_events: number;
+                    max_correlations: number;
+                    max_relationship_depth: number;
+                    relations: ("SAME_CORRELATION" | "SAME_AGGREGATE" | "CAUSATION" | "BUSINESS_KEY" | "PARENT_CHILD")[];
+                    business_keys: components["schemas"]["businessKey"][];
+                    parent_child_relations: components["schemas"]["parentChildRelation"][];
+                };
+                eventMatcher: {
+                    event_types: components["schemas"]["eventTypes"];
+                };
+                flowNode: {
+                    id: components["schemas"]["stableId"];
+                    label: string;
+                    event: components["schemas"]["eventMatcher"];
+                    min_occurs: number;
+                    max_occurs: number;
+                };
+                outcome: {
+                    code: components["schemas"]["stableId"];
+                    label: string;
+                    /** @enum {unknown} */
+                    category: "SUCCESS" | "EXPECTED_FAILURE" | "COMPENSATED" | "INCOMPLETE";
+                };
+                flowPath: {
+                    id: components["schemas"]["stableId"];
+                    label: string;
+                    nodes: components["schemas"]["stableId"][];
+                    forbidden_event_types?: components["schemas"]["eventType"][];
+                    terminal: boolean;
+                    outcome: components["schemas"]["outcome"];
+                };
+                expectation: {
+                    id: components["schemas"]["stableId"];
+                    label: string;
+                    trigger: components["schemas"]["eventMatcher"];
+                    expected: components["schemas"]["eventMatcher"];
+                    /** @enum {unknown} */
+                    temporal_relation: "BEFORE_OR_AT" | "AFTER_OR_AT";
+                    reminder_after_seconds: number;
+                    deadline_seconds: number;
+                    exclusions: {
+                        any_event_types: components["schemas"]["eventType"][];
+                    };
+                    /** @enum {unknown} */
+                    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+                    finding_code: components["schemas"]["stableId"];
+                    recommended_query_template_id: string;
+                };
+                childModel: {
+                    model_id: components["schemas"]["modelId"];
+                    version: number;
+                    activate_when: components["schemas"]["eventMatcher"];
+                    /** @enum {unknown} */
+                    relation: "SAME_CORRELATION" | "BUSINESS_KEY" | "PARENT_CHILD";
+                };
+                unmappedEventPolicy: {
+                    /** @enum {unknown} */
+                    default: "INFORMATIONAL" | "REMINDER" | "VIOLATION";
+                    escalate_event_types: components["schemas"]["eventType"][];
+                };
+                globalRule: {
+                    id: components["schemas"]["stableId"];
+                    /** @enum {unknown} */
+                    type: "DUPLICATE_EVENT_ID" | "NON_MONOTONIC_AGGREGATE_SEQUENCE" | "MISSING_TRACE_CONTEXT";
+                    /** @enum {unknown} */
+                    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+                    finding_code: components["schemas"]["stableId"];
+                };
+                fixtures: {
+                    scenario_file: string;
+                    case_ids: string[];
+                };
+            };
+        } & (unknown & unknown);
+        RegistryEntry: {
+            source_path: string;
+            checksum: string;
+            model: components["schemas"]["check-model.schema"];
+        };
+        CreateCheckSnapshotRequest: {
+            evaluation_request: components["schemas"]["EvaluationRequest"];
+            expected_event_set_hash: components["schemas"]["Sha256"];
+            expected_evaluation_hash: components["schemas"]["Sha256"];
+            retention_profile?: {
+                id: string;
+                version: number;
+            } | null;
+        };
+        SnapshotEventReference: {
+            event_id: string;
+            event_type: string;
+            /** Format: date-time */
+            occurred_at: string;
+            producer: string;
+            aggregate_type: string;
+            aggregate_id: string;
+            correlation_id: string;
+            trace_id: string | null;
+            payload_sha256: components["schemas"]["Sha256"];
+            ordinal: number;
+            /** @enum {unknown} */
+            disposition: "INCLUDED" | "EXCLUDED";
+            adjustment_reason: string | null;
+            source_available: boolean;
+        };
+        FindingFeedback: {
+            /** Format: uuid */
+            finding_id: string;
+            /** @enum {unknown} */
+            status: "UNREVIEWED" | "CONFIRMED" | "FALSE_POSITIVE" | "NEEDS_REVIEW";
+            actor_id: string;
+            actor_role: string;
+            /** Format: date-time */
+            updated_at: string | null;
+            lock_version: number;
+        };
+        CheckSnapshot: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {unknown} */
+            provenance: "LIVE_EVALUATION" | "LEGACY_PATTERN_MIGRATION";
+            created_by: string;
+            /** @enum {unknown} */
+            created_by_role: "INVESTIGATOR" | "ADMIN";
+            /** Format: date-time */
+            created_at: string;
+            evaluation_request: components["schemas"]["EvaluationRequest"];
+            /** Format: date-time */
+            as_of: string;
+            source_health: components["schemas"]["$defs-SourceHealth"];
+            model: components["schemas"]["ModelRef"];
+            result: components["schemas"]["CheckResult"];
+            event_references: components["schemas"]["SnapshotEventReference"][];
+            relationships: components["schemas"]["Relationship"][];
+            /** @description Current mutable feedback projection. It is not part of the immutable Snapshot or evaluation_hash. */
+            finding_feedback: components["schemas"]["FindingFeedback"][];
+            event_set_hash: components["schemas"]["Sha256"];
+            evaluation_hash: components["schemas"]["Sha256"];
+            /** @constant */
+            result_schema_version: 1;
+            retention_profile: Record<string, never> | null;
+        };
         stringMap: {
             [key: string]: string;
         };
@@ -2185,6 +2935,14 @@ export interface components {
         CorrelationId: string;
         /** @description 調查案件 UUID。 */
         InvestigationId: string;
+        /** @description Git-managed Check Model 穩定識別碼。 */
+        CheckModelId: string;
+        /** @description Immutable Check Model version；不接受 latest。 */
+        CheckModelVersion: number;
+        /** @description Immutable Check Snapshot UUID。 */
+        CheckSnapshotId: string;
+        /** @description Persisted generalized Check Finding UUID。 */
+        CheckFindingId: string;
         /** @description Replay 工作 UUID。 */
         ReplayId: string;
         /** @description 每頁筆數；伺服器仍會套用最大上限。 */
@@ -2201,6 +2959,8 @@ export interface components {
         ToTimeOptional: string;
         /** @description GET 回應的 ETag，例如 `W/"investigation-123-lock-v7"`。版本不符時回傳 `409 Conflict`。 */
         IfMatch: string;
+        /** @description Actor-scoped Snapshot create retry key；相同 key 搭配不同 request 回 409。 */
+        IdempotencyKey: string;
     };
     requestBodies: never;
     headers: {
@@ -2293,6 +3053,379 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    evaluateEventCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description 事件範圍解析完成；可能已評估、需要選擇或沒有資料／Model。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+            504: components["responses"]["DependencyTimeout"];
+        };
+    };
+    listCheckModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check Model catalog。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistryEntry"][];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getCheckModelVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Git-managed Check Model 穩定識別碼。 */
+                modelId: components["parameters"]["CheckModelId"];
+                /** @description Immutable Check Model version；不接受 latest。 */
+                version: components["parameters"]["CheckModelVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Model definition、source path 與 checksum 由 server response metadata 一併提供。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistryEntry"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listCheckSnapshots: {
+        parameters: {
+            query?: {
+                /** @description 依保存時的 identifier value 搜尋，最多 200 字元。 */
+                identifier?: string;
+                check_status?: "NO_DATA" | "IN_PROGRESS" | "CONFORMANT" | "DEVIATED" | "INCONCLUSIVE" | "AMBIGUOUS";
+                page_size?: number;
+                /** @description 上一頁回應的 `next_cursor`，第一次查詢不傳。 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved Results page。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSnapshotPage"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    createCheckSnapshot: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Actor-scoped Snapshot create retry key；相同 key 搭配不同 request 回 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCheckSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description 相同 actor 與 Idempotency-Key 已成功，回傳原 Snapshot。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSnapshot"];
+                };
+            };
+            /** @description Snapshot、event refs、relations、findings 與 Audit 已 transactionally 建立。 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSnapshot"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description `EVALUATION_CHANGED`、`MODEL_VERSION_UNAVAILABLE` 或 `IDEMPOTENCY_KEY_REUSED`。 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventCheckConflictError"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["DependencyUnavailable"];
+            504: components["responses"]["DependencyTimeout"];
+        };
+    };
+    getCheckSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Immutable Check Snapshot UUID。 */
+                snapshotId: components["parameters"]["CheckSnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot 與保存當下的 event reference 可用狀態。ClickHouse TTL／Evidence Archive 的讀取時 source revalidation 由選用的 EH-ECM-007 交付。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckSnapshot"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    classifyCheckFinding: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description GET 回應的 ETag，例如 `W/"investigation-123-lock-v7"`。版本不符時回傳 `409 Conflict`。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description Persisted generalized Check Finding UUID。 */
+                findingId: components["parameters"]["CheckFindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassifyCheckFindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Feedback 與 Audit 已在同一 transaction 更新。 */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckFindingFeedback"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listInvestigationCheckSnapshots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 調查案件 UUID。 */
+                investigationId: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 依 linked_at 排序的 immutable Snapshot links。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationCheckSnapshotLink"][];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    attachInvestigationCheckSnapshot: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description GET 回應的 ETag，例如 `W/"investigation-123-lock-v7"`。版本不符時回傳 `409 Conflict`。 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description 調查案件 UUID。 */
+                investigationId: components["parameters"]["InvestigationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachInvestigationCheckSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Snapshot 已連結，回傳既有 link；不重複寫入 Audit 或推進 Case lock version。 */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationCheckSnapshotLink"];
+                };
+            };
+            /** @description Link 與 Audit 已建立，Case lock version 已推進。 */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationCheckSnapshotLink"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
             429: components["responses"]["RateLimited"];
         };
     };
@@ -3130,6 +4263,8 @@ export interface operations {
     listInvestigations: {
         parameters: {
             query?: {
+                /** @description 案件編號或標題的大小寫不敏感子字串搜尋，最多 100 字元。 */
+                query?: string;
                 status?: components["schemas"]["InvestigationStatus"];
                 severity?: components["schemas"]["Severity"];
                 /** @description v1.1 的 owner 欄位；保留 assignee 名稱以相容既有契約。 */

@@ -57,6 +57,12 @@ tags:
   - name: Ingestion Issues
     description: 統一查詢 Schema 驗證、Admission quarantine 與 technical DLQ 的安全摘要；不回傳 raw payload 或 exception 細節。
     x-mvp-status: phase-1.1
+  - name: Event Check
+    description: 由任一受支援 ID 建立有界 scope 並執行唯讀流程符合性檢查；一般 evaluation 不保存。後端 API 已實作，workspace UI 由 EH-ECM-004 交付。
+    x-mvp-status: implemented-event-check-api
+  - name: Check Models
+    description: 列出 YAML／Git 發布並編譯進 immutable Registry 的 Flow Models 與 Global Checks；後端 API 已實作，registry UI 由 EH-ECM-004 交付。
+    x-mvp-status: implemented-event-check-api
   - name: Journey Profile Registry
     description: 列出由 YAML contract 編譯進 API 的唯讀 Journey Profiles；執行期不提供編輯或發布。
     x-mvp-status: phase-1.1
@@ -134,14 +140,373 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /api/v1/event-checks/evaluations:
+    x-mvp-status: implemented-event-check-api
+    x-owner: event-check
+    post:
+      tags: [Event Check]
+      operationId: evaluateEventCheck
+      summary: 即時解析事件範圍並執行 Check Model
+      description: >-
+        Stateless query-time evaluation。NO_DATA、IDENTIFIER_SELECTION_REQUIRED、
+        MODEL_SELECTION_REQUIRED 與 NO_APPLICABLE_MODEL 都以 200 回傳可操作的產品狀態；
+        本 operation 不建立 PostgreSQL Snapshot，也不接受 SQL、任意 URL 或 production command。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './contracts/event-check/event-check-evaluation.schema.json#/$defs/EvaluationRequest'
+      responses:
+        '200':
+          description: 事件範圍解析完成；可能已評估、需要選擇或沒有資料／Model。
+          content:
+            application/json:
+              schema:
+                $ref: './contracts/event-check/event-check-evaluation.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/check-models:
+    x-mvp-status: implemented-event-check-api
+    x-owner: event-check
+    get:
+      tags: [Check Models]
+      operationId: listCheckModels
+      summary: 列出 immutable Check Model Registry
+      description: 回傳已發布 Flow Models 與 Global Checks；本階段不提供 runtime CRUD 或發布 API。
+      responses:
+        '200':
+          description: Check Model catalog。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: './contracts/check-models/check-model-registry.schema.json#/$defs/RegistryEntry'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/check-models/{modelId}/versions/{version}:
+    x-mvp-status: implemented-event-check-api
+    x-owner: event-check
+    get:
+      tags: [Check Models]
+      operationId: getCheckModelVersion
+      summary: 取得指定 Check Model immutable version
+      parameters:
+        - $ref: '#/components/parameters/CheckModelId'
+        - $ref: '#/components/parameters/CheckModelVersion'
+      responses:
+        '200':
+          description: Model definition、source path 與 checksum 由 server response metadata 一併提供。
+          content:
+            application/json:
+              schema:
+                $ref: './contracts/check-models/check-model-registry.schema.json#/$defs/RegistryEntry'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/check-snapshots:
+    x-mvp-status: implemented-event-check-api
+    x-owner: event-check
+    get:
+      tags: [Event Check]
+      operationId: listCheckSnapshots
+      summary: 列出已保存的 immutable Event Check 結果
+      description: >-
+        Saved Results read-model。以建立時間與 UUID 進行穩定 keyset 分頁，可依識別碼或
+        Check status 篩選；僅回傳摘要、固定 evaluation request 與案件連結數，不包含 event payload。
+      parameters:
+        - name: identifier
+          in: query
+          description: 依保存時的 identifier value 搜尋，最多 200 字元。
+          schema:
+            type: string
+            maxLength: 200
+        - name: check_status
+          in: query
+          schema:
+            type: string
+            enum: [NO_DATA, IN_PROGRESS, CONFORMANT, DEVIATED, INCONCLUSIVE, AMBIGUOUS]
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: 上一頁回應的 `next_cursor`，第一次查詢不傳。
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saved Results page。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckSnapshotPage'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      tags: [Event Check]
+      operationId: createCheckSnapshot
+      summary: 驗證 evaluation hashes 並保存 immutable Snapshot
+      description: >-
+        只允許 INVESTIGATOR／ADMIN。伺服器使用相同 as_of 與 pinned Model version 重算；
+        event set 或 result 改變時回 409 EVALUATION_CHANGED，不接受前端 result JSON 作為正式資料。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './contracts/event-check/check-snapshot.schema.json#/$defs/CreateCheckSnapshotRequest'
+      responses:
+        '200':
+          description: 相同 actor 與 Idempotency-Key 已成功，回傳原 Snapshot。
+          content:
+            application/json:
+              schema:
+                $ref: './contracts/event-check/check-snapshot.schema.json'
+        '201':
+          description: Snapshot、event refs、relations、findings 與 Audit 已 transactionally 建立。
+          content:
+            application/json:
+              schema:
+                $ref: './contracts/event-check/check-snapshot.schema.json'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: >-
+            `EVALUATION_CHANGED`、`MODEL_VERSION_UNAVAILABLE` 或 `IDEMPOTENCY_KEY_REUSED`。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventCheckConflictError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+        '504':
+          $ref: '#/components/responses/DependencyTimeout'
+
+  /api/v1/check-snapshots/{snapshotId}:
+    x-mvp-status: implemented-event-check-api
+    x-owner: event-check
+    get:
+      tags: [Event Check]
+      operationId: getCheckSnapshot
+      summary: 取得 immutable Check Snapshot
+      parameters:
+        - $ref: '#/components/parameters/CheckSnapshotId'
+      responses:
+        '200':
+          description: >-
+            Snapshot 與保存當下的 event reference 可用狀態。ClickHouse TTL／Evidence Archive 的讀取時
+            source revalidation 由選用的 EH-ECM-007 交付。
+          content:
+            application/json:
+              schema:
+                $ref: './contracts/event-check/check-snapshot.schema.json'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/check-findings/{findingId}/feedback:
+    x-mvp-status: implemented-event-check-api
+    x-owner: investigation
+    parameters:
+      - $ref: '#/components/parameters/CheckFindingId'
+    patch:
+      tags: [Investigation, Event Check]
+      operationId: classifyCheckFinding
+      summary: 更新 generalized Check Finding 的人工判定
+      description: >-
+        Finding 本身 append-only；只更新 feedback current state。相容期舊 classifyPatternFinding
+        透過 adapter 操作同一筆 feedback，不建立第二套狀態。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassifyCheckFindingRequest'
+      responses:
+        '200':
+          description: Feedback 與 Audit 已在同一 transaction 更新。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckFindingFeedback'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/v1/investigations/{investigationId}/check-snapshots:
+    x-mvp-status: implemented-event-check-api
+    x-owner: investigation
+    parameters:
+      - $ref: '#/components/parameters/InvestigationId'
+    get:
+      tags: [Investigation, Event Check]
+      operationId: listInvestigationCheckSnapshots
+      summary: 列出案件已連結的 Check Snapshots
+      responses:
+        '200':
+          description: 依 linked_at 排序的 immutable Snapshot links。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvestigationCheckSnapshotLink'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      tags: [Investigation, Event Check]
+      operationId: attachInvestigationCheckSnapshot
+      summary: 以 optimistic lock 將 Snapshot 加入案件
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachInvestigationCheckSnapshotRequest'
+      responses:
+        '200':
+          description: Snapshot 已連結，回傳既有 link；不重複寫入 Audit 或推進 Case lock version。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCheckSnapshotLink'
+        '201':
+          description: Link 與 Audit 已建立，Case lock version 已推進。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCheckSnapshotLink'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /api/v1/patterns:
     x-mvp-status: mvp
     x-owner: event-hunter
     get:
       tags: [Pattern Registry]
       operationId: listPatterns
+      deprecated: true
       summary: 列出可執行的確定性 Pattern
-      description: 回傳由 Go 程式碼註冊的 Pattern metadata；MVP 不提供新增、修改或刪除 API。
+      description: 相容 endpoint；正式判定來源已遷移至 Check Model Registry，待 compatibility acceptance 後移除。
       responses:
         '200':
           description: Pattern 清單。
@@ -160,6 +525,7 @@ paths:
     get:
       tags: [Pattern Registry]
       operationId: getPatternEffectiveness
+      deprecated: true
       summary: 取得 Pattern 成效摘要
       description: >-
         由後端在固定 30 天窗口彙總 PostgreSQL pattern findings；資料來源失敗時回傳 503，
@@ -566,8 +932,9 @@ paths:
     get:
       tags: [Business Timeline]
       operationId: getBusinessTimeline
+      deprecated: true
       summary: 依 correlationId 重建業務時間線
-      description: 從 ClickHouse 唯讀查詢相關事件、Trace 連結與服務版本，提供調查與證據呈現；不會重送事件或修改正式系統。
+      description: 相容 endpoint；新產品入口為 Event Check。此 API 仍唯讀且不會重送事件或修改正式系統。
       parameters:
         - $ref: '#/components/parameters/FromTimeOptional'
         - $ref: '#/components/parameters/ToTimeOptional'
@@ -623,10 +990,12 @@ paths:
     get:
       tags: [Business Timeline]
       operationId: getBusinessJourney
+      deprecated: true
       summary: 依 correlationId 組織唯讀 Business Journey
       description: |
         將既有 canonical events 依物流業務 milestone 組織成 expected/actual、跨服務 duration
         與確定性異常提示；目前物流 profile 只有出現 ShipmentDelivered 才標示 COMPLETED。
+        相容 endpoint；正式流程判讀已由 Event Check Flow 與版本化 Check Model 取代。
         此操作只讀取 ClickHouse，不建立 projection、不重送事件，也不修改正式系統。
       parameters:
         - $ref: '#/components/parameters/FromTime'
@@ -653,8 +1022,10 @@ paths:
     get:
       tags: [Journey Profile Registry]
       operationId: listJourneyProfiles
+      deprecated: true
       summary: 列出目前 API build 內的 Journey Profiles
       description: |
+        相容 endpoint；正式 registry 為 `/api/v1/check-models`。
         回傳由 `contracts/journeys/*.yaml` 產生並編譯進目前 API build 的 immutable registry。
         `source_path` 與 `checksum` 用來辨識來源版本；此 endpoint 不代表已提供 runtime 編輯、
         版本選擇或發布能力。
@@ -1036,8 +1407,14 @@ paths:
       tags: [Investigation]
       operationId: listInvestigations
       summary: 列出調查案件
-      description: 依狀態、嚴重度、priority、owner、tag 或 correlationId 查詢 PostgreSQL 控制面案件。
+      description: 依案件編號／標題關鍵字、狀態、嚴重度、priority、owner、tag 或 correlationId 查詢 PostgreSQL 控制面案件。
       parameters:
+        - name: query
+          in: query
+          description: 案件編號或標題的大小寫不敏感子字串搜尋，最多 100 字元。
+          schema:
+            type: string
+            maxLength: 100
         - name: status
           in: query
           schema:
@@ -1231,7 +1608,7 @@ paths:
     post:
       tags: [Investigation]
       operationId: attachInvestigationEvent
-      summary: 將 Timeline event 加入既有案件
+      summary: 將 Timeline event 加入案件
       description: |
         以 bounded `from`/`to` 到 ClickHouse 精確驗證 event 後，只將 EVENT reference 與
         checksum 附加到案件，不複製 event payload。同一案件重複附加同一 event 為
@@ -1667,6 +2044,38 @@ components:
       schema:
         type: string
         format: uuid
+    CheckModelId:
+      name: modelId
+      in: path
+      required: true
+      description: Git-managed Check Model 穩定識別碼。
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9-]{2,63}$'
+    CheckModelVersion:
+      name: version
+      in: path
+      required: true
+      description: Immutable Check Model version；不接受 latest。
+      schema:
+        type: integer
+        minimum: 1
+    CheckSnapshotId:
+      name: snapshotId
+      in: path
+      required: true
+      description: Immutable Check Snapshot UUID。
+      schema:
+        type: string
+        format: uuid
+    CheckFindingId:
+      name: findingId
+      in: path
+      required: true
+      description: Persisted generalized Check Finding UUID。
+      schema:
+        type: string
+        format: uuid
     ReplayId:
       name: replayId
       in: path
@@ -1728,6 +2137,15 @@ components:
       schema:
         type: string
         minLength: 1
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Actor-scoped Snapshot create retry key；相同 key 搭配不同 request 回 409。
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
   headers:
     ETag:
       description: 資源版本，用於下一次更新的 `If-Match` 樂觀鎖。
@@ -1968,7 +2386,7 @@ components:
     PatternEffectivenessMetric:
       type: object
       additionalProperties: false
-      required: [pattern_id, hit_count, last_hit_at, investigation_count]
+      required: [pattern_id, hit_count, last_hit_at, investigation_count, confirmed_count, false_positive_count, needs_review_count, unreviewed_count, reviewed_count, false_positive_rate]
       properties:
         pattern_id:
           type: string
@@ -1983,6 +2401,32 @@ components:
           type: integer
           format: int64
           minimum: 0
+        confirmed_count:
+          type: integer
+          format: int64
+          minimum: 0
+        false_positive_count:
+          type: integer
+          format: int64
+          minimum: 0
+        needs_review_count:
+          type: integer
+          format: int64
+          minimum: 0
+        unreviewed_count:
+          type: integer
+          format: int64
+          minimum: 0
+        reviewed_count:
+          type: integer
+          format: int64
+          minimum: 0
+        false_positive_rate:
+          type: [number, 'null']
+          format: double
+          minimum: 0
+          maximum: 1
+          description: FALSE_POSITIVE / reviewed_count；沒有人工判定時為 null，不假裝為 0。
     LifecycleStatus:
       type: string
       enum: [DRAFT, ACTIVE, DEPRECATED]
@@ -2202,7 +2646,8 @@ components:
           enum: [EMPTY_INPUT, INPUT_TOO_SHORT, INPUT_TOO_LONG, INVALID_EXPLICIT_IDENTIFIER, UNSUPPORTED_IDENTIFIER_FORMAT, IDENTIFIER_CONFIRMED, SELECT_IDENTIFIER_TYPE]
     SavedSearchTarget:
       type: string
-      enum: [TIMELINE, JOURNEY]
+      enum: [EVENT_CHECK, TIMELINE, JOURNEY]
+      description: EVENT_CHECK 是正式目標；TIMELINE 與 JOURNEY 僅供既有查詢捷徑相容。
     SavedSearchQuery:
       type: object
       additionalProperties: false
@@ -2243,6 +2688,30 @@ components:
         include_processing_attempts:
           type: boolean
           default: false
+        identifier_type:
+          type: string
+          enum: [AUTO, CORRELATION_ID, EVENT_ID, TRACE_ID, AGGREGATE_ID, BUSINESS_KEY]
+          description: target=EVENT_CHECK 時必填。
+        identifier_value:
+          type: string
+          maxLength: 200
+          description: target=EVENT_CHECK 時必填。
+        aggregate_type:
+          type: string
+          maxLength: 200
+        business_key_name:
+          type: string
+          maxLength: 200
+        model_id:
+          type: string
+          maxLength: 200
+        model_version:
+          type: integer
+          minimum: 1
+        workspace_tab:
+          type: string
+          enum: [summary, timeline, flow, findings, cases]
+          description: target=EVENT_CHECK 時預設為 summary。
     CreateSavedSearchRequest:
       type: object
       additionalProperties: false
@@ -2274,7 +2743,7 @@ components:
           $ref: '#/components/schemas/SavedSearchQuery'
         open_url:
           type: string
-          pattern: '^/(timeline|journey)\\?'
+          pattern: '^/(event-check|timeline|journey)\\?'
         created_at:
           type: string
           format: date-time
@@ -2423,6 +2892,117 @@ components:
             current_resource:
               type: object
               additionalProperties: true
+    EventCheckConflictError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum: [EVALUATION_CHANGED, MODEL_VERSION_UNAVAILABLE, IDEMPOTENCY_KEY_REUSED]
+            current_event_set_hash:
+              type: [string, 'null']
+              pattern: '^[0-9a-f]{64}$'
+            current_evaluation_hash:
+              type: [string, 'null']
+              pattern: '^[0-9a-f]{64}$'
+          description: >-
+            EVALUATION_CHANGED 時回傳目前 hashes，要求使用者重新檢視；伺服器不得靜默保存不同結果。
+    CheckSnapshotSummary:
+      type: object
+      additionalProperties: false
+      required: [id, created_by, created_by_role, created_at, evaluation_request, as_of, source_health_status, model, check_status, event_count, finding_count, linked_case_count]
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+        created_by_role:
+          type: string
+          enum: [INVESTIGATOR, ADMIN]
+        created_at:
+          type: string
+          format: date-time
+        evaluation_request:
+          $ref: './contracts/event-check/event-check-evaluation.schema.json#/$defs/EvaluationRequest'
+        as_of:
+          type: string
+          format: date-time
+        source_health_status:
+          type: string
+          enum: [HEALTHY, STALE, PARTIAL, UNAVAILABLE]
+        model:
+          type: object
+          additionalProperties: false
+          required: [id, version, kind]
+          properties:
+            id:
+              type: string
+            version:
+              type: integer
+              minimum: 1
+            kind:
+              type: string
+              enum: [FLOW, GLOBAL_CHECK]
+        check_status:
+          type: string
+          enum: [NO_DATA, IN_PROGRESS, CONFORMANT, DEVIATED, INCONCLUSIVE, AMBIGUOUS]
+        event_count:
+          type: integer
+          minimum: 0
+        finding_count:
+          type: integer
+          minimum: 0
+        linked_case_count:
+          type: integer
+          minimum: 0
+    CheckSnapshotPage:
+      type: object
+      additionalProperties: false
+      required: [items, page_size, next_cursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CheckSnapshotSummary'
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+        next_cursor:
+          type: [string, 'null']
+    AttachInvestigationCheckSnapshotRequest:
+      type: object
+      additionalProperties: false
+      required: [snapshot_id]
+      properties:
+        snapshot_id:
+          type: string
+          format: uuid
+    InvestigationCheckSnapshotLink:
+      type: object
+      additionalProperties: false
+      required: [investigation_id, snapshot_id, linked_by, linked_by_role, linked_at]
+      properties:
+        investigation_id:
+          type: string
+          format: uuid
+        snapshot_id:
+          type: string
+          format: uuid
+        linked_by:
+          type: string
+          minLength: 1
+          maxLength: 200
+        linked_by_role:
+          type: string
+          enum: [INVESTIGATOR, ADMIN]
+        linked_at:
+          type: string
+          format: date-time
     EventDefinition:
       type: object
       required: [event_type, description, producer, owner, compatibility_policy, lifecycle_status, lock_version, created_at, updated_at]
@@ -2836,7 +3416,7 @@ components:
             $ref: '#/components/schemas/CanonicalEvent'
     BusinessJourney:
       type: object
-      required: [correlation_id, profile_id, profile_version, profile_title, from, to, status, event_count, milestones, anomalies, unmapped_event_count]
+      required: [correlation_id, profile_id, profile_version, profile_title, from, to, status, event_count, completed_milestone_count, total_milestone_count, current_milestone_id, next_milestone_id, next_expected_event_types, trace_ids, milestones, anomalies, unmapped_event_count]
       properties:
         correlation_id:
           type: string
@@ -2860,6 +3440,29 @@ components:
         event_count:
           type: integer
           minimum: 0
+        completed_milestone_count:
+          type: integer
+          minimum: 0
+          description: 目前狀態為 COMPLETED 的里程碑數；失敗與補償不計入。
+        total_milestone_count:
+          type: integer
+          minimum: 0
+        current_milestone_id:
+          type: [string, 'null']
+          description: 第一個進行中里程碑；失敗或補償時則為造成終止狀態的里程碑。
+        next_milestone_id:
+          type: [string, 'null']
+          description: Profile 排序中目前里程碑的下一個定義；可能是選用支線，不代表一定會發生。
+        next_expected_event_types:
+          type: array
+          description: 目前里程碑正在等待或可接受的事件類型。
+          items:
+            type: string
+        trace_ids:
+          type: array
+          description: 此查詢窗口內 canonical events 所帶的相異 trace ID，依事件時間首次出現排序。
+          items:
+            type: string
         started_at:
           type: [string, 'null']
           format: date-time
@@ -3141,6 +3744,10 @@ components:
           type: integer
           format: int64
           minimum: 0
+    ClassifyCheckFindingRequest:
+      $ref: '#/components/schemas/ClassifyPatternFindingRequest'
+    CheckFindingFeedback:
+      $ref: '#/components/schemas/PatternFindingFeedback'
     Evidence:
       type: object
       additionalProperties: false

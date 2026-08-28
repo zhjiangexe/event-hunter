@@ -9,9 +9,10 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z'
+    # 帶 broad explorer filter，明確驗證仍保留的 Legacy Event Explorer 能力。
+    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&event_version=1'
     Then match script("document.querySelector('[data-testid=timeline-from]').step") == '1'
     And match script("document.querySelector('[data-testid=timeline-to]').step") == '1'
     When input("[data-testid='timeline-correlation-id']", 'ORDER-2001')
@@ -61,7 +62,7 @@ Feature: Event Hunter 調查員主要操作流程
     And match text("[data-testid='case-pattern-analysis-status']") contains '已命中'
     And match text("[data-testid='case-pattern-analysis-result']") contains 'payment-completed-without-shipment'
 
-  Scenario: Investigator 可把 Timeline Event 加入既有案件並保存為 Evidence reference
+  Scenario: Investigator 可把 Timeline Event 加入案件並保存為 Evidence reference
     * def uniqueId = java.util.UUID.randomUUID().toString()
     * def caseTitle = '[E2E] UI Timeline evidence ' + uniqueId
     * def from = '2026-08-20T11:00:00Z'
@@ -79,8 +80,8 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
-    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z'
+    Then waitForUrl(webBaseUrl + '/event-check')
+    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&event_version=1'
     When input("[data-testid='timeline-correlation-id']", 'ORDER-2001')
     And click("[data-testid='timeline-search-submit']")
     Then waitFor("[data-testid='timeline-event-0-type']")
@@ -116,9 +117,9 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     And match exists("[data-testid='create-investigation']") == false
-    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z'
+    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&event_version=1'
     When input("[data-testid='timeline-correlation-id']", 'ORDER-2001')
     And click("[data-testid='timeline-search-submit']")
     Then waitFor("[data-testid='timeline-event-0-type']")
@@ -127,62 +128,66 @@ Feature: Event Hunter 調查員主要操作流程
     And match exists("[data-testid='timeline-event-0-attach']") == false
 
   @eh-p1-1-013
-  Scenario: Timeline 與 Journey 空白查詢預設最近 72 小時
+  Scenario: Event Check 與舊 Journey 入口都使用最近 72 小時的 bounded request
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
-    And waitFor("[data-testid='timeline-from']")
-    And match script("new Date(document.querySelector('[data-testid=timeline-to]').value).getTime() - new Date(document.querySelector('[data-testid=timeline-from]').value).getTime()") == 72 * 60 * 60 * 1000
+    Then waitForUrl(webBaseUrl + '/event-check')
+    And waitFor("[data-testid='event-check-from']")
+    And match script("new Date(document.querySelector('[data-testid=event-check-to]').value).getTime() - new Date(document.querySelector('[data-testid=event-check-from]').value).getTime()") == 72 * 60 * 60 * 1000
 
     Given driver webBaseUrl + '/journey'
-    Then waitFor("[data-testid='journey-from']")
-    And match script("new Date(document.querySelector('[data-testid=journey-to]').value).getTime() - new Date(document.querySelector('[data-testid=journey-from]').value).getTime()") == 72 * 60 * 60 * 1000
+    Then waitUntil("window.location.pathname == '/event-check' && new URLSearchParams(window.location.search).get('tab') == 'flow'")
+    And waitFor("[data-testid='event-check-from']")
+    And match script("new Date(document.querySelector('[data-testid=event-check-to]').value).getTime() - new Date(document.querySelector('[data-testid=event-check-from]').value).getTime()") == 72 * 60 * 60 * 1000
 
   @eh-p1-1-013
-  Scenario: Timeline 查詢 URL 在 reload、back 與 forward 後完整還原
+  Scenario: Event Check bounded request 在 reload、back 與 forward 後完整還原
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z'
-    When input("[data-testid='timeline-correlation-id']", 'ORDER-2001')
-    And click("[data-testid='timeline-search-submit']")
-    Then waitUntil("new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-2001'")
-    And waitUntil("new URLSearchParams(window.location.search).get('include_processing_attempts') == 'true'")
-    And waitFor("[data-testid='timeline-results']")
-    And match text("[data-testid='timeline-event-count']") == '2'
-    And match text("[data-testid='timeline-query-window']") contains '查詢窗口'
+    Given driver webBaseUrl + '/event-check?identifier_type=CORRELATION_ID&identifier=ORDER-2001&from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&tab=timeline'
+    Then waitFor("[data-testid='event-check-results']")
+    And match text("[data-testid='event-check-status']") == 'DEVIATED'
+    And match text("[data-testid='event-check-event-0-type']") == 'OrderCreated'
+    And match text("[data-testid='event-check-event-1-type']") == 'PaymentCompleted'
+    And match exists("[data-testid='event-check-event-0-link-event']") == true
+    And match exists("[data-testid='event-check-event-0-link-logs']") == true
+    And match exists("[data-testid='event-check-event-0-link-trace']") == true
+    And match attribute("[data-testid='event-check-event-0-link-event']", 'href') contains '/explore?'
 
     When script("window.location.reload()")
-    Then waitUntil("new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-2001'")
-    And waitFor("[data-testid='timeline-results']")
-    And match script("document.querySelector('[data-testid=timeline-correlation-id]').value") == 'ORDER-2001'
-    And match text("[data-testid='timeline-event-count']") == '2'
+    Then waitUntil("new URLSearchParams(window.location.search).get('identifier') == 'ORDER-2001'")
+    And waitFor("[data-testid='event-check-results']")
+    And match script("document.querySelector('[data-testid=event-check-identifier]').value") == 'ORDER-2001'
+    And match text("[data-testid='event-check-event-0-type']") == 'OrderCreated'
 
-    When input("[data-testid='timeline-correlation-id']", 'ORDER-4002')
-    And click("[data-testid='timeline-search-submit']")
-    Then waitUntil("new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-4002'")
-    And waitFor("[data-testid='timeline-results']")
+    When input("[data-testid='event-check-identifier']", 'ORDER-DOES-NOT-EXIST')
+    And click("[data-testid='event-check-submit']")
+    Then waitUntil("new URLSearchParams(window.location.search).get('identifier') == 'ORDER-DOES-NOT-EXIST'")
+    And waitFor("[data-testid='event-check-results']")
+    And match text("[data-testid='event-check-status']") == 'NO_DATA'
 
     When script("window.history.back()")
-    Then waitUntil("new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-2001'")
-    And waitFor("[data-testid='timeline-results']")
-    And match script("document.querySelector('[data-testid=timeline-correlation-id]').value") == 'ORDER-2001'
-    And match text("[data-testid='timeline-event-count']") == '2'
+    Then waitUntil("new URLSearchParams(window.location.search).get('identifier') == 'ORDER-2001'")
+    And waitFor("[data-testid='event-check-results']")
+    And match script("document.querySelector('[data-testid=event-check-identifier]').value") == 'ORDER-2001'
+    And match text("[data-testid='event-check-status']") == 'DEVIATED'
 
     When script("window.history.forward()")
-    Then waitUntil("new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-4002'")
-    And waitFor("[data-testid='timeline-results']")
-    And match script("document.querySelector('[data-testid=timeline-correlation-id]').value") == 'ORDER-4002'
+    Then waitUntil("new URLSearchParams(window.location.search).get('identifier') == 'ORDER-DOES-NOT-EXIST'")
+    And waitFor("[data-testid='event-check-results']")
+    And match script("document.querySelector('[data-testid=event-check-identifier]').value") == 'ORDER-DOES-NOT-EXIST'
+    And match text("[data-testid='event-check-status']") == 'NO_DATA'
 
   @feature-guide
   Scenario: Viewer 可從 Event Hunter Guide 了解調查與接入方式並前往對應頁面
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     When click("[data-testid='nav-feature-guide']")
     Then waitForUrl(webBaseUrl + '/guide')
@@ -197,7 +202,7 @@ Feature: Event Hunter 調查員主要操作流程
     And match text("[data-testid='integration-change-cases']") contains '既有 canonical topic ＋新 event type'
     And match text("[data-testid='integration-glossary']") contains '事件信箱／頻道'
     And match text("[data-testid='integration-no-data']") contains '照這個順序查'
-    And match text("[data-testid='integration-data-plane']") contains 'Business Timeline 不直接從 Kafka'
+    And match text("[data-testid='integration-data-plane']") contains 'Event Check 不直接從 Kafka'
     And match text("[data-testid='integration-admission-gates']") contains '五關都通過'
     And match text("[data-testid='integration-failure-modes']") contains '格式正確但語意錯誤'
     And match text("[data-testid='integration-commands']") contains 'verify-event-pipeline-readiness.sh'
@@ -206,11 +211,11 @@ Feature: Event Hunter 調查員主要操作流程
     Then match script("document.querySelector('[data-testid=integration-runbook-step-normalize]').open") == true
     And match text("[data-testid='integration-runbook-step-normalize']") contains 'Adapter 不直接寫 ClickHouse'
 
-    When select("[data-testid='feature-guide-select']", 'journey')
-    Then waitUntil("new URLSearchParams(window.location.search).get('feature') == 'journey'")
-    And match text("[data-testid='journey-interpretation-guide']") contains '為什麼「進行中」卻沒有該里程碑事件'
-    And match text("[data-testid='journey-interpretation-guide']") contains 'ShipmentCreated 是 Delivery 的啟動條件'
-    And match text("[data-testid='journey-interpretation-guide']") contains '退貨是選配支線'
+    When select("[data-testid='feature-guide-select']", 'event-check')
+    Then waitUntil("new URLSearchParams(window.location.search).get('feature') == 'event-check'")
+    And match text("[data-testid='feature-guide-title']") == 'Event Check'
+    And match text("[data-testid='feature-guide-question']") contains '這個 ID 關聯到哪些事件'
+    And match text("[data-testid='feature-guide']") contains 'Snapshot 固定 Model checksum'
 
     When select("[data-testid='feature-guide-select']", 'investigations')
     Then waitUntil("new URLSearchParams(window.location.search).get('feature') == 'investigations'")
@@ -220,48 +225,42 @@ Feature: Event Hunter 調查員主要操作流程
     When click("[data-testid='feature-guide-open']")
     Then waitForUrl(webBaseUrl + '/investigations')
 
-  Scenario: Viewer 可在 Timeline 查詢捷徑儲存相對時間搜尋並刪除
-    * def savedSearchName = 'UI payment timeline ' + java.util.UUID.randomUUID().toString()
+  Scenario: Viewer 可在 Event Check 查詢捷徑儲存相對時間搜尋並刪除
+    * def savedSearchName = 'UI event check ' + java.util.UUID.randomUUID().toString()
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    Given driver webBaseUrl + '/timeline?from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z'
-    When input("[data-testid='timeline-correlation-id']", 'ORDER-2001')
-    And click("[data-testid='timeline-search-submit']")
-    Then waitFor("[data-testid='timeline-results']")
-    When click("[data-testid='query-shortcuts-open']")
-    Then waitFor("[data-testid='query-shortcuts-drawer']")
-    And input("[data-testid='saved-search-name']", savedSearchName)
-    And select("[data-testid='saved-search-time-mode']", 'RELATIVE')
-    And select("[data-testid='saved-search-relative-window']", '86400')
-    And click("[data-testid='save-search-submit']")
-    Then waitFor("[data-testid='saved-search-success']")
-    And match text("[data-testid='saved-search-success']") contains savedSearchName
+    Given driver webBaseUrl + '/event-check?identifier_type=CORRELATION_ID&identifier=ORDER-2001&from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&tab=timeline'
+    Then waitFor("[data-testid='event-check-results']")
+    When click("[data-testid='event-check-shortcuts-open']")
+    Then waitFor("[data-testid='event-check-shortcuts']")
+    And input("[data-testid='event-check-shortcut-name']", savedSearchName)
+    And select("[data-testid='event-check-shortcut-time-mode']", 'RELATIVE')
+    And select("[data-testid='event-check-shortcut-relative-window']", '86400')
+    And click("[data-testid='event-check-shortcut-save']")
+    Then waitUntil("[...document.querySelectorAll('[data-testid^=event-check-shortcut-row-]')].some(node => node.textContent.includes('" + savedSearchName + "'))")
+    And match exists("[data-testid^='event-check-shortcut-open-'][href^='/event-check?']") == true
 
-    And waitFor("[data-testid='saved-search-row-0']")
-    And match text("[data-testid='saved-search-row-0']") contains savedSearchName
-    And match exists("[data-testid='saved-search-open-0'][href^='/timeline?']") == true
+    When click("[data-testid='event-check-shortcut-delete-0']")
+    Then waitUntil("![...document.querySelectorAll('[data-testid^=event-check-shortcut-row-]')].some(node => node.textContent.includes('" + savedSearchName + "'))")
 
-    When click("[data-testid='saved-search-delete-0']")
-    Then waitUntil("![...document.querySelectorAll('[data-testid^=saved-search-row-]')].some(node => node.textContent.includes('" + savedSearchName + "'))")
-
-  Scenario: 舊 Saved Searches 路徑導向 Timeline 查詢捷徑
+  Scenario: 舊 Saved Searches 路徑導向 Event Check 查詢捷徑
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     Given driver webBaseUrl + '/saved-searches'
-    Then waitUntil("window.location.pathname == '/timeline' && new URLSearchParams(window.location.search).get('panel') == 'query-shortcuts'")
-    And waitFor("[data-testid='query-shortcuts-drawer']")
+    Then waitUntil("window.location.pathname == '/event-check' && new URLSearchParams(window.location.search).get('panel') == 'query-shortcuts'")
+    And waitFor("[data-testid='event-check-shortcuts']")
 
   Scenario: Investigator 可從 Overview 查看真實聚合數字與資料來源狀態
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     When click("[data-testid='nav-dashboard']")
     Then waitForUrl(webBaseUrl + '/dashboard')
@@ -278,11 +277,11 @@ Feature: Event Hunter 調查員主要操作流程
     Then waitForUrl(webBaseUrl + '/investigations?status=OPEN')
     And waitFor("[data-testid='case-row-0']")
 
-  Scenario: Smart Search 對 opaque ID 先要求選擇類型再以 correlation 進入 bounded Journey
+  Scenario: Smart Search 對 opaque ID 先要求選擇類型再進入 bounded Event Check
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     When click("[data-testid='nav-dashboard']")
     Then waitForUrl(webBaseUrl + '/dashboard')
@@ -295,50 +294,132 @@ Feature: Event Hunter 調查員主要操作流程
     And match exists("[data-testid='smart-search-candidate-event_id']") == true
 
     When click("[data-testid='smart-search-candidate-correlation_id']")
-    Then waitUntil("window.location.pathname == '/journey' && new URLSearchParams(window.location.search).get('correlation_id') == 'ORDER-2001'")
-    And waitFor("[data-testid='journey-results']")
+    Then waitUntil("window.location.pathname == '/event-check' && new URLSearchParams(window.location.search).get('identifier_type') == 'CORRELATION_ID' && new URLSearchParams(window.location.search).get('identifier') == 'ORDER-2001'")
+    And waitFor("[data-testid='event-check-results']")
 
-  @journey-profile-registry
-  Scenario: Viewer 可從導覽查看 API 實際載入的 Journey Profile Registry
+  @check-model-registry
+  Scenario: Viewer 可從導覽查看 API 實際載入的 immutable Check Model Registry
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    When click("[data-testid='nav-journey-profiles']")
-    Then waitForUrl(webBaseUrl + '/journey-profiles')
-    And waitFor("[data-testid='journey-profile-registry']")
-    And match text("[data-testid='profile-count']") == '1'
-    And match text("[data-testid='journey-profile-order-fulfillment']") contains 'Order Fulfillment'
-    And match text("[data-testid='journey-profile-boundary']") contains '尚未提供'
+    When click("[data-testid='nav-check-models']")
+    Then waitForUrl(webBaseUrl + '/check-models')
+    And waitFor("[data-testid='check-models-page']")
+    And match text("[data-testid='check-model-row-order-fulfillment-2']") contains 'Order Fulfillment'
+    And match exists("[data-testid='check-model-detail']") == false
+    When click("[data-testid='check-model-row-order-fulfillment-2']")
+    Then waitFor("[data-testid='check-model-detail']")
+    And match text("[data-testid='check-model-detail']") contains 'order-fulfillment@2'
+    And match text("[data-testid='check-model-detail']") contains 'contracts/check-models/order-fulfillment.yaml'
+    And match text("[data-testid='check-model-detail']") contains 'MISSING_SHIPMENT_AFTER_PAYMENT'
 
-    When click("[data-testid='journey-profile-order-fulfillment']")
-    Then waitUntil("new URLSearchParams(window.location.search).get('profile') == 'order-fulfillment@v1'")
-    And waitFor("[data-testid='journey-profile-detail']")
-    And match text("[data-testid='journey-profile-detail-order-fulfillment']") contains 'MISSING_SHIPMENT_AFTER_PAYMENT'
-    And match text("[data-testid='journey-profile-detail-order-fulfillment']") contains 'contracts/journeys/order-fulfillment.yaml'
+    When click("[data-testid='check-model-panel-scenarios']")
+    Then waitUntil("new URLSearchParams(window.location.search).get('panel') == 'scenarios'")
+    And match text("[data-testid='check-model-detail']") contains 'success-happy-path'
+    And match text("[data-testid='check-model-detail']") contains 'cross-correlation-child-flow'
 
-    When click("[data-testid='journey-profile-detail-close']")
-    Then waitUntil("!new URLSearchParams(window.location.search).has('profile')")
-    And match exists("[data-testid='journey-profile-detail']") == false
+    Given driver webBaseUrl + '/journey-profiles'
+    Then waitUntil("window.location.pathname == '/check-models' && new URLSearchParams(window.location.search).get('kind') == 'FLOW'")
+    And waitFor("[data-testid='check-models-page']")
 
-    When click("[data-testid='profiles-open-journey']")
-    Then waitForUrl(webBaseUrl + '/journey')
-
-  Scenario: Viewer 可用已送達 fixture 查看完整 Business Journey
+  Scenario: Viewer 可用已送達 fixture 在 Event Check 查看完整 Flow 判讀
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    Given driver webBaseUrl + '/journey?correlation_id=ORDER-4002&from=2026-08-20T16%3A00%3A00Z&to=2026-08-20T16%3A21%3A00Z'
-    Then waitFor("[data-testid='journey-results']")
-    And match text("[data-testid='journey-status']") == 'COMPLETED'
-    And match text("[data-testid='journey-event-count']") == '6'
-    And match text("[data-testid='journey-milestone-order']") contains 'OrderCreated'
-    And match text("[data-testid='journey-milestone-payment']") contains 'PaymentCompleted'
-    And match text("[data-testid='journey-milestone-shipping']") contains 'ShipmentCreated'
-    And match text("[data-testid='journey-milestone-delivery']") contains 'ShipmentDelivered'
+    Given driver webBaseUrl + '/event-check?identifier_type=CORRELATION_ID&identifier=ORDER-4002&from=2026-08-20T16%3A00%3A00Z&to=2026-08-20T16%3A21%3A00Z&tab=flow'
+    Then waitFor("[data-testid='event-check-results']")
+    And match text("[data-testid='event-check-status']") == 'CONFORMANT'
+    And match text("[data-testid='event-check-flow-order-fulfillment-status']") == 'CONFORMANT'
+    And match text("[data-testid='event-check-flow-order-fulfillment']") contains 'HAPPY_PATH'
+    And match text("[data-testid='event-check-expectation-PAYMENT_REQUIRES_ORDER']") contains 'SATISFIED'
+    And match text("[data-testid='event-check-expectation-SHIPMENT_REQUIRES_PAYMENT']") contains 'SATISFIED'
+    And match text("[data-testid='event-check-expectation-PAYMENT_REQUIRES_SHIPMENT']") contains 'SATISFIED'
+
+    When click("[data-testid='event-check-tab-timeline']")
+    Then waitFor("[data-testid='event-check-event-list']")
+    And match script("document.querySelectorAll('[data-testid^=event-check-event-][data-testid$=-type]').length") == 6
+    And match text("[data-testid='event-check-event-0-type']") == 'OrderCreated'
+    And match text("[data-testid='event-check-event-5-type']") == 'ShipmentDelivered'
+
+  Scenario: Investigator 可保存 Event Check 並分別建立案件或加入案件
+    * def uniqueId = java.util.UUID.randomUUID().toString()
+    * def existingTitle = '[E2E] Saved Result existing case ' + uniqueId
+    Given url apiBaseUrl + '/api/v1/auth/demo-session'
+    And request { role: 'INVESTIGATOR' }
+    When method post
+    Then status 200
+    Given url apiBaseUrl + '/api/v1/investigations'
+    And request { title: '#(existingTitle)', severity: 'MEDIUM', correlation_id: 'ORDER-2001', incident_from: '2026-08-20T11:00:00Z', incident_to: '2026-08-20T11:06:00Z' }
+    When method post
+    Then status 201
+    * def existingCaseId = response.id
+
+    Given driver webBaseUrl + '/login'
+    And waitFor("[data-testid='role-investigator']")
+    When click("[data-testid='role-investigator']")
+    Then waitForUrl(webBaseUrl + '/event-check')
+    Given driver webBaseUrl + '/event-check?identifier_type=CORRELATION_ID&identifier=ORDER-2001&from=2026-08-20T11%3A00%3A00Z&to=2026-08-20T11%3A06%3A00Z&tab=summary'
+    Then waitFor("[data-testid='event-check-results']")
+    When click("[data-testid='event-check-save']")
+    Then waitUntil("new URLSearchParams(window.location.search).has('snapshot_id')")
+    * def snapshotId = script("new URLSearchParams(window.location.search).get('snapshot_id')")
+
+    When click("[data-testid='event-check-saved-results-open']")
+    Then waitForUrl(webBaseUrl + '/event-check/saved-results')
+    And waitFor("[data-testid='saved-check-results-page']")
+    * def savedRow = "[data-testid='saved-result-" + snapshotId + "']"
+    * def savedJoin = "[data-testid='saved-result-" + snapshotId + "-join-case']"
+    * def savedCreate = "[data-testid='saved-result-" + snapshotId + "-create-case']"
+    And waitFor(savedRow)
+    And match text(savedRow) contains 'ORDER-2001'
+    And match text(savedRow) contains 'DEVIATED'
+
+    When click(savedJoin)
+    Then waitFor("[role='dialog'][aria-labelledby='check-case-title']")
+    * def existingJoin = "[data-testid='event-check-join-case-" + existingCaseId + "']"
+    When click(existingJoin)
+    Then waitUntil("document.querySelector('.attachment-success') && document.querySelector('.attachment-success').textContent.includes('Snapshot 已連結案件')")
+    When click("button[aria-label='關閉案件選擇']")
+
+    When click(savedCreate)
+    Then waitFor("[data-testid='event-check-create-case-title']")
+    When input("[data-testid='event-check-create-case-title']", '[E2E] Saved Result new case ' + uniqueId)
+    And click("[data-testid='event-check-create-case-confirm']")
+    Then waitFor("[data-testid='event-check-created-case-open']")
+    * def createdCasePath = attribute("[data-testid='event-check-created-case-open']", 'href')
+    * def createdCaseId = createdCasePath.substring(createdCasePath.lastIndexOf('/') + 1)
+
+    Given url apiBaseUrl + '/api/v1/investigations/' + existingCaseId + '/check-snapshots'
+    When method get
+    Then status 200
+    And match response[*].snapshot_id contains snapshotId
+    Given url apiBaseUrl + '/api/v1/investigations/' + createdCaseId + '/check-snapshots'
+    When method get
+    Then status 200
+    And match response[*].snapshot_id contains snapshotId
+
+    Given url apiBaseUrl + '/api/v1/investigations/' + existingCaseId
+    When method get
+    Then status 200
+    * def existingCloseEtag = responseHeaders['Etag'][0]
+    Given url apiBaseUrl + '/api/v1/investigations/' + existingCaseId + '/close'
+    And header If-Match = existingCloseEtag
+    And request { root_cause: 'E2E cleanup', resolution_summary: 'Saved Result join verified' }
+    When method post
+    Then status 200
+    Given url apiBaseUrl + '/api/v1/investigations/' + createdCaseId
+    When method get
+    Then status 200
+    * def createdCloseEtag = responseHeaders['Etag'][0]
+    Given url apiBaseUrl + '/api/v1/investigations/' + createdCaseId + '/close'
+    And header If-Match = createdCloseEtag
+    And request { root_cause: 'E2E cleanup', resolution_summary: 'Saved Result create verified' }
+    When method post
+    Then status 200
 
   @p1-1-04-02
   Scenario: Investigator 可在案件抽屜切換完整調查資料頁籤並判定 Pattern finding
@@ -363,7 +444,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     When click("[data-testid='nav-investigations']")
     Then waitForUrl(webBaseUrl + '/investigations')
@@ -382,14 +463,15 @@ Feature: Event Hunter 調查員主要操作流程
     Then waitUntil("document.querySelector('[data-testid=pattern-feedback-payment-completed-without-shipment]').textContent.includes('CONFIRMED')")
     When click("[data-testid='case-tab-evidence']")
     Then waitFor("[data-testid='case-evidence'] [data-testid='evidence-manifest']")
-    And match exists("[data-testid='case-evidence'] a[href^='/patterns?pattern_id=']") == true
+    And match exists("[data-testid='case-evidence'] a[href^='/check-models?']") == true
     When click("[data-testid='case-tab-audit']")
     Then waitFor("[data-testid='case-audit']")
     When click("[data-testid='case-tab-evidence']")
     Then waitFor("[data-testid='case-evidence'] [data-testid='evidence-manifest']")
-    When click("[data-testid='case-evidence'] a[href^='/patterns?pattern_id=']")
-    Then waitFor("[data-testid='pattern-library']")
-    And match exists("[data-testid='pattern-row-0'][data-selected='true']") == true
+    When click("[data-testid='case-evidence'] a[href^='/check-models?']")
+    Then waitFor("[data-testid='check-models-page']")
+    And match text("[data-testid='check-model-detail']") contains 'order-fulfillment@2'
+    And match exists("[data-testid='check-model-rule-PAYMENT_REQUIRES_SHIPMENT'].focused") == true
 
   @eh-p1-1-014
   Scenario: 案件抽屜揭露不可變 Incident Window 並區分目前檢視窗口
@@ -411,11 +493,11 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     Given driver detailUrl
     Then waitFor("[data-testid='case-incident-window']")
     And match text("[data-testid='case-incident-window']") contains 'TIMELINE_SEARCH'
-    And match attribute("[data-testid='case-open-baseline-timeline']", 'href') contains 'correlation_id=ORDER-2001'
+    And match attribute("[data-testid='case-open-baseline-timeline']", 'href') contains 'identifier=ORDER-2001'
     And match attribute("[data-testid='case-open-baseline-timeline']", 'href') contains 'from=2026-08-20T11%3A00%3A00Z'
     And waitFor("[data-testid='case-summary-generated-at']")
     And match text("[data-testid='case-timeline-truncation']") == '完整（未截斷）'
@@ -441,7 +523,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     When click("[data-testid='nav-investigations']")
     Then waitForUrl(webBaseUrl + '/investigations')
     And waitFor("[data-testid='case-row-0']")
@@ -462,40 +544,58 @@ Feature: Event Hunter 調查員主要操作流程
     Then waitUntil("document.querySelector('[data-testid=case-note-list]').textContent.includes('已確認 shipping consumer lag')")
 
   @p1-1-04-01 @p1-1-04-02
-  Scenario: Viewer 可查看由程式碼管理的唯讀 Pattern Library 與後端成效
+  Scenario: Viewer 可查看由程式碼管理的唯讀 Check Models 與 deterministic scenarios
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
-    When click("[data-testid='nav-patterns']")
-    Then waitForUrl(webBaseUrl + '/patterns')
-    And waitFor("[data-testid='pattern-library']")
-    And match text("[data-testid='pattern-active-count']") contains '1 active'
-    And match text("[data-testid='pattern-0-id']") == 'payment-completed-without-shipment'
-    And match text("[data-testid='pattern-0-status']") == 'ACTIVE'
-    And waitFor("[data-testid='pattern-effectiveness-window']")
-    And match text("[data-testid='pattern-0-hit-count']") != '不可用'
-    And match text("[data-testid='pattern-0-case-count']") != '不可用'
-    And match text("[data-testid='pattern-0-last-hit']") != '不可用'
-    And match text("[data-testid='pattern-0-fixture-coverage']") contains '1 match / 2 non-match'
-    And match text("[data-testid='pattern-row-0']") contains 'contracts/patterns/payment-completed-without-shipment.yaml'
+    When click("[data-testid='nav-check-models']")
+    Then waitForUrl(webBaseUrl + '/check-models')
+    And waitFor("[data-testid='check-model-row-order-fulfillment-2']")
+    And match text("[data-testid='check-model-row-order-fulfillment-2']") contains 'ACTIVE'
+    When click("[data-testid='check-model-row-order-fulfillment-2']")
+    Then waitFor("[data-testid='check-model-detail']")
+    And match text("[data-testid='check-model-detail']") contains 'contracts/check-models/order-fulfillment.yaml'
+    And match text("[data-testid='check-model-rule-PAYMENT_REQUIRES_SHIPMENT']") contains 'MISSING_SHIPMENT_AFTER_PAYMENT'
 
-  Scenario: Investigator 可從 Scenario Lab 執行劇本並查看實際結果與 deep links
+    When click("[data-testid='check-model-panel-scenarios']")
+    Then match text("[data-testid='check-model-detail']") contains 'violation-missing-shipment'
+    And match text("[data-testid='check-model-detail']") contains 'expected-payment-failure'
+
+    When click("[data-testid='check-model-kind-global']")
+    Then waitFor("[data-testid='check-model-row-event-integrity-1']")
+    When click("[data-testid='check-model-row-event-integrity-1']")
+    Then waitFor("[data-testid='check-model-detail']")
+    And match text("[data-testid='check-model-detail']") contains 'DUPLICATE_EVENT_ID'
+    And match text("[data-testid='check-model-detail']") contains 'MISSING_TRACE_CONTEXT'
+
+  @p1-1-ux-09
+  Scenario: Investigator 以單次 start request 取得識別碼並由手動 Run History 查看實際結果
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     When click("[data-testid='nav-scenario-lab']")
     Then waitForUrl(webBaseUrl + '/scenario-lab')
     And waitFor("[data-testid='run-scenario-s8']")
     When click("[data-testid='run-scenario-s8']")
-    Then waitFor("[data-testid='scenario-result']")
-    And waitUntil("document.querySelector('[data-testid=scenario-run-status]').textContent.includes('PASSED')")
-    And match text("[data-testid='scenario-run-status']") == 'PASSED'
+    Then waitFor("[data-testid='scenario-run-modal']")
+    And match text("[data-testid='scenario-run-status']") == 'STARTING'
+    And match text("[data-testid='scenario-run-id']") == '#regex [0-9a-f-]{36}'
+    And match text("[data-testid='scenario-correlation-id']") == '#regex LAB-S8-.+'
+    And match exists("[data-testid='scenario-link-timeline'][href^='http://localhost:28334/event-check?']") == true
+    And match exists("[data-testid='scenario-link-tempo']") == false
+
+    # 前端不輪詢；使用者關閉 modal 後明確按一次手動更新，再重新開啟 persisted result。
+    When click("[aria-label='關閉 Scenario 執行資訊']")
+    And delay(2500)
+    And click("[data-testid='scenario-history-refresh']")
+    Then waitUntil("document.querySelector('[data-testid^=scenario-history-run-]') && document.querySelector('[data-testid^=scenario-history-run-]').textContent.includes('PASSED')")
+    When click("[data-testid^='scenario-history-run-']")
+    Then match text("[data-testid='scenario-run-status']") == 'PASSED'
     And match text("[data-testid='scenario-actual-events']") contains 'PaymentFailed'
-    And match exists("[data-testid='scenario-link-timeline'][href^='http://localhost:28334/timeline?correlation_id=']") == true
     And match exists("[data-testid='scenario-link-grafana'][href*='panes=']") == true
     And match exists("[data-testid='scenario-link-tempo'][href*='panes=']") == true
     And match exists("[data-testid='scenario-link-loki'][href*='panes=']") == true
@@ -535,7 +635,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     When click("[data-testid='nav-investigations']")
     Then waitForUrl(webBaseUrl + '/investigations')
     And waitFor("[data-testid='case-row-0']")
@@ -573,7 +673,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     * def filteredUrl = webBaseUrl + '/investigations?status=INVESTIGATING&severity=HIGH&priority=P0&assignee=shipping-oncall&tag=urgent&correlation_id=' + correlationId + '&sort_by=updated_at&sort_order=asc'
     Given driver filteredUrl
@@ -618,7 +718,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     When click("[data-testid='nav-investigations']")
     Then waitForUrl(webBaseUrl + '/investigations')
     And waitFor("[data-testid='case-row-0']")
@@ -656,7 +756,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     Given driver detailUrl
     Then waitForUrl(detailUrl)
     And waitFor("[data-testid='case-detail']")
@@ -678,7 +778,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
 
     Given driver missingUrl
     Then waitForUrl(missingUrl)
@@ -704,7 +804,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     Given driver detailUrl
     Then waitFor("[data-testid='case-detail']")
     And match exists("[data-testid='case-root-cause-input']") == false
@@ -759,7 +859,7 @@ Feature: Event Hunter 調查員主要操作流程
     Given driver webBaseUrl + '/login'
     And waitFor("[data-testid='role-investigator']")
     When click("[data-testid='role-investigator']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     Given driver detailUrl
     Then waitFor("[data-testid='case-detail']")
     And waitFor("[data-testid='case-transition-investigating']")
@@ -810,7 +910,7 @@ Feature: Event Hunter 調查員主要操作流程
     * driver.dimensions = { x: 0, y: 0, width: 390, height: 844 }
     And waitFor("[data-testid='role-viewer']")
     When click("[data-testid='role-viewer']")
-    Then waitForUrl(webBaseUrl + '/timeline')
+    Then waitForUrl(webBaseUrl + '/event-check')
     And match script("document.documentElement.scrollWidth <= document.documentElement.clientWidth") == true
 
     When click("[data-testid='nav-dashboard']")
@@ -821,17 +921,20 @@ Feature: Event Hunter 調查員主要操作流程
     Then waitFor("[data-testid='feature-guide']")
     And match script("document.documentElement.scrollWidth <= document.documentElement.clientWidth") == true
 
-    When click("[data-testid='nav-journey-profiles']")
-    Then waitFor("[data-testid='journey-profile-registry']")
+    When click("[data-testid='nav-check-models']")
+    Then waitFor("[data-testid='check-models-page']")
     And match script("document.documentElement.scrollWidth <= document.documentElement.clientWidth") == true
 
     When click("[data-testid='nav-investigations']")
     Then waitForUrl(webBaseUrl + '/investigations')
     And match script("document.documentElement.scrollWidth <= document.documentElement.clientWidth") == true
 
-    When click("[data-testid='nav-patterns']")
-    Then waitFor("[data-testid='pattern-library']")
+    When click("[data-testid='nav-check-models']")
+    Then waitFor("[data-testid='check-model-row-order-fulfillment-2']")
+    When click("[data-testid='check-model-row-order-fulfillment-2']")
+    Then waitFor("[data-testid='check-model-detail']")
     And match script("document.documentElement.scrollWidth <= document.documentElement.clientWidth") == true
+    And match script("document.querySelector('[data-testid=check-model-row-order-fulfillment-2]').getBoundingClientRect().width <= document.documentElement.clientWidth") == true
 
     When click("[data-testid='nav-scenario-lab']")
     Then waitFor("[data-testid='scenario-lab']")

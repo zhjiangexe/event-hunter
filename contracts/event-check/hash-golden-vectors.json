@@ -1,0 +1,60 @@
+{
+  "contract_version": 1,
+  "algorithm": "SHA-256",
+  "canonicalization": "RFC8785_JCS",
+  "vectors": [
+    {
+      "id": "event-set-basic",
+      "kind": "EVENT_SET",
+      "document": {
+        "scope_contract_version": 1,
+        "included_event_metadata_and_payload_checksums": [
+          {
+            "event_id": "EVT-HASH-01",
+            "occurred_at": "2026-08-28T00:00:00Z",
+            "payload_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "ordinal": 0
+          }
+        ],
+        "excluded_event_metadata_and_reasons": [],
+        "relationship_edges": [
+          {
+            "ordinal": 0,
+            "from_event_id": null,
+            "to_event_id": "EVT-HASH-01",
+            "relation_type": "SEED"
+          }
+        ]
+      },
+      "canonical_utf8": "{\"excluded_event_metadata_and_reasons\":[],\"included_event_metadata_and_payload_checksums\":[{\"event_id\":\"EVT-HASH-01\",\"occurred_at\":\"2026-08-28T00:00:00Z\",\"ordinal\":0,\"payload_sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\"}],\"relationship_edges\":[{\"from_event_id\":null,\"ordinal\":0,\"relation_type\":\"SEED\",\"to_event_id\":\"EVT-HASH-01\"}],\"scope_contract_version\":1}",
+      "sha256": "c8eaafeb7a58c9bc591100654839b3a200ca7d272e88dcf80b2da8d4966c8580"
+    },
+    {
+      "id": "evaluation-basic",
+      "kind": "EVALUATION",
+      "document": {
+        "evaluation_contract_version": 1,
+        "normalized_request": {
+          "identifier": {"type": "CORRELATION_ID", "value": "ORDER-HASH-01"},
+          "from": "2026-08-28T00:00:00Z",
+          "to": "2026-08-28T00:10:00Z",
+          "model": {"id": "order-fulfillment", "version": 2}
+        },
+        "model_ref_and_checksum": {
+          "id": "order-fulfillment",
+          "version": 2,
+          "checksum": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        "event_set_hash": "c8eaafeb7a58c9bc591100654839b3a200ca7d272e88dcf80b2da8d4966c8580",
+        "source_health": {"status": "HEALTHY", "truncated": false},
+        "deterministic_result": {
+          "check_status": "IN_PROGRESS",
+          "business_outcome": null,
+          "expectations": []
+        }
+      },
+      "canonical_utf8": "{\"deterministic_result\":{\"business_outcome\":null,\"check_status\":\"IN_PROGRESS\",\"expectations\":[]},\"evaluation_contract_version\":1,\"event_set_hash\":\"c8eaafeb7a58c9bc591100654839b3a200ca7d272e88dcf80b2da8d4966c8580\",\"model_ref_and_checksum\":{\"checksum\":\"1111111111111111111111111111111111111111111111111111111111111111\",\"id\":\"order-fulfillment\",\"version\":2},\"normalized_request\":{\"from\":\"2026-08-28T00:00:00Z\",\"identifier\":{\"type\":\"CORRELATION_ID\",\"value\":\"ORDER-HASH-01\"},\"model\":{\"id\":\"order-fulfillment\",\"version\":2},\"to\":\"2026-08-28T00:10:00Z\"},\"source_health\":{\"status\":\"HEALTHY\",\"truncated\":false}}",
+      "sha256": "bc8a8e4bc3476060170f2901e6363cbe19da58a4530f4440e524570d4e328cf5"
+    }
+  ]
+}

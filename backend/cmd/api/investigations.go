@@ -115,9 +115,14 @@ func (api investigationAPI) list(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	filter := caselifecycle.CaseFilter{
+		Query:  strings.TrimSpace(request.URL.Query().Get("query")),
 		Status: strings.TrimSpace(request.URL.Query().Get("status")), Severity: strings.TrimSpace(request.URL.Query().Get("severity")),
 		Assignee: strings.TrimSpace(request.URL.Query().Get("assignee")), Priority: strings.TrimSpace(request.URL.Query().Get("priority")),
 		Tag: strings.TrimSpace(request.URL.Query().Get("tag")), CorrelationID: strings.TrimSpace(request.URL.Query().Get("correlation_id")), SortBy: sortBy, SortOrder: sortOrder, PageSize: pageSize,
+	}
+	if len([]rune(filter.Query)) > 100 {
+		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_QUERY")
+		return
 	}
 	if cursor := strings.TrimSpace(request.URL.Query().Get("cursor")); cursor != "" {
 		cursorValue, err := decodeInvestigationCursor(cursor)

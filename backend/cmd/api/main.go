@@ -16,6 +16,13 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	attachchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/attach_check_snapshot"
+	classifycheckfinding "event-hunter/backend/internal/contexts/eventcheck/application/classify_check_finding"
+	evaluateeventcheck "event-hunter/backend/internal/contexts/eventcheck/application/evaluate_event_check"
+	getchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/get_check_snapshot"
+	listcheckmodels "event-hunter/backend/internal/contexts/eventcheck/application/list_check_models"
+	listchecksnapshots "event-hunter/backend/internal/contexts/eventcheck/application/list_check_snapshots"
+	savechecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/save_check_snapshot"
 	"event-hunter/backend/internal/contexts/investigation/application/alert_intake"
 	businessjourney "event-hunter/backend/internal/contexts/investigation/application/business_journey"
 	caselifecycle "event-hunter/backend/internal/contexts/investigation/application/case_lifecycle"
@@ -175,6 +182,27 @@ func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, gra
 	ingestionIssueHandler := ingestionIssuesAPI{service: ingestionissues.NewService(clickHouseReadModel)}
 	mux.HandleFunc("GET /api/v1/ingestion-issues", sessions.requireRead(ingestionIssueHandler.list))
 	mux.HandleFunc("POST /api/v1/search/identify", sessions.requireRead(identifySmartSearchInput))
+	eventCheckEvaluator := evaluateeventcheck.NewService(clickHouseReadModel)
+	eventCheckRepository := platformpostgres.NewCheckSnapshotRepository(db)
+	eventCheckUnitOfWork := platformpostgres.NewUnitOfWork(db)
+	eventChecks := eventCheckAPI{
+		evaluator: eventCheckEvaluator, models: listcheckmodels.NewService(),
+		saver:       savechecksnapshot.NewService(eventCheckEvaluator, eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		getter:      getchecksnapshot.NewService(eventCheckRepository),
+		lister:      listchecksnapshots.NewService(eventCheckRepository),
+		classifier:  classifycheckfinding.NewService(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		attachments: attachchecksnapshot.NewService(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		sessions:    sessions,
+	}
+	mux.HandleFunc("POST /api/v1/event-checks/evaluations", eventChecks.evaluate)
+	mux.HandleFunc("GET /api/v1/check-models", eventChecks.listModels)
+	mux.HandleFunc("GET /api/v1/check-models/{modelId}/versions/{version}", eventChecks.getModel)
+	mux.HandleFunc("POST /api/v1/check-snapshots", eventChecks.createSnapshot)
+	mux.HandleFunc("GET /api/v1/check-snapshots", eventChecks.listSnapshots)
+	mux.HandleFunc("GET /api/v1/check-snapshots/{snapshotId}", eventChecks.getSnapshot)
+	mux.HandleFunc("PATCH /api/v1/check-findings/{findingId}/feedback", eventChecks.classifyFinding)
+	mux.HandleFunc("GET /api/v1/investigations/{investigationId}/check-snapshots", eventChecks.listInvestigationSnapshots)
+	mux.HandleFunc("POST /api/v1/investigations/{investigationId}/check-snapshots", eventChecks.attachInvestigationSnapshot)
 	savedSearchHandler := savedSearchAPI{service: savedsearch.NewService(platformpostgres.NewSavedSearchRepository(db)), sessions: sessions}
 	mux.HandleFunc("GET /api/v1/saved-searches", savedSearchHandler.list)
 	mux.HandleFunc("POST /api/v1/saved-searches", savedSearchHandler.create)

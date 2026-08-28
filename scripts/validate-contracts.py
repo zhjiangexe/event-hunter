@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import subprocess
 import sys
@@ -25,6 +26,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NON_SOURCE_DIRECTORIES = {".git", "artifacts", "dist", "node_modules"}
 # 只有這些 key 代表 OpenAPI operation；parameters、servers 等 path-level key 不可當成 API。
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
+DOCUMENT_SUFFIXES = {".md", ".yaml", ".puml", ".png", ".html"}
+MARKDOWN_LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 
 
 class ContractError(RuntimeError):
@@ -54,6 +57,20 @@ UniqueKeyLoader.add_constructor(
     yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
     construct_unique_mapping,
 )
+
+
+def construct_compose_override(loader: UniqueKeyLoader, node: yaml.Node) -> Any:
+    """Parse Docker Compose !reset/!override tags while preserving their value."""
+
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    return loader.construct_scalar(node)
+
+
+UniqueKeyLoader.add_constructor("!reset", construct_compose_override)
+UniqueKeyLoader.add_constructor("!override", construct_compose_override)
 
 
 def load_yaml(path: Path) -> Any:
@@ -125,6 +142,187 @@ def validate_references(path: Path, document: Any) -> int:
             target = load_json(target_path) if target_path.suffix == ".json" else load_yaml(target_path)
             resolve_json_pointer(target, f"#{fragment}", target_path)
     return count
+
+
+def validate_local_schema_id_references(json_documents: dict[Path, Any]) -> None:
+    """Resolve Event Hunter HTTPS schema IDs offline instead of treating them as network contracts."""
+
+    by_id = {
+        document["$id"]: (path, document)
+        for path, document in json_documents.items()
+        if isinstance(document, dict) and isinstance(document.get("$id"), str)
+    }
+    for path, document in json_documents.items():
+        for value in walk(document):
+            if not isinstance(value, dict) or not isinstance(value.get("$ref"), str):
+                continue
+            reference = value["$ref"]
+            if not reference.startswith("https://event-hunter.local/"):
+                continue
+            base, separator, fragment = reference.partition("#")
+            target = by_id.get(base)
+            if target is None:
+                raise ContractError(
+                    f"{path.relative_to(PROJECT_ROOT)}: unresolved local schema ID {reference}"
+                )
+            if separator:
+                resolve_json_pointer(target[1], f"#{fragment}", target[0])
+
+
+def validate_all_json_schemas(json_documents: dict[Path, Any]) -> int:
+    count = 0
+    for path, document in json_documents.items():
+        if not path.name.endswith(".schema.json"):
+            continue
+        try:
+            Draft202012Validator.check_schema(document)
+        except Exception as exc:
+            raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: invalid JSON Schema: {exc}") from exc
+        count += 1
+    return count
+
+
+def load_markdown_metadata(path: Path) -> dict[str, Any]:
+    """讀取 governed Markdown 的 YAML front matter。"""
+
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: missing YAML front matter")
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: unterminated YAML front matter")
+    try:
+        metadata = yaml.load(text[4:end], Loader=UniqueKeyLoader)
+    except Exception as exc:
+        raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: invalid front matter: {exc}") from exc
+    if not isinstance(metadata, dict):
+        raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: front matter must be an object")
+    return metadata
+
+
+def validate_document_catalog(catalog: dict[str, Any]) -> int:
+    """驗證 requirements 文件的 coverage、metadata 與唯一來源宣告。"""
+
+    allowed_statuses = set(catalog.get("allowed_statuses", []))
+    if not allowed_statuses:
+        raise ContractError("requirements document catalog has no allowed_statuses")
+
+    entries = catalog.get("documents", [])
+    if not isinstance(entries, list) or not entries:
+        raise ContractError("requirements document catalog has no documents")
+
+    required_fields = {
+        "document_id",
+        "path",
+        "status",
+        "owner",
+        "source_of_truth",
+        "canonical_topic",
+    }
+    by_path: dict[str, dict[str, Any]] = {}
+    seen_ids: set[str] = set()
+    seen_topics: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ContractError("requirements document catalog entry must be an object")
+        missing = sorted(required_fields - set(entry))
+        if missing:
+            raise ContractError(f"requirements document catalog entry missing fields: {missing}")
+        document_id = entry["document_id"]
+        path_value = entry["path"]
+        topic = entry["canonical_topic"]
+        if document_id in seen_ids:
+            raise ContractError(f"duplicate document_id {document_id}")
+        if path_value in by_path:
+            raise ContractError(f"duplicate document path {path_value}")
+        if topic in seen_topics:
+            raise ContractError(f"duplicate canonical_topic {topic}")
+        seen_ids.add(document_id)
+        seen_topics.add(topic)
+        by_path[path_value] = entry
+
+        if entry["status"] not in allowed_statuses:
+            raise ContractError(f"{path_value}: unsupported document status {entry['status']}")
+        if not isinstance(entry["source_of_truth"], bool):
+            raise ContractError(f"{path_value}: source_of_truth must be boolean")
+        if entry["status"] in {"completed", "superseded", "archived"} and entry["source_of_truth"]:
+            raise ContractError(f"{path_value}: historical document cannot be source_of_truth")
+
+        target = (PROJECT_ROOT / path_value).resolve()
+        requirements_root = (PROJECT_ROOT / "requirements").resolve()
+        if requirements_root not in target.parents and target != requirements_root:
+            raise ContractError(f"{path_value}: catalog path must remain under requirements/")
+        if not target.is_file():
+            raise ContractError(f"{path_value}: catalog target does not exist")
+        if "/archive/" in f"/{path_value}" and entry["status"] not in {
+            "completed",
+            "superseded",
+            "archived",
+        }:
+            raise ContractError(f"{path_value}: archive document has active status {entry['status']}")
+
+        if target.suffix == ".md":
+            metadata = load_markdown_metadata(target)
+        elif target.suffix == ".yaml" and target.name != "document-catalog.yaml":
+            document = load_yaml(target)
+            metadata = document.get("document_control") if isinstance(document, dict) else None
+            if not isinstance(metadata, dict):
+                raise ContractError(f"{path_value}: missing document_control metadata")
+        else:
+            metadata = None
+
+        if metadata is not None:
+            for field in ("document_id", "status", "owner", "source_of_truth", "canonical_topic"):
+                if metadata.get(field) != entry[field]:
+                    raise ContractError(
+                        f"{path_value}: metadata {field}={metadata.get(field)!r} "
+                        f"does not match catalog {entry[field]!r}"
+                    )
+            reviewed = str(metadata.get("last_reviewed", ""))
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", reviewed):
+                raise ContractError(f"{path_value}: last_reviewed must use YYYY-MM-DD")
+            if not isinstance(metadata.get("supersedes"), list):
+                raise ContractError(f"{path_value}: supersedes must be a list")
+
+    actual_paths = {
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in (PROJECT_ROOT / "requirements").rglob("*")
+        if path.is_file() and path.suffix in DOCUMENT_SUFFIXES
+    }
+    catalog_paths = set(by_path)
+    missing_entries = sorted(actual_paths - catalog_paths)
+    stale_entries = sorted(catalog_paths - actual_paths)
+    if missing_entries or stale_entries:
+        raise ContractError(
+            f"requirements document catalog drift: missing={missing_entries}, stale={stale_entries}"
+        )
+    return len(entries)
+
+
+def validate_markdown_links() -> int:
+    """驗證 repository 文件中的相對 Markdown links，不連線檢查外部 URL。"""
+
+    checked = 0
+    for path in sorted(PROJECT_ROOT.rglob("*.md")):
+        if not is_project_source(path):
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in MARKDOWN_LINK_PATTERN.finditer(text):
+            raw_target = match.group(1).strip()
+            if raw_target.startswith("<") and raw_target.endswith(">"):
+                raw_target = raw_target[1:-1]
+            if raw_target.startswith(("http://", "https://", "mailto:", "#", "/")):
+                continue
+            file_part = raw_target.partition("#")[0].strip()
+            if not file_part:
+                continue
+            checked += 1
+            target = (path.parent / file_part).resolve()
+            if not target.exists():
+                raise ContractError(
+                    f"{path.relative_to(PROJECT_ROOT)}: broken Markdown link {raw_target}"
+                )
+    return checked
 
 
 def operation_ids(openapi: dict[str, Any]) -> set[str]:
@@ -325,6 +523,318 @@ def validate_generated_journey_registry() -> None:
         raise ContractError(f"Journey Profile Registry drift: {detail}")
 
 
+def validate_generated_check_model_registry() -> None:
+    command = [sys.executable, str(PROJECT_ROOT / "scripts" / "generate-check-model-registry.py"), "--check"]
+    result = subprocess.run(command, cwd=PROJECT_ROOT, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        detail = result.stdout.strip() or result.stderr.strip() or "generated registry is stale"
+        raise ContractError(f"Check Model Registry drift: {detail}")
+    model_schema_path = PROJECT_ROOT / "contracts" / "check-models" / "check-model.schema.json"
+    registry_schema_path = PROJECT_ROOT / "contracts" / "check-models" / "check-model-registry.schema.json"
+    generated_path = PROJECT_ROOT / "contracts" / "generated" / "check-model-registry.json"
+    registry = schema_registry([model_schema_path, registry_schema_path])
+    schema = load_json(registry_schema_path)
+    document = load_json(generated_path)
+    errors = sorted(
+        Draft202012Validator(
+            schema,
+            registry=registry,
+            format_checker=FormatChecker(),
+        ).iter_errors(document),
+        key=lambda error: list(error.path),
+    )
+    if errors:
+        details = "; ".join(f"{list(error.path)} {error.message}" for error in errors)
+        raise ContractError(f"{generated_path.relative_to(PROJECT_ROOT)}: {details}")
+
+
+def schema_registry(schema_paths: Iterable[Path]) -> Registry:
+    """Build an offline registry for schemas that reference Event Hunter HTTPS schema IDs."""
+
+    registry = Registry()
+    for path in schema_paths:
+        schema = load_json(path)
+        Draft202012Validator.check_schema(schema)
+        schema_id = schema.get("$id")
+        if not schema_id:
+            raise ContractError(f"{path.relative_to(PROJECT_ROOT)}: JSON Schema has no $id")
+        registry = registry.with_resource(schema_id, Resource.from_contents(schema))
+    return registry
+
+
+def validate_check_models(
+    model_schema_path: Path,
+    model_paths: list[Path],
+    event_schema_paths: list[Path],
+    fixture_schema_path: Path,
+    fixture_path: Path,
+    mapping_schema_path: Path,
+    mapping_path: Path,
+) -> tuple[int, int]:
+    """Validate Check Model shape plus cross-model, fixture, and legacy migration semantics."""
+
+    model_schema = load_json(model_schema_path)
+    Draft202012Validator.check_schema(model_schema)
+    model_validator = Draft202012Validator(model_schema, format_checker=FormatChecker())
+    known_event_types = {
+        load_json(path)["title"]
+        for path in event_schema_paths
+        if path.name != "canonical-envelope.schema.json"
+    }
+    model_by_ref: dict[tuple[str, int], tuple[Path, dict[str, Any]]] = {}
+    all_node_ids: set[str] = set()
+    all_expectation_ids: set[str] = set()
+    all_global_rule_ids: set[str] = set()
+
+    for model_path in model_paths:
+        model = load_yaml(model_path)
+        errors = sorted(model_validator.iter_errors(model), key=lambda error: list(error.path))
+        if errors:
+            details = "; ".join(f"{list(error.path)} {error.message}" for error in errors)
+            raise ContractError(f"{model_path.relative_to(PROJECT_ROOT)}: {details}")
+
+        model_ref = (model["model_id"], model["version"])
+        if model_ref in model_by_ref:
+            raise ContractError(f"duplicate Check Model identity {model_ref}")
+        model_by_ref[model_ref] = (model_path, model)
+
+        version_types = [item["event_type"] for item in model["applies_to"]["event_versions"]]
+        if len(version_types) != len(set(version_types)):
+            raise ContractError(f"{model_ref}: duplicate applies_to event_versions")
+        referenced_event_types = {
+            *model["applies_to"]["trigger_event_types"],
+            *version_types,
+        }
+        for key in model["scope"]["business_keys"]:
+            referenced_event_types.update(key["event_types"])
+
+        if model["kind"] == "FLOW":
+            node_ids = [node["id"] for node in model["nodes"]]
+            if len(node_ids) != len(set(node_ids)):
+                raise ContractError(f"{model_ref}: duplicate Flow node IDs")
+            all_node_ids.update(node_ids)
+            for node in model["nodes"]:
+                if node["min_occurs"] > node["max_occurs"]:
+                    raise ContractError(f"{model_ref}/{node['id']}: min_occurs exceeds max_occurs")
+                referenced_event_types.update(node["event"]["event_types"])
+            path_ids = [path["id"] for path in model["paths"]]
+            if len(path_ids) != len(set(path_ids)):
+                raise ContractError(f"{model_ref}: duplicate Flow path IDs")
+            for path in model["paths"]:
+                unknown_nodes = set(path["nodes"]) - set(node_ids)
+                if unknown_nodes:
+                    raise ContractError(f"{model_ref}/{path['id']}: unknown nodes {sorted(unknown_nodes)}")
+                if len(path["nodes"]) != len(set(path["nodes"])):
+                    raise ContractError(f"{model_ref}/{path['id']}: duplicate node in path")
+                referenced_event_types.update(path.get("forbidden_event_types", []))
+            expectation_ids = [item["id"] for item in model["expectations"]]
+            if len(expectation_ids) != len(set(expectation_ids)):
+                raise ContractError(f"{model_ref}: duplicate Expectation IDs")
+            for expectation in model["expectations"]:
+                all_expectation_ids.add(expectation["id"])
+                if expectation["reminder_after_seconds"] > expectation["deadline_seconds"]:
+                    raise ContractError(
+                        f"{model_ref}/{expectation['id']}: reminder occurs after deadline"
+                    )
+                referenced_event_types.update(expectation["trigger"]["event_types"])
+                referenced_event_types.update(expectation["expected"]["event_types"])
+                referenced_event_types.update(expectation["exclusions"]["any_event_types"])
+            for child in model["child_models"]:
+                referenced_event_types.update(child["activate_when"]["event_types"])
+        else:
+            rule_ids = [rule["id"] for rule in model["rules"]]
+            if len(rule_ids) != len(set(rule_ids)):
+                raise ContractError(f"{model_ref}: duplicate Global Check rule IDs")
+            all_global_rule_ids.update(rule_ids)
+
+        unknown_event_types = referenced_event_types - known_event_types
+        if unknown_event_types:
+            raise ContractError(
+                f"{model_ref}: references event types without canonical schemas: {sorted(unknown_event_types)}"
+            )
+        undeclared_versions = referenced_event_types - set(version_types)
+        if undeclared_versions:
+            raise ContractError(
+                f"{model_ref}: referenced event types have no applies_to version declaration: "
+                f"{sorted(undeclared_versions)}"
+            )
+
+    for model_ref, (_, model) in model_by_ref.items():
+        if model["kind"] != "FLOW":
+            continue
+        for child in model["child_models"]:
+            child_ref = (child["model_id"], child["version"])
+            if child_ref not in model_by_ref:
+                raise ContractError(f"{model_ref}: missing pinned child model {child_ref}")
+            if model_by_ref[child_ref][1]["kind"] != "FLOW":
+                raise ContractError(f"{model_ref}: child {child_ref} is not a FLOW model")
+            if child_ref == model_ref:
+                raise ContractError(f"{model_ref}: model cannot reference itself as child")
+
+    contract_schema_paths = [
+        *event_schema_paths,
+        PROJECT_ROOT / "contracts" / "event-check" / "event-check-evaluation.schema.json",
+        fixture_schema_path,
+    ]
+    registry = schema_registry(contract_schema_paths)
+    fixture_schema = load_json(fixture_schema_path)
+    fixture = load_json(fixture_path)
+    fixture_validator = Draft202012Validator(
+        fixture_schema,
+        registry=registry,
+        format_checker=FormatChecker(),
+    )
+    errors = sorted(fixture_validator.iter_errors(fixture), key=lambda error: list(error.path))
+    if errors:
+        details = "; ".join(f"{list(error.path)} {error.message}" for error in errors)
+        raise ContractError(f"{fixture_path.relative_to(PROJECT_ROOT)}: {details}")
+
+    cases = fixture["cases"]
+    case_ids = [case["id"] for case in cases]
+    if len(case_ids) != len(set(case_ids)):
+        raise ContractError("Event Check fixture set contains duplicate case IDs")
+    profile_ids = set(fixture["source_health_profiles"])
+    event_schemas = {
+        load_json(path)["title"]: load_json(path)
+        for path in event_schema_paths
+        if path.name != "canonical-envelope.schema.json"
+    }
+    event_registry = schema_registry(event_schema_paths)
+    for case in cases:
+        if case["source_health_profile"] not in profile_ids:
+            raise ContractError(
+                f"Event Check fixture {case['id']} references unknown source health profile "
+                f"{case['source_health_profile']}"
+            )
+        if case["request"]["from"] >= case["request"]["to"]:
+            raise ContractError(f"Event Check fixture {case['id']} has invalid half-open time window")
+        for event in case["events"]:
+            event_schema = event_schemas.get(event.get("eventType"))
+            if event_schema is None:
+                raise ContractError(f"Event Check fixture {case['id']} has unknown eventType {event.get('eventType')}")
+            event_errors = sorted(
+                Draft202012Validator(
+                    event_schema,
+                    registry=event_registry,
+                    format_checker=FormatChecker(),
+                ).iter_errors(event),
+                key=lambda error: list(error.path),
+            )
+            if event_errors:
+                details = "; ".join(f"{list(error.path)} {error.message}" for error in event_errors)
+                raise ContractError(f"Event Check fixture {case['id']}/{event['eventId']}: {details}")
+
+    required_cases = {
+        "success-happy-path",
+        "expected-payment-failure",
+        "compensated-refund",
+        "in-progress-awaiting-shipment",
+        "reminder-awaiting-shipment",
+        "violation-missing-shipment",
+        "late-satisfied-shipment",
+        "informational-unmapped-event",
+        "reasonable-repeat",
+        "duplicate-event-id",
+        "cross-correlation-child-flow",
+        "inconclusive-source-partial",
+        "ambiguous-terminal-outcomes",
+        "no-data",
+        "no-applicable-model",
+        "model-selection-required",
+        "identifier-selection-required",
+        "source-trace-missing",
+    }
+    missing_cases = required_cases - set(case_ids)
+    if missing_cases:
+        raise ContractError(f"Event Check fixture coverage missing cases: {sorted(missing_cases)}")
+
+    for model_ref, (model_path, model) in model_by_ref.items():
+        scenario_path = (model_path.parent / model["fixtures"]["scenario_file"]).resolve()
+        if scenario_path != fixture_path.resolve():
+            raise ContractError(f"{model_ref}: unsupported scenario file {scenario_path}")
+        unknown_case_ids = set(model["fixtures"]["case_ids"]) - set(case_ids)
+        if unknown_case_ids:
+            raise ContractError(f"{model_ref}: unknown fixture case IDs {sorted(unknown_case_ids)}")
+
+    mapping_registry = schema_registry([mapping_schema_path])
+    mapping_schema = load_json(mapping_schema_path)
+    mapping = load_yaml(mapping_path)
+    mapping_errors = sorted(
+        Draft202012Validator(
+            mapping_schema,
+            registry=mapping_registry,
+            format_checker=FormatChecker(),
+        ).iter_errors(mapping),
+        key=lambda error: list(error.path),
+    )
+    if mapping_errors:
+        details = "; ".join(f"{list(error.path)} {error.message}" for error in mapping_errors)
+        raise ContractError(f"{mapping_path.relative_to(PROJECT_ROOT)}: {details}")
+    target_ref = (mapping["target_model"]["model_id"], mapping["target_model"]["version"])
+    if target_ref not in model_by_ref:
+        raise ContractError(f"legacy mapping targets missing Check Model {target_ref}")
+
+    duplicate_groups: dict[str, list[dict[str, Any]]] = {}
+    for item in mapping["mappings"]:
+        source_path = PROJECT_ROOT / item["legacy_source"]
+        if not source_path.is_file():
+            raise ContractError(f"legacy mapping references missing source {item['legacy_source']}")
+        target_id = item["target_id"]
+        known_targets = {
+            "FLOW_NODE": all_node_ids,
+            "FLOW_EXPECTATION": all_expectation_ids,
+            "GLOBAL_RULE": all_global_rule_ids,
+        }[item["target_kind"]]
+        if target_id not in known_targets:
+            raise ContractError(f"legacy mapping references unknown target {item['target_kind']} {target_id}")
+        if item["disposition"] == "MERGE_DUPLICATE":
+            group = item.get("duplicate_group")
+            if not group:
+                raise ContractError(f"legacy duplicate mapping {item['legacy_id']} has no duplicate_group")
+            duplicate_groups.setdefault(group, []).append(item)
+    for group, items in duplicate_groups.items():
+        if len(items) < 2 or len({(item["target_kind"], item["target_id"]) for item in items}) != 1:
+            raise ContractError(f"legacy duplicate group {group} does not converge on one target")
+
+    return len(model_paths), len(cases)
+
+
+def validate_hash_golden_vectors(schema_path: Path, vectors_path: Path) -> int:
+    schema = load_json(schema_path)
+    Draft202012Validator.check_schema(schema)
+    vectors = load_json(vectors_path)
+    errors = sorted(
+        Draft202012Validator(schema).iter_errors(vectors),
+        key=lambda error: list(error.path),
+    )
+    if errors:
+        details = "; ".join(f"{list(error.path)} {error.message}" for error in errors)
+        raise ContractError(f"{vectors_path.relative_to(PROJECT_ROOT)}: {details}")
+    seen_ids: set[str] = set()
+    kinds: set[str] = set()
+    for vector in vectors["vectors"]:
+        if vector["id"] in seen_ids:
+            raise ContractError(f"duplicate hash golden vector ID {vector['id']}")
+        seen_ids.add(vector["id"])
+        kinds.add(vector["kind"])
+        # These baseline documents intentionally avoid floating-point values; sorted compact JSON is
+        # therefore byte-identical to RFC 8785 JCS and catches key-order/whitespace drift in tooling.
+        canonical = json.dumps(
+            vector["document"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        if canonical != vector["canonical_utf8"]:
+            raise ContractError(f"hash golden vector {vector['id']} canonical document drift")
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if digest != vector["sha256"]:
+            raise ContractError(f"hash golden vector {vector['id']} digest drift")
+    if kinds != {"EVENT_SET", "EVALUATION"}:
+        raise ContractError(f"hash golden vectors must cover EVENT_SET and EVALUATION, got {sorted(kinds)}")
+    return len(vectors["vectors"])
+
+
 def validate_traceability(
     openapi: dict[str, Any],
     traceability: dict[str, Any],
@@ -362,7 +872,23 @@ def validate_traceability(
     missing_features = [path for path in mapped_features if not (PROJECT_ROOT / path).is_file()]
     if missing_features:
         raise ContractError(f"traceability references missing features: {sorted(missing_features)}")
-    return len(expected_operations) + len(expected_system_operations)
+
+    target_operations: set[str] = set()
+    target_contracts: set[str] = set()
+    for evolution in traceability.get("accepted_target_evolution", {}).values():
+        target_operations.update(evolution.get("openapi_operations", []))
+        target_contracts.update(evolution.get("executable_contracts", []))
+    missing_target_operations = target_operations - available_operations
+    if missing_target_operations:
+        raise ContractError(
+            f"target evolution references missing operationIds: {sorted(missing_target_operations)}"
+        )
+    missing_target_contracts = sorted(path for path in target_contracts if not (PROJECT_ROOT / path).is_file())
+    if missing_target_contracts:
+        raise ContractError(
+            f"target evolution references missing executable contracts: {missing_target_contracts}"
+        )
+    return len(expected_operations) + len(expected_system_operations) + len(target_operations)
 
 
 def validate_fixture_group(schema_path: Path, fixtures: list[tuple[Path, str | None]]) -> int:
@@ -674,20 +1200,30 @@ def main() -> int:
     yaml_documents = {path: load_yaml(path) for path in yaml_paths}
     json_documents = {path: load_json(path) for path in json_paths}
 
+    document_count = validate_document_catalog(
+        yaml_documents[PROJECT_ROOT / "requirements" / "governance" / "document-catalog.yaml"]
+    )
+    markdown_link_count = validate_markdown_links()
+
     # 第二階段：解析所有本地 $ref，確保契約不會指向不存在的檔案或節點。
     reference_count = sum(validate_references(path, document) for path, document in yaml_documents.items())
     reference_count += sum(validate_references(path, document) for path, document in json_documents.items())
+    validate_local_schema_id_references(json_documents)
+    json_schema_count = validate_all_json_schemas(json_documents)
 
     # 第三階段：驗證 OpenAPI 與需求追蹤矩陣之間的穩定映射。
     openapi = yaml_documents[PROJECT_ROOT / "openapi.yaml"]
     asyncapi = yaml_documents[PROJECT_ROOT / "contracts" / "asyncapi.yaml"]
-    traceability = yaml_documents[PROJECT_ROOT / "requirements" / "traceability.yaml"]
-    project_scope = yaml_documents[PROJECT_ROOT / "requirements" / "project-scope.yaml"]
-    implementation_plan = yaml_documents[PROJECT_ROOT / "requirements" / "implementation-plan.yaml"]
+    traceability = yaml_documents[PROJECT_ROOT / "requirements" / "governance" / "traceability.yaml"]
+    project_scope = yaml_documents[PROJECT_ROOT / "requirements" / "product" / "project-scope.yaml"]
+    implementation_plan = yaml_documents[PROJECT_ROOT / "requirements" / "delivery" / "implementation-plan.yaml"]
     system_openapis = [
         yaml_documents[path]
         for path in sorted((PROJECT_ROOT / "contracts" / "demo-services").glob("*.openapi.yaml"))
     ]
+    system_openapis.append(
+        yaml_documents[PROJECT_ROOT / "contracts" / "event-lab" / "event-lab.openapi.yaml"]
+    )
     validate_openapi_parameters(openapi)
     mapped_operation_count = validate_traceability(openapi, traceability, system_openapis)
     validate_requirement_sets(project_scope, traceability, implementation_plan)
@@ -704,6 +1240,20 @@ def main() -> int:
         schema_paths,
     )
     validate_generated_journey_registry()
+    check_model_count, check_fixture_count = validate_check_models(
+        PROJECT_ROOT / "contracts" / "check-models" / "check-model.schema.json",
+        sorted((PROJECT_ROOT / "contracts" / "check-models").glob("*.yaml")),
+        schema_paths,
+        PROJECT_ROOT / "contracts" / "event-check" / "event-check-fixture.schema.json",
+        PROJECT_ROOT / "contracts" / "event-check" / "fixtures" / "check-model-scenarios.json",
+        PROJECT_ROOT / "contracts" / "event-check" / "legacy-expectation-mapping.schema.json",
+        PROJECT_ROOT / "contracts" / "event-check" / "legacy-expectation-mapping.yaml",
+    )
+    hash_vector_count = validate_hash_golden_vectors(
+        PROJECT_ROOT / "contracts" / "event-check" / "hash-golden-vectors.schema.json",
+        PROJECT_ROOT / "contracts" / "event-check" / "hash-golden-vectors.json",
+    )
+    validate_generated_check_model_registry()
     validate_event_lab_scenarios(
         yaml_documents[PROJECT_ROOT / "contracts" / "event-lab" / "event-lab.yaml"],
         yaml_documents[PROJECT_ROOT / "contracts" / "event-lab" / "event-lab.openapi.yaml"],
@@ -750,12 +1300,17 @@ def main() -> int:
         yaml_documents[PROJECT_ROOT / "contracts" / "event-lab" / "event-lab.yaml"],
     )
 
-    print(f"OK yaml={len(yaml_paths)} json={len(json_paths)} refs={reference_count}")
+    print(
+        f"OK yaml={len(yaml_paths)} json={len(json_paths)} "
+        f"json_schemas={json_schema_count} refs={reference_count}"
+    )
     print(
         f"OK mapped_operations={mapped_operation_count} fixture_events={event_count} "
-        f"journey_profiles={journey_profile_count} processing_attempts={attempt_count} "
+        f"journey_profiles={journey_profile_count} check_models={check_model_count} "
+        f"check_fixtures={check_fixture_count} hash_vectors={hash_vector_count} "
+        f"processing_attempts={attempt_count} "
         f"grafana_webhooks={webhook_count} fixture_mapping_expressions={fixture_mapping_expression_count} "
-        f"ports={port_count}"
+        f"ports={port_count} documents={document_count} markdown_links={markdown_link_count}"
     )
     return 0
 

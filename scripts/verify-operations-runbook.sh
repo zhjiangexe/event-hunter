@@ -30,7 +30,7 @@ if [[ "${EVENT_HUNTER_RESTART}" == "true" && "${EVENT_HUNTER_CONFIRMED}" != "tru
 fi
 
 for EVENT_HUNTER_REQUIRED_FILE in \
-  requirements/operations-runbook.md \
+  requirements/operations/operations-runbook.md \
   compose.yaml \
   .env.example \
   scripts/dev-up.sh \
@@ -39,6 +39,8 @@ for EVENT_HUNTER_REQUIRED_FILE in \
   scripts/verify-persistence.sh \
   scripts/verify-event-pipeline-readiness.sh \
   scripts/verify-restart-persistence.sh \
+  scripts/test-event-check-source-failure.sh \
+  scripts/test-event-check-restart-persistence.sh \
   scripts/backup-local-volumes.sh; do
   if [[ ! -f "${EVENT_HUNTER_REQUIRED_FILE}" ]]; then
     echo "Runbook 依賴檔案不存在：${EVENT_HUNTER_REQUIRED_FILE}" >&2

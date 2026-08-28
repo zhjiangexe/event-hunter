@@ -1,0 +1,117 @@
+@startuml event-hunter-activity
+title Event Hunter Phase 1.1 現況活動圖
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName "Arial"
+skinparam activity {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+  FontColor #0F172A
+  DiamondBackgroundColor #FEF3C7
+  DiamondBorderColor #B45309
+  StartColor #16A34A
+  EndColor #DC2626
+  BarColor #64748B
+}
+
+start
+
+partition "Event Source" {
+  if (Scenario Lab 執行?) then (是)
+    if (LIVE_SERVICES?) then (是)
+      :呼叫真實 Order API;
+      :Order / Payment / Shipping
+      寫入業務資料與 Outbox;
+    else (LAB_INJECTION)
+      :發布固定劇本事件到
+      event-lab.events;
+    endif
+  else (否)
+    :外部或 Demo domain service
+    寫入業務資料與 Outbox;
+  endif
+}
+
+partition "Kafka Ingestion" {
+  :Debezium 發布 Outbox event，或
+  canonical producer 直接發布到 Kafka;
+  :官方 ClickHouse Sink 先寫入
+  domain / attempt 7 天 raw landing;
+  :Materialized Views 執行 event admission
+  或 processing-attempt contract;
+}
+
+if (Admission 可提升?) then (是)
+  partition "Event Read Model" {
+    :寫入 promoted event 或 attempt table;
+    :透過 canonical view 提供查詢;
+    :Quality Worker 產生一分鐘品質指標;
+  }
+else (否)
+  partition "Ingestion Failure" {
+    if (是資料契約或 Admission 問題?) then (是)
+      :寫入 contract / admission
+      safe failure summary;
+    else (connector technical poison)
+      :發布到 technical DLQ;
+      :Projector 只保存 transport metadata、
+      exception class 與 payload SHA-256;
+    endif
+    :Ingestion Issues 提供統一有界查詢;
+    :不保存 raw payload、exception message
+    或 stack trace 到一般 read model;
+    :不出現在正常 Business Timeline;
+  }
+  stop
+endif
+
+fork
+  partition "Technical Observability" {
+    :服務以 OpenTelemetry SDK 產生
+    traces / logs / metrics;
+    :Collector 送至 Tempo / Loki / Prometheus;
+    :Grafana 提供 Dashboard、Explore、Alerting;
+  }
+fork again
+  partition "Business Investigation" {
+    :Overview / Event Check 輸入識別碼;
+    :解析 bounded event scope
+    與 relationship provenance;
+    :確認 immutable Check Model;
+    :執行 deterministic evaluation;
+    :查看 Summary / Timeline / Flow /
+    Findings 與 telemetry deep links;
+  }
+end fork
+
+partition "Investigation Case" {
+  if (需要協作與追蹤?) then (是)
+    :保存 immutable Check Snapshot;
+    :建立或開啟案件並掛入 Snapshot;
+    :加入 Note、Evidence reference、
+    Check Finding / feedback 與 Audit;
+    :填寫 Root cause 與 Resolution;
+    :以 lock_version 提交狀態轉移;
+    if (樂觀鎖衝突?) then (是)
+      :重新載入最新案件並再次提交;
+    else (否)
+      :案件進入 RESOLVED / CLOSED;
+    endif
+  else (否)
+    :完成唯讀調查;
+  endif
+}
+
+note right
+  目前未實作：
+  * Continuous all-instance scanning
+  * Automatic Finding / Case creation
+  * Temporal case workflow
+  * Projection Rebuild
+  * Sandbox Replay
+  * Production Redrive
+end note
+
+stop
+@enduml

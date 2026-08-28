@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/check-model-registry.schema.json",
+  "title": "Generated Check Model Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["registry_contract_version", "models"],
+  "properties": {
+    "registry_contract_version": { "const": 1 },
+    "models": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/RegistryEntry" }
+    }
+  },
+  "$defs": {
+    "RegistryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_path", "checksum", "model"],
+      "properties": {
+        "source_path": {
+          "type": "string",
+          "pattern": "^contracts/check-models/[a-z0-9._/-]+\\.yaml$"
+        },
+        "checksum": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "model": {
+          "$ref": "./check-model.schema.json"
+        }
+      }
+    }
+  }
+}

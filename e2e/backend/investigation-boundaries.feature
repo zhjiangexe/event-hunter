@@ -11,26 +11,45 @@ Feature: REQ-EH-002 REQ-EH-004 REQ-EH-005 REQ-EH-014 REQ-EH-015 案件 API 邊�
   Scenario: 案件清單使用後端穩定排序與綁定 query 的 cursor 分頁
     * def uniqueId = java.util.UUID.randomUUID().toString()
     * def correlationId = 'PAGE-' + uniqueId
+    * def titleA = '[E2E] Cursor page case A ' + uniqueId
+    * def titleB = '[E2E] Cursor page case B ' + uniqueId
+    * def titleC = '[E2E] Cursor page case C ' + uniqueId
 
     Given path 'api', 'v1', 'investigations'
-    And request { title: '[E2E] Cursor page case A', severity: 'LOW', correlation_id: '#(correlationId)' }
+    And request { title: '#(titleA)', severity: 'LOW', correlation_id: '#(correlationId)' }
     When method post
     Then status 201
     * def firstId = response.id
 
     Given path 'api', 'v1', 'investigations'
-    And request { title: '[E2E] Cursor page case B', severity: 'MEDIUM', correlation_id: '#(correlationId)' }
+    And request { title: '#(titleB)', severity: 'MEDIUM', correlation_id: '#(correlationId)' }
     When method post
     Then status 201
     * def secondId = response.id
+    * def secondCaseNo = response.case_no
 
     Given path 'api', 'v1', 'investigations'
-    And request { title: '[E2E] Cursor page case C', severity: 'HIGH', correlation_id: '#(correlationId)' }
+    And request { title: '#(titleC)', severity: 'HIGH', correlation_id: '#(correlationId)' }
     When method post
     Then status 201
     * def thirdId = response.id
     * def expectedIds = karate.append(firstId, secondId, thirdId)
     * def expectedPageOneIds = karate.append(firstId, secondId)
+
+    # 人類使用的 case no／title 搜尋由後端執行，不只篩選目前載入的一頁。
+    Given path 'api', 'v1', 'investigations'
+    And param query = titleB
+    And param page_size = 20
+    When method get
+    Then status 200
+    And match response.items[*].id == ['#(secondId)']
+
+    Given path 'api', 'v1', 'investigations'
+    And param query = secondCaseNo
+    And param page_size = 20
+    When method get
+    Then status 200
+    And match response.items[*].id == ['#(secondId)']
 
     Given path 'api', 'v1', 'investigations'
     And param correlation_id = correlationId
@@ -104,6 +123,15 @@ Feature: REQ-EH-002 REQ-EH-004 REQ-EH-005 REQ-EH-014 REQ-EH-015 案件 API 邊�
       | cursor    | not-a-cursor  | INVALID_CURSOR    |
       | sort_by   | severity      | INVALID_SORT      |
       | sort_order | sideways     | INVALID_SORT      |
+
+  @p1-1-ux-08
+  Scenario: 案件文字搜尋拒絕超過契約上限的輸入
+    * def oversizedQuery = 'x'.repeat(101)
+    Given path 'api', 'v1', 'investigations'
+    And param query = oversizedQuery
+    When method get
+    Then status 422
+    And match response.code == 'INVALID_QUERY'
 
   Scenario: 案件狀態只能沿合法路徑轉移且 CLOSED 後不可再修改
     Given path 'api', 'v1', 'investigations'

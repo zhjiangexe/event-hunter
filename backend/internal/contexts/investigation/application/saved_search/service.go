@@ -15,6 +15,7 @@ type Repository = domain.SavedSearchRepository
 const (
 	TargetTimeline             = domain.SavedSearchTimeline
 	TargetJourney              = domain.SavedSearchJourney
+	TargetEventCheck           = domain.SavedSearchEventCheck
 	defaultPresetWindowSeconds = 72 * 60 * 60
 )
 

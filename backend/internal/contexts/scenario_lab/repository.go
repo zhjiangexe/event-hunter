@@ -14,6 +14,7 @@ var ErrRunNotFound = errors.New("scenario run not found")
 type Repository interface {
 	Create(context.Context, RunRecord) error
 	Get(context.Context, string) (RunRecord, error)
+	List(context.Context, RunFilter) ([]RunRecord, error)
 	MarkRunning(context.Context, string, time.Time) error
 	Complete(context.Context, string, string, Actual, []Check, *string, time.Time) error
 }
@@ -38,18 +39,71 @@ func (repository *PostgresRepository) Create(ctx context.Context, run RunRecord)
 }
 
 func (repository *PostgresRepository) Get(ctx context.Context, id string) (RunRecord, error) {
+	run, err := scanRun(repository.db.QueryRowContext(ctx, `SELECT id,scenario_id,scenario_name,execution_mode,synthetic,
+        correlation_id,trace_id,status,expected_event_types,actual,checks,error_message,accepted_at,started_at,completed_at
+		FROM scenario_runs WHERE id=$1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return RunRecord{}, ErrRunNotFound
+	}
+	return run, nil
+}
+
+func (repository *PostgresRepository) List(ctx context.Context, filter RunFilter) ([]RunRecord, error) {
+	query := `SELECT id,scenario_id,scenario_name,execution_mode,synthetic,
+        correlation_id,trace_id,status,expected_event_types,actual,checks,error_message,accepted_at,started_at,completed_at
+        FROM scenario_runs WHERE 1=1`
+	args := make([]any, 0, 5)
+	for _, candidate := range []struct {
+		column string
+		value  string
+	}{
+		{column: "scenario_id", value: filter.ScenarioID},
+		{column: "status", value: filter.Status},
+		{column: "execution_mode", value: filter.ExecutionMode},
+	} {
+		if candidate.value == "" {
+			continue
+		}
+		args = append(args, candidate.value)
+		query += fmt.Sprintf(" AND %s=$%d", candidate.column, len(args))
+	}
+	if filter.From != nil {
+		args = append(args, *filter.From)
+		query += fmt.Sprintf(" AND accepted_at >= $%d", len(args))
+	}
+	if filter.To != nil {
+		args = append(args, *filter.To)
+		query += fmt.Sprintf(" AND accepted_at < $%d", len(args))
+	}
+	query += fmt.Sprintf(" ORDER BY accepted_at DESC,id DESC LIMIT %d", filter.PageSize)
+	rows, err := repository.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list scenario runs: %w", err)
+	}
+	defer rows.Close()
+	runs := make([]RunRecord, 0, filter.PageSize)
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, run)
+	}
+	return runs, rows.Err()
+}
+
+type runScanner interface {
+	Scan(...any) error
+}
+
+func scanRun(scanner runScanner) (RunRecord, error) {
 	var run RunRecord
 	var expected, actual, checks []byte
-	err := repository.db.QueryRowContext(ctx, `SELECT id,scenario_id,scenario_name,execution_mode,synthetic,
-        correlation_id,trace_id,status,expected_event_types,actual,checks,error_message,accepted_at,started_at,completed_at
-        FROM scenario_runs WHERE id=$1`, id).Scan(
+	err := scanner.Scan(
 		&run.RunID, &run.ScenarioID, &run.ScenarioName, &run.ExecutionMode, &run.Synthetic,
 		&run.CorrelationID, &run.TraceID, &run.Status, &expected, &actual, &checks, &run.Error,
 		&run.AcceptedAt, &run.StartedAt, &run.CompletedAt,
 	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return RunRecord{}, ErrRunNotFound
-	}
 	if err != nil {
 		return RunRecord{}, fmt.Errorf("read scenario run: %w", err)
 	}

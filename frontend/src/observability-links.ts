@@ -1,4 +1,5 @@
 import type { EvidenceReference, TimelineEvent } from "./api";
+import { legacyPatternModelURL } from "./legacy-routes";
 
 export type ObservabilityLink = {
   kind: "event" | "trace" | "logs" | "dashboard";
@@ -11,6 +12,11 @@ export type EvidenceSourceLink = {
   href: string;
   external: boolean;
 };
+
+type ObservableEvent = Pick<
+  TimelineEvent,
+  "event_id" | "occurred_at" | "producer" | "correlation_id" | "trace_id"
+>;
 
 const defaultGrafanaUrl =
   import.meta.env.VITE_GRAFANA_URL || "http://localhost:28332";
@@ -31,7 +37,7 @@ export function trustedGrafanaBase(value: string) {
   return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
 }
 
-function eventRange(event: TimelineEvent) {
+function eventRange(event: ObservableEvent) {
   const occurredAt = Date.parse(event.occurred_at);
   return {
     from: String(occurredAt - 5 * 60_000),
@@ -80,7 +86,7 @@ function sqlLiteral(value: string) {
 }
 
 export function eventObservabilityLinks(
-  event: TimelineEvent,
+  event: ObservableEvent,
   grafanaUrl = defaultGrafanaUrl,
 ): ObservabilityLink[] {
   const range = eventRange(event);
@@ -154,6 +160,21 @@ export function qualityDashboardLink(
   return `${trustedGrafanaBase(grafanaUrl)}/d/event-quality?${dashboardSearch.toString()}`;
 }
 
+export function traceObservabilityLink(
+  traceID: string,
+  from: string,
+  to: string,
+  grafanaUrl = defaultGrafanaUrl,
+) {
+  return exploreUrl(
+    grafanaUrl,
+    "tempo",
+    "tempo",
+    { query: traceID, queryType: "traceql" },
+    { from: String(Date.parse(from)), to: String(Date.parse(to)) },
+  );
+}
+
 export function evidenceSourceLink(
   item: EvidenceReference,
   grafanaUrl = defaultGrafanaUrl,
@@ -216,9 +237,12 @@ export function evidenceSourceLink(
     }
     case "PATTERN_LIBRARY": {
       const patternID = item.reference.split(":v")[0];
+      const modelURL = legacyPatternModelURL(item.reference);
       return {
-        label: "開啟 Pattern",
-        href: `/patterns?pattern_id=${encodeURIComponent(patternID)}#pattern-${encodeURIComponent(patternID)}`,
+        label: modelURL ? "開啟 Check Model" : "開啟 Legacy Pattern",
+        href:
+          modelURL ??
+          `/patterns?pattern_id=${encodeURIComponent(patternID)}#pattern-${encodeURIComponent(patternID)}`,
         external: false,
       };
     }

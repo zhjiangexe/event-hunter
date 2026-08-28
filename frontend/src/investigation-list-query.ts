@@ -15,6 +15,7 @@ const severities: Severity[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const priorities = ["P0", "P1", "P2", "P3"] as const;
 
 export type InvestigationListQueryState = {
+  query?: string;
   status?: InvestigationStatus;
   severity?: Severity;
   priority?: (typeof priorities)[number];
@@ -31,6 +32,7 @@ export function parseInvestigationListQuery(
   search: string,
 ): InvestigationListQueryState {
   const params = new URLSearchParams(search);
+  const query = params.get("query")?.trim() || undefined;
   const requestedStatus = params.get("status") as InvestigationStatus;
   const requestedSeverity = params.get("severity") as Severity;
   const requestedPriority = params.get("priority") as
@@ -52,6 +54,7 @@ export function parseInvestigationListQuery(
     params.get("sort_by") === "updated_at" ? "updated_at" : "created_at";
   const sortOrder = params.get("sort_order") === "asc" ? "asc" : "desc";
   const filters = {
+    query,
     status,
     severity,
     priority,
@@ -63,6 +66,7 @@ export function parseInvestigationListQuery(
   } satisfies InvestigationFilters;
 
   return {
+    query,
     status,
     severity,
     priority,
@@ -73,6 +77,7 @@ export function parseInvestigationListQuery(
     sortOrder,
     filters,
     key: [
+      query,
       status,
       severity,
       priority,

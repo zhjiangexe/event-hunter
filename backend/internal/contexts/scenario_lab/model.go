@@ -64,6 +64,21 @@ type Run struct {
 	AcceptedAt         time.Time          `json:"accepted_at"`
 	StartedAt          *time.Time         `json:"started_at"`
 	CompletedAt        *time.Time         `json:"completed_at"`
+	DurationMS         *int64             `json:"duration_ms"`
+	CurrentStep        string             `json:"current_step"`
+}
+
+type RunPage struct {
+	Items []Run `json:"items"`
+}
+
+type RunFilter struct {
+	ScenarioID    string
+	Status        string
+	ExecutionMode string
+	From          *time.Time
+	To            *time.Time
+	PageSize      int
 }
 
 type RunRecord struct {

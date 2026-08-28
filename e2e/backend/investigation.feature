@@ -202,7 +202,7 @@ Feature: REQ-EH-002 REQ-EH-004 REQ-EH-005 REQ-EH-014 REQ-EH-015 案件生命週�
     And match response !contains { raw_logs: '#present' }
     And match response !contains { raw_traces: '#present' }
 
-  Scenario: Timeline Event 可用 bounded source lookup 加入既有案件且重送不重複
+  Scenario: Timeline Event 可用 bounded source lookup 加入案件且重送不重複
     * def uniqueId = java.util.UUID.randomUUID().toString()
     * def primaryCorrelationId = 'CASE-ATTACH-' + uniqueId
     * def from = '2026-08-20T11:00:00Z'

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/event-check-fixture.schema.json",
+  "title": "Event Check Deterministic Fixture Set",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "source_health_profiles", "cases"],
+  "properties": {
+    "contract_version": { "const": 1 },
+    "source_health_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]{2,31}$" },
+      "additionalProperties": {
+        "$ref": "https://event-hunter.local/schemas/event-check-evaluation.schema.json#/$defs/SourceHealth"
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "request", "source_health_profile", "events", "expected"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "request": {
+          "$ref": "https://event-hunter.local/schemas/event-check-evaluation.schema.json#/$defs/EvaluationRequest"
+        },
+        "source_health_profile": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,31}$" },
+        "events": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "https://event-hunter.local/schemas/canonical-envelope.schema.json" }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resolution_status", "check_status", "business_outcome_category", "expectation_states", "finding_codes", "activated_child_models", "global_finding_codes", "unmapped_event_types"],
+          "properties": {
+            "resolution_status": {
+              "enum": ["NO_DATA", "IDENTIFIER_SELECTION_REQUIRED", "MODEL_SELECTION_REQUIRED", "NO_APPLICABLE_MODEL", "EVALUATED"]
+            },
+            "check_status": {
+              "type": ["string", "null"],
+              "enum": ["NO_DATA", "IN_PROGRESS", "CONFORMANT", "DEVIATED", "INCONCLUSIVE", "AMBIGUOUS", null]
+            },
+            "business_outcome_category": {
+              "type": ["string", "null"],
+              "enum": ["SUCCESS", "EXPECTED_FAILURE", "COMPENSATED", "INCOMPLETE", null]
+            },
+            "expectation_states": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+              "additionalProperties": { "enum": ["SATISFIED", "WAITING", "REMINDER", "VIOLATED", "LATE_SATISFIED"] }
+            },
+            "finding_codes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+            },
+            "activated_child_models": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" }
+            },
+            "global_finding_codes": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+            },
+            "unmapped_event_types": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{1,127}$" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

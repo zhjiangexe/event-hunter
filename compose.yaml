@@ -82,6 +82,7 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:-grafana_reader_local_only}
     ports:
       - "${CLICKHOUSE_HTTP_PORT:-28317}:8123"
       - "${CLICKHOUSE_NATIVE_PORT:-28318}:9000"
@@ -329,7 +330,7 @@ services:
       # encrypts the expanded HMAC secret in its own persistent database.
       GRAFANA_WEBHOOK_SECRET: ${GRAFANA_WEBHOOK_SECRET:-grafana_webhook_local_only}
       # 必須與 infra/clickhouse/initdb 的本機唯讀帳號一致；正式環境不可沿用。
-      GRAFANA_CLICKHOUSE_PASSWORD: grafana_reader_local_only
+      GRAFANA_CLICKHOUSE_PASSWORD: ${GRAFANA_CLICKHOUSE_PASSWORD:-grafana_reader_local_only}
     ports:
       - "${GRAFANA_PORT:-28332}:3000"
     volumes:

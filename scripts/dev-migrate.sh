@@ -57,6 +57,10 @@ apply_postgres_migration() {
 
 apply_postgres_migration backend/migrations/postgres/00007_live_scenario_catalog.sql
 apply_postgres_migration backend/migrations/postgres/00008_investigation_incident_window.sql
+apply_postgres_migration_if_table_missing \
+  check_snapshots \
+  backend/migrations/postgres/00009_check_snapshots.sql
+apply_postgres_migration backend/migrations/postgres/00010_saved_search_event_check.sql
 
 apply_demo_postgres_migration_if_table_missing() {
   local EVENT_HUNTER_COMPOSE_SERVICE="$1"

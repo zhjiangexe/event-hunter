@@ -51,11 +51,12 @@ func (stub eventReaderStub) Search(context.Context, forensics.EventSearchFilter)
 }
 
 func TestGetBuildsCompletedDeliveredJourney(t *testing.T) {
+	traceID := "8f6c9d92f05d4f1bad293a1d42cdaff0"
 	service := NewService(eventReaderStub{events: []forensics.ForensicsEvent{
-		event("delivered-1", "ShipmentDelivered", "2026-08-20T10:05:00Z", "shipping-service"),
-		event("shipment-1", "ShipmentCreated", "2026-08-20T10:03:00Z", "shipping-service"),
-		event("order-1", "OrderCreated", "2026-08-20T10:00:00Z", "order-service"),
-		event("payment-1", "PaymentCompleted", "2026-08-20T10:00:30Z", "payment-service"),
+		eventWithTrace("delivered-1", "ShipmentDelivered", "2026-08-20T10:05:00Z", "shipping-service", traceID),
+		eventWithTrace("shipment-1", "ShipmentCreated", "2026-08-20T10:03:00Z", "shipping-service", traceID),
+		eventWithTrace("order-1", "OrderCreated", "2026-08-20T10:00:00Z", "order-service", traceID),
+		eventWithTrace("payment-1", "PaymentCompleted", "2026-08-20T10:00:30Z", "payment-service", traceID),
 	}})
 	result, err := service.Get(context.Background(), journeyQuery())
 	if err != nil {
@@ -66,6 +67,12 @@ func TestGetBuildsCompletedDeliveredJourney(t *testing.T) {
 	}
 	if result.Milestones[2].State != MilestoneCompleted || *result.Milestones[2].DurationFromPreviousMS != 150000 {
 		t.Fatalf("unexpected shipping milestone: %#v", result.Milestones[2])
+	}
+	if result.CompletedMilestoneCount != 4 || result.TotalMilestoneCount != 5 || result.CurrentMilestoneID != nil || result.NextMilestoneID != nil {
+		t.Fatalf("unexpected completed progress: %#v", result)
+	}
+	if len(result.TraceIDs) != 1 || result.TraceIDs[0] != traceID {
+		t.Fatalf("unexpected trace ids: %#v", result.TraceIDs)
 	}
 }
 
@@ -78,6 +85,12 @@ func TestGetKeepsCreatedShipmentInProgressUntilDelivery(t *testing.T) {
 	result, err := service.Get(context.Background(), journeyQuery())
 	if err != nil || result.Status != StatusInProgress || result.Milestones[3].State != MilestoneInProgress {
 		t.Fatalf("result = %#v, err = %v", result, err)
+	}
+	if result.CurrentMilestoneID == nil || *result.CurrentMilestoneID != "DELIVERY" || result.NextMilestoneID == nil || *result.NextMilestoneID != "RETURN" {
+		t.Fatalf("unexpected current/next progress: %#v", result)
+	}
+	if len(result.NextExpectedEventTypes) != 1 || result.NextExpectedEventTypes[0] != "ShipmentDelivered" {
+		t.Fatalf("unexpected expected events: %#v", result.NextExpectedEventTypes)
 	}
 }
 
@@ -125,6 +138,12 @@ func event(id, eventType, occurredAt, producer string) forensics.ForensicsEvent 
 		EventID: id, EventType: eventType, OccurredAt: occurredAt, Producer: producer,
 		CorrelationID: "ORDER-1", AggregateType: "Order", AggregateID: "ORDER-1",
 	}
+}
+
+func eventWithTrace(id, eventType, occurredAt, producer, traceID string) forensics.ForensicsEvent {
+	result := event(id, eventType, occurredAt, producer)
+	result.TraceID = &traceID
+	return result
 }
 
 func journeyQuery() Query {

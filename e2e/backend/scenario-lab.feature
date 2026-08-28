@@ -35,7 +35,7 @@ Feature: Scenario Lab 固定劇本由真實後端執行並回查 actual 結果
     * def actualCheck = response.checks.find(x => x.id == '<checkId>')
     And assert actualCheck != null
     And match actualCheck.passed == true
-    And match response.links contains { timeline: '#regex http://localhost:28334/timeline\\?correlation_id=.+', grafana: '#string', loki: '#string' }
+    And match response.links contains { timeline: '#regex http://localhost:28334/event-check\\?.*identifier_type=CORRELATION_ID.*', grafana: '#string', loki: '#string' }
     And match response.trace_id == '#regex [0-9a-f]{32}'
     And match response.error == null
 
@@ -97,3 +97,44 @@ Feature: Scenario Lab 固定劇本由真實後端執行並回查 actual 結果
     And match traceIds contains traceId
     And match eventTypes contains 'PaymentFailed'
     And match eventTypes contains 'OrderCancelled'
+
+  @p1-1-ux-09
+  Scenario: Run History 可依 Scenario、狀態與模式回查持久化結果
+    Given path 'api', 'v1', 'scenario-runs'
+    And request { scenario_id: 'S8' }
+    When method post
+    Then status 202
+    * def runId = response.run_id
+    * def correlationId = response.correlation_id
+
+    Given path 'api', 'v1', 'scenario-runs', runId
+    And retry until responseStatus == 200 && response.status == 'PASSED'
+    When method get
+    Then status 200
+
+    Given path 'api', 'v1', 'scenario-runs'
+    And param scenario_id = 'S8'
+    And param status = 'PASSED'
+    And param execution_mode = 'LAB_INJECTION'
+    And param page_size = 20
+    When method get
+    Then status 200
+    And match response.items == '#[_ > 0]'
+    * def matchingRun = karate.filter(response.items, function(x){ return x.run_id == runId })[0]
+    And match matchingRun contains { run_id: '#(runId)', correlation_id: '#(correlationId)', status: 'PASSED', execution_mode: 'LAB_INJECTION', duration_ms: '#number', current_step: '驗收通過' }
+    And match matchingRun.trace_id == '#regex [0-9a-f]{32}'
+
+  @p1-1-ux-09
+  Scenario Outline: Run History 拒絕無效查詢條件
+    Given path 'api', 'v1', 'scenario-runs'
+    And param <parameter> = '<value>'
+    When method get
+    Then status 422
+    And match response.code == '<errorCode>'
+
+    Examples:
+      | parameter      | value       | errorCode              |
+      | scenario_id    | S99         | INVALID_SCENARIO_ID    |
+      | status         | UNKNOWN     | INVALID_STATUS         |
+      | execution_mode | UNKNOWN     | INVALID_EXECUTION_MODE |
+      | page_size      | 0           | INVALID_PAGE_SIZE      |

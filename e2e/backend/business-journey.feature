@@ -36,6 +36,12 @@ Feature: REQ-EH-012 唯讀 Business Journey
     And match response contains { profile_id: 'order-fulfillment', profile_version: 1, profile_title: 'Order Fulfillment' }
     And match response.status == 'COMPLETED'
     And match response.event_count == 6
+    And match response.completed_milestone_count == 4
+    And match response.total_milestone_count == 5
+    And match response.current_milestone_id == null
+    And match response.next_milestone_id == null
+    And match response.next_expected_event_types == []
+    And match each response.trace_ids == '#regex [0-9a-f]{32}'
     And match response.anomalies == []
     And match response.milestones[0] contains { id: 'ORDER', state: 'COMPLETED', actual_event_types: ['OrderCreated'] }
     And match response.milestones[1] contains { id: 'PAYMENT', state: 'COMPLETED', actual_event_types: ['PaymentCompleted'] }
@@ -51,6 +57,12 @@ Feature: REQ-EH-012 唯讀 Business Journey
     Then status 200
     And match response.status == 'IN_PROGRESS'
     And match response.event_count == 2
+    And match response.completed_milestone_count == 2
+    And match response.total_milestone_count == 5
+    And match response.current_milestone_id == 'SHIPPING'
+    And match response.next_milestone_id == 'DELIVERY'
+    And match response.next_expected_event_types contains 'ShipmentCreated'
+    And match each response.trace_ids == '#regex [0-9a-f]{32}'
     And match response.milestones[2] contains { id: 'SHIPPING', state: 'IN_PROGRESS', actual_event_types: [] }
     And match response.anomalies[0].code == 'MISSING_SHIPMENT_AFTER_PAYMENT'
     And match response.anomalies[0].severity == 'HIGH'
@@ -63,6 +75,10 @@ Feature: REQ-EH-012 唯讀 Business Journey
     Then status 200
     And match response.status == 'EMPTY'
     And match response.event_count == 0
+    And match response.completed_milestone_count == 0
+    And match response.total_milestone_count == 5
+    And match response.current_milestone_id == null
+    And match response.trace_ids == []
     And match response.started_at == null
     And match each response.milestones contains { state: 'NOT_APPLICABLE' }
 

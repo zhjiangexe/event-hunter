@@ -16,6 +16,7 @@ import {
 } from "@tanstack/react-query";
 import {
   BrowserRouter,
+  NavLink,
   Navigate,
   useLocation,
   useNavigate,
@@ -52,9 +53,15 @@ import {
   eventObservabilityLinks,
   evidenceSourceLink,
   qualityDashboardLink,
+  traceObservabilityLink,
 } from "./observability-links";
 import { parseInvestigationListQuery } from "./investigation-list-query";
-import { scenarioApi, type ScenarioRun } from "./scenario-api";
+import {
+  scenarioApi,
+  type ScenarioRun,
+  type ScenarioRunFilters,
+  type ScenarioRunPage,
+} from "./scenario-api";
 import {
   featureGuideByID,
   featureGuides,
@@ -62,9 +69,31 @@ import {
   type IntegrationGuideDefinition,
   type JourneyInterpretationDefinition,
 } from "./feature-guide";
+import {
+  CheckModelsRegistry,
+  EventCheckWorkspace,
+  SavedCheckResults,
+} from "./event-check-workspace";
+import { legacyPatternModelURL, resolveLegacyRoute } from "./legacy-routes";
 import "./styles.css";
 
 const queryClient = new QueryClient();
+
+const apiErrorMessages: Record<string, string> = {
+  UNAUTHENTICATED: "登入狀態已失效，請重新登入。",
+  FORBIDDEN: "目前角色沒有執行此操作的權限。",
+  NOT_FOUND: "找不到指定資料，可能已刪除或網址已過期。",
+  OPTIMISTIC_LOCK_CONFLICT: "資料已被其他人更新，請重新載入後再試。",
+  INVALID_TIME_WINDOW: "時間範圍不正確，請確認起訖時間與七天上限。",
+  INVESTIGATION_LIST_UNAVAILABLE: "案件資料來源暫時無法使用。",
+  PATTERN_EFFECTIVENESS_UNAVAILABLE: "Pattern 成效資料暫時無法使用。",
+  SCENARIO_RUNS_UNAVAILABLE: "Scenario 執行歷程暫時無法使用。",
+};
+
+function userFacingError(error: unknown, fallback: string) {
+  const code = error instanceof Error ? error.message : "UNKNOWN_ERROR";
+  return `${apiErrorMessages[code] ?? fallback}（錯誤代碼：${code}）`;
+}
 
 const timelineDateFormatter = new Intl.DateTimeFormat("zh-TW", {
   year: "numeric",
@@ -157,7 +186,7 @@ function Login() {
     mutationFn: (role: Role) => api.createSession(role),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["me"] });
-      navigate("/timeline");
+      navigate("/event-check");
     },
   });
   return (
@@ -165,12 +194,14 @@ function Login() {
       <section className="login-card">
         <p className="eyebrow">EVENT HUNTER / BUSINESS FORENSICS</p>
         <h1>找出事件流裡的業務真相。</h1>
-        <p className="muted">選擇展示角色，開始查詢 Business Timeline。</p>
+        <p className="muted">選擇展示角色，開始執行 Event Check。</p>
         <div className="role-grid">
           {(["VIEWER", "INVESTIGATOR", "ADMIN"] as Role[]).map((role) => (
             <button
               data-testid={`role-${role.toLowerCase()}`}
               className="role-card"
+              disabled={login.isPending}
+              aria-busy={login.isPending && login.variables === role}
               onClick={() => login.mutate(role)}
               key={role}
             >
@@ -182,8 +213,15 @@ function Login() {
                     : "管理員"}
               </span>
               <small>
-                {role === "VIEWER" ? "唯讀查詢" : "查詢、建立與分析案件"}
+                {role === "VIEWER"
+                  ? "唯讀查看 Event Check、Check Models 與案件"
+                  : role === "INVESTIGATOR"
+                    ? "查詢、建立案件、分析與回饋 finding"
+                    : "包含調查員能力與完整示範管理權限"}
               </small>
+              {login.isPending && login.variables === role && (
+                <small role="status">登入中…</small>
+              )}
             </button>
           ))}
         </div>
@@ -202,90 +240,127 @@ function Shell({
   principal: Principal;
   children: React.ReactNode;
 }) {
-  const navigate = useNavigate();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navGroups = [
+    {
+      label: "總覽",
+      items: [{ testID: "nav-dashboard", to: "/dashboard", label: "Overview" }],
+    },
+    {
+      label: "探索與檢查",
+      items: [
+        { testID: "nav-event-check", to: "/event-check", label: "Event Check" },
+        {
+          testID: "nav-saved-results",
+          to: "/event-check/saved-results",
+          label: "Saved Results",
+        },
+      ],
+    },
+    {
+      label: "問題與調查",
+      items: [
+        {
+          testID: "nav-investigations",
+          to: "/investigations",
+          label: "Investigation Cases",
+        },
+        {
+          testID: "nav-ingestion-issues",
+          to: "/ingestion-issues",
+          label: "Ingestion Issues",
+        },
+      ],
+    },
+    {
+      label: "模型與規則",
+      items: [
+        {
+          testID: "nav-check-models",
+          to: "/check-models",
+          label: "Check Models",
+        },
+      ],
+    },
+    {
+      label: "工具與說明",
+      items: [
+        {
+          testID: "nav-scenario-lab",
+          to: "/scenario-lab",
+          label: "Scenario Lab",
+        },
+        {
+          testID: "nav-feature-guide",
+          to: "/guide",
+          label: "Event Hunter Guide",
+        },
+      ],
+    },
+  ];
+  const navItems = navGroups.flatMap((group) => group.items);
+  const currentLabel =
+    navItems.find((item) =>
+      item.to === "/investigations"
+        ? location.pathname.startsWith("/investigations")
+        : location.pathname === item.to,
+    )?.label ?? "Event Hunter";
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        跳到主要內容
+      </a>
       <aside>
-        <p className="brand">
-          EH<span>.</span>
-        </p>
-        <p className="eyebrow">INVESTIGATION CONSOLE</p>
-        <nav>
+        <div className="shell-brand-row">
+          <div>
+            <p className="brand">
+              EH<span>.</span>
+            </p>
+            <p className="eyebrow">INVESTIGATION CONSOLE</p>
+          </div>
           <button
-            data-testid="nav-dashboard"
-            className={location.pathname === "/dashboard" ? "nav-active" : ""}
-            onClick={() => navigate("/dashboard")}
+            type="button"
+            className="mobile-nav-toggle"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setMobileMenuOpen((open) => !open)}
           >
-            Overview
+            <span>{currentLabel}</span>
+            <span aria-hidden="true">{mobileMenuOpen ? "×" : "☰"}</span>
           </button>
-          <button
-            data-testid="nav-timeline"
-            className={location.pathname === "/timeline" ? "nav-active" : ""}
-            onClick={() => navigate("/timeline")}
-          >
-            Business Timeline
-          </button>
-          <button
-            data-testid="nav-journey"
-            className={location.pathname === "/journey" ? "nav-active" : ""}
-            onClick={() => navigate("/journey")}
-          >
-            Business Journey
-          </button>
-          <button
-            data-testid="nav-journey-profiles"
-            className={
-              location.pathname === "/journey-profiles" ? "nav-active" : ""
-            }
-            onClick={() => navigate("/journey-profiles")}
-          >
-            Journey Profiles
-          </button>
-          <button
-            data-testid="nav-ingestion-issues"
-            className={
-              location.pathname === "/ingestion-issues" ? "nav-active" : ""
-            }
-            onClick={() => navigate("/ingestion-issues")}
-          >
-            Ingestion Issues
-          </button>
-          <button
-            data-testid="nav-investigations"
-            className={
-              location.pathname === "/investigations" ||
-              location.pathname.startsWith("/investigations/")
-                ? "nav-active"
-                : ""
-            }
-            onClick={() => navigate("/investigations")}
-          >
-            Investigation Cases
-          </button>
-          <button
-            data-testid="nav-patterns"
-            className={location.pathname === "/patterns" ? "nav-active" : ""}
-            onClick={() => navigate("/patterns")}
-          >
-            Pattern Library
-          </button>
-          <button
-            data-testid="nav-scenario-lab"
-            className={
-              location.pathname === "/scenario-lab" ? "nav-active" : ""
-            }
-            onClick={() => navigate("/scenario-lab")}
-          >
-            Scenario Lab
-          </button>
-          <button
-            data-testid="nav-feature-guide"
-            className={location.pathname === "/guide" ? "nav-active" : ""}
-            onClick={() => navigate("/guide")}
-          >
-            Event Hunter Guide
-          </button>
+        </div>
+        <nav
+          id="primary-navigation"
+          className={mobileMenuOpen ? "mobile-open" : ""}
+        >
+          {navGroups.map((group) => (
+            <section
+              className="nav-group"
+              aria-label={group.label}
+              key={group.label}
+            >
+              <span className="nav-group-label">{group.label}</span>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to !== "/investigations"}
+                  data-testid={item.testID}
+                  className={({ isActive }) =>
+                    isActive ||
+                    (item.to === "/investigations" &&
+                      location.pathname.startsWith("/investigations"))
+                      ? "nav-active"
+                      : ""
+                  }
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </section>
+          ))}
         </nav>
         <div className="identity">
           <small>SESSION ROLE</small>
@@ -301,16 +376,40 @@ function Shell({
           </button>
         </div>
       </aside>
-      <section className="content">
+      <section className="content" id="main-content" tabIndex={-1}>
         <header>
           <span>業務事件鑑識</span>
           <span className="status-dot" role="status" aria-live="polite">
-            ● API ready
+            ● Authenticated session
           </span>
         </header>
         {children}
       </section>
     </div>
+  );
+}
+
+export function EventCheckPage({ principal }: { principal: Principal }) {
+  return (
+    <Shell principal={principal}>
+      <EventCheckWorkspace principal={principal} />
+    </Shell>
+  );
+}
+
+export function SavedCheckResultsPage({ principal }: { principal: Principal }) {
+  return (
+    <Shell principal={principal}>
+      <SavedCheckResults principal={principal} />
+    </Shell>
+  );
+}
+
+export function CheckModelsPage({ principal }: { principal: Principal }) {
+  return (
+    <Shell principal={principal}>
+      <CheckModelsRegistry />
+    </Shell>
   );
 }
 
@@ -492,8 +591,8 @@ function FeatureGuideIntegration({
         <p className="eyebrow">DATA PLANE OWNERSHIP</p>
         <h4>資料真正保存與查詢的位置</h4>
         <p className="integration-section-intro">
-          Kafka 負責傳遞，ClickHouse 才是事件查詢庫。Business Timeline 不直接從
-          Kafka 讀取歷史事件。
+          Kafka 負責傳遞，ClickHouse 才是事件查詢庫。Event Check 不直接從 Kafka
+          讀取歷史事件。
         </p>
         <div className="integration-store-grid">
           {integration.dataStores.map((store) => (
@@ -730,7 +829,7 @@ export function FeatureGuidePage({ principal }: { principal: Principal }) {
         <div className="page-heading feature-guide-heading">
           <div>
             <p className="eyebrow">PRODUCT FIELD GUIDE</p>
-            <h2>Event Hunter Guide</h2>
+            <h1>Event Hunter Guide</h1>
             <p className="muted">
               從第一次調查到外部系統接入，理解每個能力該在什麼時候使用。
             </p>
@@ -941,16 +1040,24 @@ function SmartSearchPanel({
   const openCandidate = (candidate: SmartSearchCandidate) => {
     if (!identify.data) return;
     const fallbackWindow = dynamicQueryWindow();
+    const from = window?.from ?? fallbackWindow.from;
+    const to = window?.to ?? fallbackWindow.to;
+    if (candidate.identifier_type === "ALERT_FINGERPRINT") {
+      const params = new URLSearchParams({
+        alert_id: identify.data.normalized_input,
+        from,
+        to,
+      });
+      navigate(`/timeline?${params.toString()}`);
+      return;
+    }
     const params = new URLSearchParams({
-      [candidate.query_parameter]: identify.data.normalized_input,
-      from: window?.from ?? fallbackWindow.from,
-      to: window?.to ?? fallbackWindow.to,
+      identifier_type: candidate.identifier_type,
+      identifier: identify.data.normalized_input,
+      from,
+      to,
     });
-    navigate(
-      candidate.identifier_type === "CORRELATION_ID"
-        ? `/journey?${params.toString()}`
-        : `/timeline?${params.toString()}`,
-    );
+    navigate(`/event-check?${params.toString()}`);
   };
 
   return (
@@ -1044,22 +1151,32 @@ export function DashboardPage({ principal }: { principal: Principal }) {
         <div className="page-heading overview-heading">
           <div>
             <p className="eyebrow">OPERATIONAL INVESTIGATION VIEW</p>
-            <h2>事件調查總覽</h2>
+            <h1>事件調查總覽</h1>
             <p className="muted">
               最近 72 小時的案件、事件流與資料來源可信度。
             </p>
           </div>
-          {data && (
-            <time dateTime={data.generated_at}>
-              更新於 {new Date(data.generated_at).toLocaleTimeString("zh-TW")}
-            </time>
-          )}
+          <div className="page-heading-actions">
+            {data && (
+              <time dateTime={data.generated_at}>
+                更新於 {new Date(data.generated_at).toLocaleString("zh-TW")}
+              </time>
+            )}
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => void overview.refetch()}
+              disabled={overview.isFetching}
+            >
+              {overview.isFetching ? "更新中…" : "重新整理"}
+            </button>
+          </div>
         </div>
 
         {overview.isLoading && <p className="muted">載入總覽…</p>}
         {overview.isError && (
           <section className="overview-warning" data-testid="overview-error">
-            無法載入總覽：{(overview.error as Error).message}
+            {userFacingError(overview.error, "無法載入調查總覽。")}
           </section>
         )}
         {data?.partial && (
@@ -1202,7 +1319,10 @@ export function DashboardPage({ principal }: { principal: Principal }) {
                       {control?.top_patterns.map((item) => (
                         <a
                           key={item.key}
-                          href={`/patterns?pattern_id=${encodeURIComponent(item.key)}#pattern-${encodeURIComponent(item.key)}`}
+                          href={
+                            legacyPatternModelURL(item.key) ??
+                            `/patterns?pattern_id=${encodeURIComponent(item.key)}#pattern-${encodeURIComponent(item.key)}`
+                          }
                         >
                           <span>{item.key}</span>
                           <strong>{item.count}</strong>
@@ -1241,6 +1361,15 @@ export function DashboardPage({ principal }: { principal: Principal }) {
                         ? `lag ${Math.round(source.lag_ms / 1000)}s`
                         : (source.reason ?? "available")}
                     </small>
+                    <small>
+                      最近成功：
+                      {source.last_success_at
+                        ? new Date(source.last_success_at).toLocaleString(
+                            "zh-TW",
+                          )
+                        : "沒有可用紀錄"}
+                    </small>
+                    {source.reason && <small>原因：{source.reason}</small>}
                   </article>
                 ))}
               </div>
@@ -1306,12 +1435,13 @@ function queryWindowLabel(from: string, to: string) {
 
 function investigationTimelineURL(item: Investigation) {
   const query = new URLSearchParams({
-    correlation_id: item.correlation_id,
+    identifier_type: "CORRELATION_ID",
+    identifier: item.correlation_id,
     from: item.incident_from,
     to: item.incident_to,
-    include_processing_attempts: "true",
+    tab: "timeline",
   });
-  return `/timeline?${query.toString()}`;
+  return `/event-check?${query.toString()}`;
 }
 
 function investigationTimelineWindowURL(
@@ -1319,12 +1449,13 @@ function investigationTimelineWindowURL(
   window: QueryWindow,
 ) {
   const query = new URLSearchParams({
-    correlation_id: item.correlation_id,
+    identifier_type: "CORRELATION_ID",
+    identifier: item.correlation_id,
     from: window.from,
     to: window.to,
-    include_processing_attempts: "true",
+    tab: "timeline",
   });
-  return `/timeline?${query.toString()}`;
+  return `/event-check?${query.toString()}`;
 }
 
 function queryWindowsAreEqual(left: QueryWindow, right: QueryWindow) {
@@ -1571,7 +1702,15 @@ function QueryShortcutsDrawer({
                   data-testid={`saved-search-delete-${index}`}
                   disabled={remove.isPending}
                   aria-label={`刪除 ${item.name}`}
-                  onClick={() => remove.mutate(item.id)}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `確定刪除查詢捷徑「${item.name}」？此動作無法復原。`,
+                      )
+                    ) {
+                      remove.mutate(item.id);
+                    }
+                  }}
                 >
                   刪除
                 </button>
@@ -1749,7 +1888,7 @@ function BusinessJourneyPageContent({
         <div className="page-heading journey-page-heading">
           <div>
             <p className="eyebrow">ORDER / JOURNEY VIEW</p>
-            <h2>Business Journey</h2>
+            <h1>Business Journey</h1>
             <p className="muted">
               用業務里程碑閱讀同一 correlation 的 canonical events；不建立新
               projection。Expected 事件與狀態由版本化 Journey Profile 定義。
@@ -1829,7 +1968,7 @@ function BusinessJourneyPageContent({
         {journey.isLoading && <p className="muted">載入 Business Journey…</p>}
         {journey.isError && (
           <section className="overview-warning" data-testid="journey-error">
-            無法載入 Journey：{(journey.error as Error).message}
+            {userFacingError(journey.error, "無法載入 Business Journey。")}
           </section>
         )}
 
@@ -1861,6 +2000,13 @@ function BusinessJourneyPageContent({
                   <dd data-testid="journey-event-count">{data.event_count}</dd>
                 </div>
                 <div>
+                  <dt>里程碑進度</dt>
+                  <dd data-testid="journey-progress">
+                    {data.completed_milestone_count} /{" "}
+                    {data.total_milestone_count}
+                  </dd>
+                </div>
+                <div>
                   <dt>跨服務耗時</dt>
                   <dd>{durationLabel(data.duration_ms)}</dd>
                 </div>
@@ -1876,6 +2022,70 @@ function BusinessJourneyPageContent({
                 {data.status}
               </span>
             </section>
+
+            {data.status !== "EMPTY" && (
+              <section
+                className="journey-progress-card card"
+                data-testid="journey-progress-card"
+              >
+                <div>
+                  <p className="eyebrow">SERVER-DERIVED PROGRESS</p>
+                  <h3>
+                    {data.current_milestone_id
+                      ? `目前：${data.current_milestone_id}`
+                      : data.status === "COMPLETED"
+                        ? "主要旅程已完成"
+                        : "目前沒有進行中的里程碑"}
+                  </h3>
+                  {data.next_expected_event_types.length > 0 && (
+                    <p className="muted">
+                      正在等待：{data.next_expected_event_types.join(" / ")}
+                    </p>
+                  )}
+                  {data.next_milestone_id && (
+                    <p className="journey-state-help">
+                      Profile 下一個定義：{data.next_milestone_id}
+                      ；它可能是選用支線，不代表一定會發生。
+                    </p>
+                  )}
+                </div>
+                <div className="journey-traces">
+                  <strong>跨服務 traces</strong>
+                  {data.trace_ids.length > 0 ? (
+                    data.trace_ids.map((traceID) => (
+                      <a
+                        key={traceID}
+                        href={traceObservabilityLink(
+                          traceID,
+                          data.from,
+                          data.to,
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Tempo · {traceID.slice(0, 12)}… ↗
+                      </a>
+                    ))
+                  ) : (
+                    <span className="muted">事件未帶 trace ID</span>
+                  )}
+                </div>
+                <div className="journey-next-actions">
+                  <a
+                    href={`/timeline?${new URLSearchParams({ correlation_id: data.correlation_id, from: data.from, to: data.to, include_processing_attempts: "true" }).toString()}`}
+                  >
+                    查看完整 Timeline →
+                  </a>
+                  {data.anomalies.length > 0 && (
+                    <a
+                      href={`/investigations?correlation_id=${encodeURIComponent(data.correlation_id)}`}
+                    >
+                      查看／建立調查案件 →
+                    </a>
+                  )}
+                </div>
+              </section>
+            )}
 
             {data.status === "EMPTY" && (
               <section className="empty-state">
@@ -2215,7 +2425,7 @@ export function JourneyProfilesPage({ principal }: { principal: Principal }) {
         <div className="page-heading journey-profile-page-heading">
           <div>
             <p className="eyebrow">GIT-MANAGED / READ-ONLY</p>
-            <h2>Journey Profile Registry</h2>
+            <h1>Journey Profile Registry</h1>
             <p className="muted">
               查看目前 API build 實際載入的流程定義。Profile 仍由 YAML、contract
               validation 與 code review 發布；此頁不會直接改動 production 規則。
@@ -2897,7 +3107,7 @@ function TimelineEventCard({
                 data-testid={`timeline-event-${index}-attach`}
                 onClick={() => onAttach(event)}
               >
-                ＋ 加入既有案件
+                ＋ 加入案件
               </button>
             </div>
           )}
@@ -3116,7 +3326,7 @@ export function IngestionIssuesPage({ principal }: { principal: Principal }) {
       <main className="page">
         <div className="page-heading">
           <p className="eyebrow">INGESTION OPERATIONS</p>
-          <h2>Ingestion Issues</h2>
+          <h1>Ingestion Issues</h1>
           <p className="muted">
             集中查看事件契約、Admission 與 connector 技術問題；此頁不顯示原始
             payload。
@@ -3247,7 +3457,7 @@ export function IngestionIssuesPage({ principal }: { principal: Principal }) {
                 key={`${item.kind}-${item.id}`}
                 onClick={() => setSelected(item)}
               >
-                <span className="case-number">
+                <span className="case-number" data-label="#">
                   {String((page - 1) * pageSize + index + 1).padStart(2, "0")}
                 </span>
                 <span className="ingestion-issue-identity">
@@ -3415,16 +3625,17 @@ export function IngestionIssuesPage({ principal }: { principal: Principal }) {
                   className="ingestion-timeline-link"
                   onClick={() =>
                     navigate(
-                      `/timeline?${new URLSearchParams({
-                        correlation_id: selected.correlation_id!,
+                      `/event-check?${new URLSearchParams({
+                        identifier_type: "CORRELATION_ID",
+                        identifier: selected.correlation_id!,
                         from: filters.from ?? initialWindow.from,
                         to: filters.to ?? initialWindow.to,
-                        include_processing_attempts: "true",
+                        tab: "timeline",
                       }).toString()}`,
                     )
                   }
                 >
-                  在 Business Timeline 開啟 →
+                  在 Event Check 開啟 →
                 </button>
               )}
             </section>
@@ -3444,6 +3655,7 @@ export function TimelinePage({ principal }: { principal: Principal }) {
     dynamicQueryWindow(),
   );
   const canIncludePayload = principal.role === "ADMIN";
+  const compatibility = resolveLegacyRoute(location.pathname, location.search);
   const urlFilters = useMemo(
     () =>
       timelineFiltersFromSearch(
@@ -3572,9 +3784,11 @@ export function TimelinePage({ principal }: { principal: Principal }) {
       <main className="page">
         <div className="page-heading timeline-page-heading">
           <div>
-            <p className="eyebrow">CORRELATION EXPLORER</p>
-            <h2>Business Timeline</h2>
-            <p className="muted">從事件序列還原一筆訂單的完整業務旅程。</p>
+            <p className="eyebrow">LEGACY COMPATIBILITY EXPLORER</p>
+            <h1>Legacy Event Explorer</h1>
+            <p className="muted">
+              保留 event type、producer 與 Kafka metadata 等廣泛探索條件。
+            </p>
           </div>
           <button
             className="button-secondary"
@@ -3584,6 +3798,13 @@ export function TimelinePage({ principal }: { principal: Principal }) {
             ☆ 查詢捷徑
           </button>
         </div>
+        {compatibility?.kind === "RETAIN" && (
+          <section className="compatibility-notice card" role="status">
+            <strong>此頁僅供無法無損遷移的舊查詢</strong>
+            <p>{compatibility.reason}</p>
+            <a href="/event-check">使用正式 Event Check →</a>
+          </section>
+        )}
         <TimelineSearchForm
           key={timelineFiltersToSearch(urlFilters, canIncludePayload)}
           initialFilters={urlFilters}
@@ -3757,7 +3978,7 @@ export function TimelinePage({ principal }: { principal: Principal }) {
               <div className="attachment-modal-heading">
                 <div>
                   <p className="eyebrow">ATTACH EVENT EVIDENCE</p>
-                  <h3 id="event-attachment-title">加入既有案件</h3>
+                  <h3 id="event-attachment-title">加入案件</h3>
                 </div>
                 <button
                   type="button"
@@ -4187,7 +4408,7 @@ function CaseEvidenceWindowNotice({
 
   return (
     <div className="case-warning" data-testid="case-evidence-window-notice">
-      <strong>Evidence 與案件 Timeline 使用不同時間窗</strong>
+      <strong>Evidence 與案件 Event Check 使用不同時間窗</strong>
       <p>
         Evidence 是分析時保存的不可變參照，不代表事件一定落在案件基準窗口內。
         最近一次 Pattern Analysis 使用{" "}
@@ -4202,7 +4423,7 @@ function CaseEvidenceWindowNotice({
         data-testid="case-open-pattern-window-timeline"
         href={investigationTimelineWindowURL(item, analysis.effectiveWindow)}
       >
-        在 Business Timeline 開啟分析時間窗 →
+        在 Event Check 開啟分析時間窗 →
       </a>
     </div>
   );
@@ -4408,7 +4629,6 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
   const caseQueryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState<InvestigationTab>("summary");
   const [rootCause, setRootCause] = useState("");
   const [resolution, setResolution] = useState("");
   const [resolutionAction, setResolutionAction] =
@@ -4422,12 +4642,29 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
   // throw for a malformed percent escape in a manually entered URL).
   const selectedId = detailRouteMatch?.[1] ?? null;
   const readWindowQuery = new URLSearchParams(location.search);
+  const requestedTab = readWindowQuery.get("tab");
+  const activeTab: InvestigationTab = [
+    "summary",
+    "timeline",
+    "patterns",
+    "evidence",
+    "audit",
+  ].includes(requestedTab ?? "")
+    ? (requestedTab as InvestigationTab)
+    : "summary";
+  const setActiveTab = (tab: InvestigationTab) => {
+    const next = new URLSearchParams(location.search);
+    if (tab === "summary") next.delete("tab");
+    else next.set("tab", tab);
+    navigate(`${location.pathname}?${next.toString()}`);
+  };
   const readFrom = readWindowQuery.get("from") || undefined;
   const readTo = readWindowQuery.get("to") || undefined;
   const readWindow =
     readFrom && readTo ? { from: readFrom, to: readTo } : undefined;
   const listQuery = parseInvestigationListQuery(location.search);
   const {
+    query: caseQuery,
     status,
     severity: severityFilter,
     priority: priorityFilter,
@@ -4439,15 +4676,12 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
     filters: investigationFilters,
     key: filterKey,
   } = listQuery;
-  const [pagination, setPagination] = useState({
-    filterKey,
-    page: 1,
-    cursors: [] as string[],
-  });
-  const page = pagination.filterKey === filterKey ? pagination.page : 1;
-  const cursors =
-    pagination.filterKey === filterKey ? pagination.cursors : ([] as string[]);
-  const cursor = page === 1 ? undefined : cursors[page - 2];
+  const requestedPage = Number(readWindowQuery.get("page") ?? "1");
+  const page =
+    Number.isSafeInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
+  const cursor = readWindowQuery.get("cursor") || undefined;
   const list = useQuery({
     queryKey: ["investigations", cursor, investigationFilters],
     queryFn: () => api.investigations(cursor, investigationFilters),
@@ -4588,18 +4822,10 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
   const hasNextPage = Boolean(list.data?.next_cursor);
   const goNext = () => {
     if (!list.data?.next_cursor) return;
-    setPagination((value) => {
-      const currentCursors =
-        value.filterKey === filterKey ? value.cursors : ([] as string[]);
-      return {
-        filterKey,
-        page: page + 1,
-        cursors: [
-          ...currentCursors.slice(0, page - 1),
-          list.data!.next_cursor!,
-        ],
-      };
-    });
+    const next = new URLSearchParams(location.search);
+    next.set("page", String(page + 1));
+    next.set("cursor", list.data.next_cursor);
+    navigate(`${location.pathname}?${next.toString()}`);
   };
   const resolutionDraftDirty =
     resolutionAction !== null &&
@@ -4630,11 +4856,12 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
   }, [resolutionDraftDirty]);
   const selectInvestigation = (id: string) => {
     if (!discardResolutionDraft()) return;
-    setActiveTab("summary");
     setCaseActionNotice("");
     update.reset();
     close.reset();
-    navigate(`/investigations/${encodeURIComponent(id)}${location.search}`);
+    const next = new URLSearchParams(location.search);
+    next.delete("tab");
+    navigate(`/investigations/${encodeURIComponent(id)}?${next.toString()}`);
   };
   const closeDrawer = () => {
     if (!discardResolutionDraft()) return;
@@ -4646,6 +4873,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
     const data = new FormData(event.currentTarget);
     const next = new URLSearchParams();
     for (const name of [
+      "query",
       "status",
       "severity",
       "priority",
@@ -4716,7 +4944,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
       <main className="page">
         <div className="page-heading">
           <p className="eyebrow">CASE MANAGEMENT</p>
-          <h2>Investigation Cases</h2>
+          <h1>Investigation Cases</h1>
           <p className="muted">
             集中查看案件狀態、Pattern finding 與證據摘要。
           </p>
@@ -4727,6 +4955,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
               <p className="eyebrow">CASE REGISTER</p>
               <h3>案件列表</h3>
               {[
+                caseQuery,
                 status,
                 severityFilter,
                 priorityFilter,
@@ -4747,6 +4976,16 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
             key={filterKey}
             onSubmit={applyListFilters}
           >
+            <label className="case-list-query">
+              案件編號／標題
+              <input
+                name="query"
+                defaultValue={caseQuery ?? ""}
+                maxLength={100}
+                autoComplete="off"
+                placeholder="例如 MANUAL-4002 或付款異常"
+              />
+            </label>
             <label>
               Status
               <select name="status" defaultValue={status ?? ""}>
@@ -4834,7 +5073,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
             {list.isLoading && <p className="muted">載入案件…</p>}
             {list.isError && (
               <p className="field-error" data-testid="case-list-error">
-                案件列表載入失敗：{(list.error as Error).message}
+                {userFacingError(list.error, "案件列表載入失敗。")}
               </p>
             )}
             {items.map((item, index) => (
@@ -4847,27 +5086,31 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
                 <span className="case-number">
                   {String((page - 1) * pageSize + index + 1).padStart(2, "0")}
                 </span>
-                <span className="case-name">
+                <span className="case-name" data-label="案件">
                   <strong>{item.title}</strong>
                   <small>{item.case_no}</small>
                 </span>
-                <span>
+                <span data-label="狀態">
                   <em className={`status status-${item.status.toLowerCase()}`}>
                     {item.status}
                   </em>
                 </span>
-                <span>
+                <span data-label="Severity">
                   <em
                     className={`severity severity-${item.severity.toLowerCase()}`}
                   >
                     {item.severity}
                   </em>
                 </span>
-                <span className="case-priority">{item.priority}</span>
-                <span className="case-correlation">{item.correlation_id}</span>
-                <span>{item.assignee || "未指派"}</span>
-                <span className="case-updated">
-                  {new Date(item.updated_at).toLocaleDateString("zh-TW")}
+                <span className="case-priority" data-label="Priority">
+                  {item.priority}
+                </span>
+                <span className="case-correlation" data-label="Correlation ID">
+                  {item.correlation_id}
+                </span>
+                <span data-label="負責人">{item.assignee || "未指派"}</span>
+                <span className="case-updated" data-label="更新時間">
+                  {new Date(item.updated_at).toLocaleString("zh-TW")}
                 </span>
               </button>
             ))}
@@ -4878,13 +5121,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
               <button
                 className="button-secondary"
                 disabled={page === 1 || list.isFetching}
-                onClick={() =>
-                  setPagination((value) => ({
-                    filterKey,
-                    page: Math.max(1, page - 1),
-                    cursors: value.filterKey === filterKey ? value.cursors : [],
-                  }))
-                }
+                onClick={() => navigate(-1)}
               >
                 上一頁
               </button>
@@ -4975,7 +5212,7 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
                         data-testid="case-open-baseline-timeline"
                         href={investigationTimelineURL(detail.data)}
                       >
-                        在 Business Timeline 開啟／調整
+                        在 Event Check 開啟／調整
                       </a>
                     </div>
                     {readWindow && (
@@ -5447,8 +5684,8 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
             </section>
           </div>
         )}
-        <button className="back-link" onClick={() => navigate("/timeline")}>
-          ← 回到 Business Timeline
+        <button className="back-link" onClick={() => navigate("/event-check")}>
+          ← 回到 Event Check
         </button>
       </main>
     </Shell>
@@ -5457,6 +5694,12 @@ export function InvestigationsPage({ principal }: { principal: Principal }) {
 
 export function PatternsPage({ principal }: { principal: Principal }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [patternQuery, setPatternQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [eventTypeFilter, setEventTypeFilter] = useState("");
+  const [sortBy, setSortBy] = useState("name");
   const patterns = useQuery({
     queryKey: ["patterns"],
     queryFn: api.patterns,
@@ -5465,29 +5708,99 @@ export function PatternsPage({ principal }: { principal: Principal }) {
     queryKey: ["pattern-effectiveness"],
     queryFn: api.patternEffectiveness,
   });
-  const items = patterns.data ?? [];
-  const metricsByPattern = new Map(
-    (effectiveness.data?.items ?? []).map((item) => [item.pattern_id, item]),
+  const items = useMemo(() => patterns.data ?? [], [patterns.data]);
+  const metricsByPattern = useMemo(
+    () =>
+      new Map(
+        (effectiveness.data?.items ?? []).map((item) => [
+          item.pattern_id,
+          item,
+        ]),
+      ),
+    [effectiveness.data?.items],
   );
   const selectedPatternID = new URLSearchParams(location.search).get(
     "pattern_id",
   );
-  const selectedPatternExists = items.some(
-    (item) => item.id === selectedPatternID,
+  const selectedPattern = items.find((item) => item.id === selectedPatternID);
+  const selectedPatternExists = Boolean(selectedPattern);
+  const eventTypes = Array.from(
+    new Set(
+      items.flatMap((pattern) => [
+        ...pattern.required_event_types,
+        ...pattern.expected_event_types,
+        ...pattern.exclusion_event_types,
+      ]),
+    ),
+  ).sort();
+  const filteredItems = useMemo(
+    () =>
+      items
+        .filter((pattern) => {
+          const normalizedQuery = patternQuery.trim().toLowerCase();
+          return (
+            (!normalizedQuery ||
+              pattern.id.toLowerCase().includes(normalizedQuery) ||
+              pattern.name.toLowerCase().includes(normalizedQuery) ||
+              pattern.condition.toLowerCase().includes(normalizedQuery)) &&
+            (!severityFilter || pattern.severity === severityFilter) &&
+            (!statusFilter || pattern.status === statusFilter) &&
+            (!eventTypeFilter ||
+              [
+                ...pattern.required_event_types,
+                ...pattern.expected_event_types,
+                ...pattern.exclusion_event_types,
+              ].includes(eventTypeFilter))
+          );
+        })
+        .sort((left, right) => {
+          if (sortBy === "hits") {
+            return (
+              (metricsByPattern.get(right.id)?.hit_count ?? 0) -
+              (metricsByPattern.get(left.id)?.hit_count ?? 0)
+            );
+          }
+          if (sortBy === "false-positive") {
+            return (
+              (metricsByPattern.get(right.id)?.false_positive_rate ?? -1) -
+              (metricsByPattern.get(left.id)?.false_positive_rate ?? -1)
+            );
+          }
+          return left.id.localeCompare(right.id);
+        }),
+    [
+      eventTypeFilter,
+      items,
+      metricsByPattern,
+      patternQuery,
+      severityFilter,
+      sortBy,
+      statusFilter,
+    ],
   );
-  useEffect(() => {
-    if (!selectedPatternID || !selectedPatternExists) return;
-    document
-      .getElementById(`pattern-${selectedPatternID}`)
-      ?.scrollIntoView?.({ block: "center", behavior: "smooth" });
-  }, [selectedPatternID, selectedPatternExists]);
+  const closePattern = () => {
+    const query = new URLSearchParams(location.search);
+    query.delete("pattern_id");
+    navigate(`${location.pathname}${query.size ? `?${query.toString()}` : ""}`);
+  };
+  const patternDrawerRef = useDialogFocus<HTMLElement>(
+    Boolean(selectedPatternID),
+    closePattern,
+  );
+  const openPattern = (pattern: PatternDefinition) => {
+    const query = new URLSearchParams(location.search);
+    query.set("pattern_id", pattern.id);
+    navigate(
+      `${location.pathname}?${query.toString()}#pattern-${encodeURIComponent(pattern.id)}`,
+    );
+  };
   return (
     <Shell principal={principal}>
       <main className="page" data-testid="pattern-library">
         <div className="page-heading pattern-page-heading">
           <div>
             <p className="eyebrow">DETERMINISTIC DOMAIN RULES</p>
-            <h2>Pattern Library</h2>
+            <h1>Pattern Library</h1>
             <p className="muted">
               固定、唯讀、可測試的 Domain Pattern；不提供線上編輯或 LLM
               自動推理。
@@ -5517,7 +5830,7 @@ export function PatternsPage({ principal }: { principal: Principal }) {
           )}
           {patterns.isError && (
             <p className="field-error" data-testid="pattern-library-error">
-              Pattern Registry 載入失敗：{(patterns.error as Error).message}
+              {userFacingError(patterns.error, "Pattern Registry 載入失敗。")}
             </p>
           )}
           {effectiveness.isError && (
@@ -5525,8 +5838,7 @@ export function PatternsPage({ principal }: { principal: Principal }) {
               className="field-error"
               data-testid="pattern-effectiveness-error"
             >
-              Pattern 成效資料不可用：
-              {(effectiveness.error as Error).message}
+              {userFacingError(effectiveness.error, "Pattern 成效資料不可用。")}
             </p>
           )}
           {effectiveness.data && (
@@ -5541,6 +5853,64 @@ export function PatternsPage({ principal }: { principal: Principal }) {
               )}
             </p>
           )}
+          <div className="pattern-filters" data-testid="pattern-filters">
+            <label>
+              搜尋 Pattern
+              <input
+                value={patternQuery}
+                onChange={(event) => setPatternQuery(event.target.value)}
+                placeholder="ID、名稱或條件"
+                autoComplete="off"
+              />
+            </label>
+            <label>
+              Severity
+              <select
+                value={severityFilter}
+                onChange={(event) => setSeverityFilter(event.target.value)}
+              >
+                <option value="">全部</option>
+                {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="">全部</option>
+                {["DRAFT", "ACTIVE", "DEPRECATED"].map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Event type
+              <select
+                value={eventTypeFilter}
+                onChange={(event) => setEventTypeFilter(event.target.value)}
+              >
+                <option value="">全部</option>
+                {eventTypes.map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              排序
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+              >
+                <option value="name">Pattern ID</option>
+                <option value="hits">命中數</option>
+                <option value="false-positive">False-positive rate</option>
+              </select>
+            </label>
+          </div>
           {!patterns.isLoading &&
             selectedPatternID &&
             !selectedPatternExists && (
@@ -5554,21 +5924,21 @@ export function PatternsPage({ principal }: { principal: Principal }) {
           <div className="pattern-table">
             <div className="pattern-table-head">
               <span>Pattern</span>
-              <span>條件</span>
-              <span>Evidence query</span>
               <span>命中</span>
               <span>案件</span>
-              <span>最近命中</span>
+              <span>人工判定</span>
+              <span>False positive</span>
               <span>Severity</span>
               <span>狀態</span>
             </div>
-            {items.map((pattern, index) => {
+            {filteredItems.map((pattern, index) => {
               const metric = metricsByPattern.get(pattern.id);
               const metricsUnavailable =
                 effectiveness.isError ||
                 (!effectiveness.isLoading && metric === undefined);
               return (
-                <article
+                <button
+                  type="button"
                   id={`pattern-${pattern.id}`}
                   className={`pattern-table-row${pattern.id === selectedPatternID ? " pattern-selected" : ""}`}
                   data-selected={
@@ -5576,79 +5946,84 @@ export function PatternsPage({ principal }: { principal: Principal }) {
                   }
                   data-testid={`pattern-row-${index}`}
                   key={`${pattern.id}:v${pattern.version}`}
+                  onClick={() => openPattern(pattern)}
                 >
-                  <div className="pattern-name">
+                  <div className="pattern-name" data-label="Pattern">
                     <strong data-testid={`pattern-${index}-id`}>
                       {pattern.id}
                     </strong>
                     <small>
                       {pattern.name} · v{pattern.version} · {pattern.window}
                     </small>
-                    <small title={pattern.checksum}>
-                      {pattern.source_path} · SHA-256{" "}
-                      {pattern.checksum.slice(0, 12)}…
-                    </small>
                     <small data-testid={`pattern-${index}-fixture-coverage`}>
                       fixtures: {pattern.fixture_coverage.match_count} match /{" "}
                       {pattern.fixture_coverage.non_match_count} non-match
                     </small>
                   </div>
-                  <div className="pattern-condition">
-                    <p>{pattern.condition}</p>
-                    <small>
-                      requires: {pattern.required_event_types.join(", ")}
-                    </small>
-                    <small>
-                      expects: {pattern.expected_event_types.join(", ")}
-                    </small>
-                    <small>
-                      excludes: {pattern.exclusion_event_types.join(", ")}
-                    </small>
-                  </div>
-                  <code>{pattern.evidence_query_template_id}</code>
-                  <strong data-testid={`pattern-${index}-hit-count`}>
+                  <strong
+                    data-testid={`pattern-${index}-hit-count`}
+                    data-label="命中"
+                  >
                     {effectiveness.isLoading
                       ? "載入中"
                       : metricsUnavailable
                         ? "不可用"
                         : metric!.hit_count.toLocaleString()}
                   </strong>
-                  <strong data-testid={`pattern-${index}-case-count`}>
+                  <strong
+                    data-testid={`pattern-${index}-case-count`}
+                    data-label="案件"
+                  >
                     {effectiveness.isLoading
                       ? "載入中"
                       : metricsUnavailable
                         ? "不可用"
                         : metric!.investigation_count.toLocaleString()}
                   </strong>
-                  <span data-testid={`pattern-${index}-last-hit`}>
+                  <span
+                    data-testid={`pattern-${index}-review-count`}
+                    data-label="人工判定"
+                  >
                     {effectiveness.isLoading
                       ? "載入中"
                       : metricsUnavailable
                         ? "不可用"
-                        : metric!.last_hit_at
-                          ? new Date(metric!.last_hit_at).toLocaleString(
-                              "zh-TW",
-                            )
-                          : "尚無命中"}
+                        : `${metric!.reviewed_count} reviewed / ${metric!.unreviewed_count} unreviewed`}
+                  </span>
+                  <span
+                    data-testid={`pattern-${index}-false-positive-rate`}
+                    data-label="False positive"
+                  >
+                    {effectiveness.isLoading
+                      ? "載入中"
+                      : metricsUnavailable
+                        ? "不可用"
+                        : metric!.false_positive_rate === null
+                          ? "尚無判定"
+                          : `${(metric!.false_positive_rate * 100).toFixed(1)}%`}
                   </span>
                   <span
                     className={`severity severity-${pattern.severity.toLowerCase()}`}
+                    data-label="Severity"
                   >
                     {pattern.severity}
                   </span>
                   <span
                     className="pattern-status"
                     data-testid={`pattern-${index}-status`}
+                    data-label="狀態"
                   >
                     {pattern.status}
                   </span>
-                </article>
+                </button>
               );
             })}
           </div>
-          {!patterns.isLoading && !patterns.isError && items.length === 0 && (
-            <p className="empty-inline">目前沒有啟用的 Pattern。</p>
-          )}
+          {!patterns.isLoading &&
+            !patterns.isError &&
+            filteredItems.length === 0 && (
+              <p className="empty-inline">目前條件沒有 Pattern。</p>
+            )}
         </section>
         <section className="card pattern-boundary">
           <div className="boundary-icon">✓</div>
@@ -5661,6 +6036,179 @@ export function PatternsPage({ principal }: { principal: Principal }) {
             </p>
           </div>
         </section>
+        {selectedPatternID && (
+          <div className="drawer-backdrop" onClick={closePattern}>
+            <section
+              ref={patternDrawerRef}
+              className="case-drawer pattern-drawer"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="pattern-detail-title"
+              tabIndex={-1}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="drawer-header">
+                <div>
+                  <p className="eyebrow">PATTERN DETAIL</p>
+                  <h3 id="pattern-detail-title">
+                    {selectedPattern?.name ?? selectedPatternID}
+                  </h3>
+                </div>
+                <button
+                  className="drawer-close"
+                  data-dialog-initial-focus
+                  data-testid="pattern-detail-close"
+                  aria-label="關閉 Pattern 詳細"
+                  onClick={closePattern}
+                >
+                  ×
+                </button>
+              </div>
+              {!selectedPattern && (
+                <p className="field-error">
+                  找不到指定的 Pattern：{selectedPatternID}
+                </p>
+              )}
+              {selectedPattern &&
+                (() => {
+                  const metric = metricsByPattern.get(selectedPattern.id);
+                  const window = dynamicQueryWindow();
+                  const timeline = new URLSearchParams({
+                    from: window.from,
+                    to: window.to,
+                    include_processing_attempts: "true",
+                  });
+                  if (selectedPattern.required_event_types[0]) {
+                    timeline.set(
+                      "event_type",
+                      selectedPattern.required_event_types[0],
+                    );
+                  }
+                  return (
+                    <div className="pattern-detail-content">
+                      <div className="pattern-detail-badges">
+                        <span
+                          className={`severity severity-${selectedPattern.severity.toLowerCase()}`}
+                        >
+                          {selectedPattern.severity}
+                        </span>
+                        <span className="pattern-status">
+                          {selectedPattern.status}
+                        </span>
+                        <span className="badge">
+                          v{selectedPattern.version}
+                        </span>
+                      </div>
+                      <section>
+                        <h4>規則條件</h4>
+                        <p>{selectedPattern.condition}</p>
+                        <dl className="pattern-rule-list">
+                          <div>
+                            <dt>Requires</dt>
+                            <dd>
+                              {selectedPattern.required_event_types.join(
+                                ", ",
+                              ) || "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Expects</dt>
+                            <dd>
+                              {selectedPattern.expected_event_types.join(
+                                ", ",
+                              ) || "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Excludes</dt>
+                            <dd>
+                              {selectedPattern.exclusion_event_types.join(
+                                ", ",
+                              ) || "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Window</dt>
+                            <dd>{selectedPattern.window}</dd>
+                          </div>
+                        </dl>
+                      </section>
+                      <section>
+                        <h4>近 30 天成效</h4>
+                        {metric ? (
+                          <dl className="pattern-effectiveness-detail">
+                            <div>
+                              <dt>Hits</dt>
+                              <dd>{metric.hit_count}</dd>
+                            </div>
+                            <div>
+                              <dt>Cases</dt>
+                              <dd>{metric.investigation_count}</dd>
+                            </div>
+                            <div>
+                              <dt>Confirmed</dt>
+                              <dd>{metric.confirmed_count}</dd>
+                            </div>
+                            <div>
+                              <dt>False positive</dt>
+                              <dd>{metric.false_positive_count}</dd>
+                            </div>
+                            <div>
+                              <dt>Needs review</dt>
+                              <dd>{metric.needs_review_count}</dd>
+                            </div>
+                            <div>
+                              <dt>Unreviewed</dt>
+                              <dd>{metric.unreviewed_count}</dd>
+                            </div>
+                          </dl>
+                        ) : (
+                          <p className="muted">成效資料不可用。</p>
+                        )}
+                      </section>
+                      <section>
+                        <h4>治理與驗證</h4>
+                        <p>
+                          <strong>Evidence query：</strong>
+                          <code>
+                            {selectedPattern.evidence_query_template_id}
+                          </code>
+                        </p>
+                        <p>
+                          <strong>Source：</strong>
+                          <code>{selectedPattern.source_path}</code>
+                        </p>
+                        <p title={selectedPattern.checksum}>
+                          <strong>SHA-256：</strong>
+                          <code>{selectedPattern.checksum}</code>
+                        </p>
+                        <p>
+                          <strong>Fixtures：</strong>
+                          {selectedPattern.fixture_coverage.match_count} match /{" "}
+                          {selectedPattern.fixture_coverage.non_match_count}{" "}
+                          non-match
+                        </p>
+                      </section>
+                      <div className="pattern-detail-actions">
+                        <a
+                          href={`/event-check?${new URLSearchParams({
+                            identifier_type: "EVENT_ID",
+                            identifier: timeline.get("event_id") ?? "",
+                            from: timeline.get("from") ?? "",
+                            to: timeline.get("to") ?? "",
+                            tab: "timeline",
+                          }).toString()}`}
+                        >
+                          用主要事件執行 Event Check →
+                        </a>
+                        <a href="/investigations">查看 Investigation Cases →</a>
+                      </div>
+                    </div>
+                  );
+                })()}
+            </section>
+          </div>
+        )}
       </main>
     </Shell>
   );
@@ -5680,6 +6228,7 @@ function ScenarioRunModal({
   const [copiedIdentifier, setCopiedIdentifier] = useState<string | null>(null);
   const dialogRef = useDialogFocus<HTMLElement>(true, onClose);
   const status = error ? "START_FAILED" : (run?.status ?? "STARTING");
+  const terminal = ["PASSED", "FAILED", "TIMED_OUT"].includes(status);
 
   const copyIdentifier = async (label: string, value: string) => {
     try {
@@ -5775,11 +6324,61 @@ function ScenarioRunModal({
                   </button>
                 </dd>
               </div>
+              {terminal && run.trace_id && (
+                <div>
+                  <dt>Trace ID</dt>
+                  <dd>
+                    <code data-testid="scenario-trace-id">{run.trace_id}</code>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      onClick={() =>
+                        void copyIdentifier("trace", run.trace_id!)
+                      }
+                    >
+                      {copiedIdentifier === "trace" ? "已複製" : "複製"}
+                    </button>
+                  </dd>
+                </div>
+              )}
             </dl>
+
+            {terminal && (
+              <section
+                className="scenario-completed-summary"
+                data-testid="scenario-result"
+              >
+                <div>
+                  <strong>{run.current_step}</strong>
+                  <span>
+                    {run.duration_ms === null
+                      ? "Duration unavailable"
+                      : `${run.duration_ms} ms`}
+                  </span>
+                </div>
+                <div
+                  className="scenario-events"
+                  data-testid="scenario-actual-events"
+                >
+                  {run.actual.event_types.map((eventType) => (
+                    <code key={eventType}>{eventType}</code>
+                  ))}
+                  {run.actual.event_types.length === 0 && (
+                    <span className="muted">沒有 admitted domain events</span>
+                  )}
+                </div>
+                {run.checks.map((check) => (
+                  <p key={check.id}>
+                    <strong>{check.passed ? "PASS" : "FAIL"}</strong> ·{" "}
+                    {check.label}
+                  </p>
+                ))}
+              </section>
+            )}
 
             <div className="scenario-links">
               <a data-testid="scenario-link-timeline" href={run.links.timeline}>
-                Open Timeline →
+                Open Event Check →
               </a>
               <a
                 data-testid="scenario-link-loki"
@@ -5789,6 +6388,26 @@ function ScenarioRunModal({
               >
                 Open Logs ↗
               </a>
+              {terminal && (
+                <a
+                  data-testid="scenario-link-grafana"
+                  href={run.links.grafana}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Grafana ↗
+                </a>
+              )}
+              {terminal && run.links.tempo && (
+                <a
+                  data-testid="scenario-link-tempo"
+                  href={run.links.tempo}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Trace ↗
+                </a>
+              )}
             </div>
           </>
         )}
@@ -5798,8 +6417,16 @@ function ScenarioRunModal({
 }
 
 export function ScenarioLabPage({ principal }: { principal: Principal }) {
+  const scenarioQueryClient = useQueryClient();
   const [acceptedRun, setAcceptedRun] = useState<ScenarioRun | null>(null);
   const [showRunModal, setShowRunModal] = useState(false);
+  const [historyStatus, setHistoryStatus] = useState<
+    NonNullable<ScenarioRunFilters["status"]> | ""
+  >("");
+  const [historyMode, setHistoryMode] = useState<
+    NonNullable<ScenarioRunFilters["execution_mode"]> | ""
+  >("");
+  const [historyScenario, setHistoryScenario] = useState("");
   const catalog = useQuery({
     queryKey: ["scenario-catalog"],
     queryFn: scenarioApi.catalog,
@@ -5812,9 +6439,42 @@ export function ScenarioLabPage({ principal }: { principal: Principal }) {
     },
     onSuccess: (run) => {
       setAcceptedRun(run);
+      scenarioQueryClient.setQueriesData<ScenarioRunPage>(
+        { queryKey: ["scenario-history"] },
+        (previous) =>
+          previous
+            ? {
+                items: [
+                  run,
+                  ...previous.items.filter(
+                    (item) => item.run_id !== run.run_id,
+                  ),
+                ],
+              }
+            : previous,
+      );
     },
   });
-  const items = catalog.data?.items ?? [];
+  const items = useMemo(() => catalog.data?.items ?? [], [catalog.data?.items]);
+  const historyFilters = {
+    status: historyStatus || undefined,
+    execution_mode: historyMode || undefined,
+    scenario_id: historyScenario || undefined,
+    page_size: 20,
+  };
+  const history = useQuery({
+    queryKey: ["scenario-history", historyFilters],
+    queryFn: () => scenarioApi.history(historyFilters),
+    retry: false,
+  });
+  const groups = useMemo(
+    () =>
+      ["LIVE_SERVICES", "LAB_INJECTION"].map((mode) => ({
+        mode,
+        items: items.filter((scenario) => scenario.execution_mode === mode),
+      })),
+    [items],
+  );
   const canRun = principal.role !== "VIEWER";
 
   return (
@@ -5823,7 +6483,7 @@ export function ScenarioLabPage({ principal }: { principal: Principal }) {
         <div className="page-heading scenario-heading">
           <div>
             <p className="eyebrow">DETERMINISTIC PIPELINE EXERCISES</p>
-            <h2>Scenario Lab</h2>
+            <h1>Scenario Lab</h1>
             <p className="muted">
               劇本與預期固定；actual 與 PASS／FAIL 來自後端實際執行及資料回查。
             </p>
@@ -5837,51 +6497,191 @@ export function ScenarioLabPage({ principal }: { principal: Principal }) {
         {catalog.isLoading && <p className="muted">載入 Scenario catalog…</p>}
         {catalog.isError && (
           <p className="field-error" data-testid="scenario-catalog-error">
-            Scenario Lab 尚未就緒：{(catalog.error as Error).message}
+            {userFacingError(catalog.error, "Scenario Lab 尚未就緒。")}
           </p>
         )}
-        <section className="scenario-grid" data-testid="scenario-catalog">
-          {items.map((scenario) => (
-            <article className="scenario-card" key={scenario.id}>
-              <div className="scenario-card-heading">
-                <span className="scenario-id">{scenario.id}</span>
-                <span
-                  className={`scenario-mode ${scenario.synthetic ? "synthetic" : "live"}`}
-                >
-                  {scenario.execution_mode}
-                </span>
+        <section
+          className="scenario-catalog-groups"
+          data-testid="scenario-catalog"
+        >
+          {groups.map((group) => (
+            <section className="scenario-catalog-group" key={group.mode}>
+              <div className="card-heading">
+                <div>
+                  <p className="eyebrow">{group.mode}</p>
+                  <h3>
+                    {group.mode === "LIVE_SERVICES"
+                      ? "真實服務鏈情境"
+                      : "隔離事件注入情境"}
+                  </h3>
+                </div>
+                <span className="badge">{group.items.length} scenarios</span>
               </div>
-              <p className="eyebrow">{scenario.category}</p>
-              <h3>{scenario.title}</h3>
-              <p className="muted">{scenario.description}</p>
-              <div className="scenario-events">
-                {scenario.expected_event_types.length > 0 ? (
-                  scenario.expected_event_types.map((eventType) => (
-                    <code key={eventType}>{eventType}</code>
-                  ))
-                ) : (
-                  <code>Invalid PaymentCompleted → ingestion DLQ</code>
-                )}
-              </div>
-              <ul>
-                {scenario.expected_results.map((result) => (
-                  <li key={result}>{result}</li>
+              <div className="scenario-grid">
+                {group.items.map((scenario) => (
+                  <article className="scenario-card" key={scenario.id}>
+                    <div className="scenario-card-heading">
+                      <span className="scenario-id">{scenario.id}</span>
+                      <span
+                        className={`scenario-mode ${scenario.synthetic ? "synthetic" : "live"}`}
+                      >
+                        {scenario.execution_mode}
+                      </span>
+                    </div>
+                    <p className="eyebrow">{scenario.category}</p>
+                    <h3>{scenario.title}</h3>
+                    <p className="muted">{scenario.description}</p>
+                    <div className="scenario-events">
+                      {scenario.expected_event_types.length > 0 ? (
+                        scenario.expected_event_types.map((eventType) => (
+                          <code key={eventType}>{eventType}</code>
+                        ))
+                      ) : (
+                        <code>Invalid PaymentCompleted → ingestion DLQ</code>
+                      )}
+                    </div>
+                    <ul>
+                      {scenario.expected_results.map((result) => (
+                        <li key={result}>{result}</li>
+                      ))}
+                    </ul>
+                    <button
+                      data-testid={`run-scenario-${scenario.id.toLowerCase()}`}
+                      disabled={
+                        !canRun ||
+                        (start.isPending && start.variables === scenario.id)
+                      }
+                      title={
+                        canRun
+                          ? "啟動此固定情境"
+                          : "VIEWER 為唯讀角色，不能啟動情境"
+                      }
+                      onClick={() => start.mutate(scenario.id)}
+                    >
+                      {start.isPending && start.variables === scenario.id
+                        ? "啟動中…"
+                        : "執行情境"}
+                    </button>
+                  </article>
                 ))}
-              </ul>
-              <button
-                data-testid={`run-scenario-${scenario.id.toLowerCase()}`}
-                disabled={!canRun || start.isPending}
-                onClick={() => start.mutate(scenario.id)}
-              >
-                執行情境
-              </button>
-            </article>
+              </div>
+            </section>
           ))}
+        </section>
+
+        <section
+          className="card scenario-history"
+          data-testid="scenario-history"
+        >
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">RECENT RUNS</p>
+              <h3>近期執行歷程</h3>
+              <p className="muted">
+                顯示後端已保存的實際狀態；此區不會定時輪詢或補查 trace ID。
+              </p>
+            </div>
+            <button
+              type="button"
+              className="button-secondary"
+              data-testid="scenario-history-refresh"
+              onClick={() => void history.refetch()}
+              disabled={history.isFetching}
+            >
+              {history.isFetching ? "更新中…" : "手動更新"}
+            </button>
+          </div>
+          <div className="scenario-history-filters">
+            <label>
+              Scenario
+              <select
+                data-testid="scenario-history-scenario-filter"
+                value={historyScenario}
+                onChange={(event) => setHistoryScenario(event.target.value)}
+              >
+                <option value="">全部</option>
+                {items.map((scenario) => (
+                  <option value={scenario.id} key={scenario.id}>
+                    {scenario.id} · {scenario.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Status
+              <select
+                data-testid="scenario-history-status-filter"
+                value={historyStatus}
+                onChange={(event) =>
+                  setHistoryStatus(event.target.value as typeof historyStatus)
+                }
+              >
+                <option value="">全部</option>
+                {["ACCEPTED", "RUNNING", "PASSED", "FAILED", "TIMED_OUT"].map(
+                  (status) => (
+                    <option key={status}>{status}</option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label>
+              Mode
+              <select
+                data-testid="scenario-history-mode-filter"
+                value={historyMode}
+                onChange={(event) =>
+                  setHistoryMode(event.target.value as typeof historyMode)
+                }
+              >
+                <option value="">全部</option>
+                <option>LIVE_SERVICES</option>
+                <option>LAB_INJECTION</option>
+              </select>
+            </label>
+          </div>
+          {history.isError && (
+            <p className="field-error">
+              {userFacingError(history.error, "執行歷程載入失敗。")}
+            </p>
+          )}
+          <div className="scenario-history-list">
+            {(history.data?.items ?? []).map((run) => (
+              <button
+                type="button"
+                data-testid={`scenario-history-run-${run.run_id}`}
+                key={run.run_id}
+                onClick={() => {
+                  setAcceptedRun(run);
+                  setShowRunModal(true);
+                }}
+              >
+                <span className="scenario-id">{run.scenario.id}</span>
+                <span>
+                  <strong>{run.scenario.title}</strong>
+                  <small>{run.correlation_id}</small>
+                </span>
+                <span>{run.current_step}</span>
+                <span
+                  className={`scenario-run-status status-${run.status.toLowerCase()}`}
+                >
+                  {run.status}
+                </span>
+                <time dateTime={run.accepted_at}>
+                  {new Date(run.accepted_at).toLocaleString("zh-TW")}
+                </time>
+              </button>
+            ))}
+            {!history.isLoading &&
+              !history.isError &&
+              (history.data?.items.length ?? 0) === 0 && (
+                <p className="empty-inline">目前條件沒有執行紀錄。</p>
+              )}
+          </div>
         </section>
 
         {start.isError && (
           <p className="field-error" data-testid="scenario-start-error">
-            無法啟動 Scenario：{(start.error as Error).message}
+            {userFacingError(start.error, "無法啟動 Scenario。")}
           </p>
         )}
         {showRunModal && (
@@ -5910,6 +6710,15 @@ function AppWithPrincipal({ principal }: { principal: Principal | null }) {
   const [current] = useState(principal);
   const location = useLocation();
   if (!current) return <App />;
+  const legacyRoute = resolveLegacyRoute(location.pathname, location.search);
+  if (legacyRoute?.kind === "REDIRECT")
+    return <Navigate replace to={legacyRoute.to} />;
+  if (location.pathname === "/event-check/saved-results")
+    return <SavedCheckResultsPage principal={current} />;
+  if (location.pathname === "/event-check")
+    return <EventCheckPage principal={current} />;
+  if (location.pathname === "/check-models")
+    return <CheckModelsPage principal={current} />;
   if (location.pathname === "/dashboard")
     return <DashboardPage principal={current} />;
   if (location.pathname === "/guide")
@@ -5920,8 +6729,6 @@ function AppWithPrincipal({ principal }: { principal: Principal | null }) {
     return <JourneyProfilesPage principal={current} />;
   if (location.pathname === "/ingestion-issues")
     return <IngestionIssuesPage principal={current} />;
-  if (location.pathname === "/saved-searches")
-    return <Navigate replace to="/timeline?panel=query-shortcuts" />;
   if (
     location.pathname === "/investigations" ||
     /^\/investigations\/[^/]+$/.test(location.pathname)
@@ -5931,7 +6738,9 @@ function AppWithPrincipal({ principal }: { principal: Principal | null }) {
     return <PatternsPage principal={current} />;
   if (location.pathname === "/scenario-lab")
     return <ScenarioLabPage principal={current} />;
-  return <TimelinePage principal={current} />;
+  if (location.pathname === "/timeline")
+    return <TimelinePage principal={current} />;
+  return <Navigate replace to="/event-check" />;
 }
 
 const rootElement = document.getElementById("root");

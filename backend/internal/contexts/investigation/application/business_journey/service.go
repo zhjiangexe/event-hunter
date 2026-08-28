@@ -68,20 +68,26 @@ type Anomaly struct {
 }
 
 type Journey struct {
-	CorrelationID      string      `json:"correlation_id"`
-	ProfileID          string      `json:"profile_id"`
-	ProfileVersion     int         `json:"profile_version"`
-	ProfileTitle       string      `json:"profile_title"`
-	From               time.Time   `json:"from"`
-	To                 time.Time   `json:"to"`
-	Status             Status      `json:"status"`
-	EventCount         int         `json:"event_count"`
-	StartedAt          *string     `json:"started_at"`
-	EndedAt            *string     `json:"ended_at"`
-	DurationMS         *int64      `json:"duration_ms"`
-	Milestones         []Milestone `json:"milestones"`
-	Anomalies          []Anomaly   `json:"anomalies"`
-	UnmappedEventCount int         `json:"unmapped_event_count"`
+	CorrelationID           string      `json:"correlation_id"`
+	ProfileID               string      `json:"profile_id"`
+	ProfileVersion          int         `json:"profile_version"`
+	ProfileTitle            string      `json:"profile_title"`
+	From                    time.Time   `json:"from"`
+	To                      time.Time   `json:"to"`
+	Status                  Status      `json:"status"`
+	EventCount              int         `json:"event_count"`
+	CompletedMilestoneCount int         `json:"completed_milestone_count"`
+	TotalMilestoneCount     int         `json:"total_milestone_count"`
+	CurrentMilestoneID      *string     `json:"current_milestone_id"`
+	NextMilestoneID         *string     `json:"next_milestone_id"`
+	NextExpectedEventTypes  []string    `json:"next_expected_event_types"`
+	TraceIDs                []string    `json:"trace_ids"`
+	StartedAt               *string     `json:"started_at"`
+	EndedAt                 *string     `json:"ended_at"`
+	DurationMS              *int64      `json:"duration_ms"`
+	Milestones              []Milestone `json:"milestones"`
+	Anomalies               []Anomaly   `json:"anomalies"`
+	UnmappedEventCount      int         `json:"unmapped_event_count"`
 }
 
 type Service struct {
@@ -119,11 +125,17 @@ func build(query Query, events []forensics.ForensicsEvent, profile journeys.Prof
 		CorrelationID: query.CorrelationID, ProfileID: profile.ID, ProfileVersion: profile.Version, ProfileTitle: profile.Title,
 		From: query.From, To: query.To,
 		Status: StatusEmpty, EventCount: len(events), Milestones: make([]Milestone, 0, len(profile.Milestones)),
+		TotalMilestoneCount: len(profile.Milestones), NextExpectedEventTypes: []string{}, TraceIDs: []string{},
 		Anomalies: []Anomaly{},
 	}
 	byType := make(map[string][]forensics.ForensicsEvent)
+	seenTraceIDs := make(map[string]bool)
 	for _, event := range events {
 		byType[event.EventType] = append(byType[event.EventType], event)
+		if event.TraceID != nil && *event.TraceID != "" && !seenTraceIDs[*event.TraceID] {
+			seenTraceIDs[*event.TraceID] = true
+			journey.TraceIDs = append(journey.TraceIDs, *event.TraceID)
+		}
 	}
 
 	var previousAt *time.Time
@@ -183,7 +195,39 @@ func build(query Query, events []forensics.ForensicsEvent, profile journeys.Prof
 
 	journey.Anomalies = detectAnomalies(query.To, events, byType, profile)
 	journey.Status = journeyStatus(events, byType, profile.JourneyStateRules)
+	deriveJourneyProgress(&journey)
 	return journey
+}
+
+// deriveJourneyProgress exposes the profile-derived progress as an API contract so
+// clients do not need to reinterpret milestone state rules independently.
+func deriveJourneyProgress(journey *Journey) {
+	currentIndex := -1
+	for index, milestone := range journey.Milestones {
+		if milestone.State == MilestoneCompleted {
+			journey.CompletedMilestoneCount++
+		}
+		if currentIndex == -1 && milestone.State == MilestoneInProgress {
+			currentIndex = index
+		}
+	}
+	if currentIndex == -1 && (journey.Status == StatusFailed || journey.Status == StatusCompensated) {
+		for index, milestone := range journey.Milestones {
+			if milestone.State == MilestoneFailed || milestone.State == MilestoneCompensated {
+				currentIndex = index
+				break
+			}
+		}
+	}
+	if currentIndex == -1 {
+		return
+	}
+	current := journey.Milestones[currentIndex]
+	journey.CurrentMilestoneID = stringPointer(current.ID)
+	journey.NextExpectedEventTypes = append([]string(nil), current.ExpectedEventTypes...)
+	if currentIndex+1 < len(journey.Milestones) {
+		journey.NextMilestoneID = stringPointer(journey.Milestones[currentIndex+1].ID)
+	}
 }
 
 func milestoneState(rules []journeys.StateRule, byType map[string][]forensics.ForensicsEvent) MilestoneState {

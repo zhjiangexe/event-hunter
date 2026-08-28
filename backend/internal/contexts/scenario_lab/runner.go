@@ -137,6 +137,18 @@ func (runner *Runner) Get(ctx context.Context, runID string) (Run, error) {
 	return runner.runFromRecord(record), nil
 }
 
+func (runner *Runner) List(ctx context.Context, filter RunFilter) (RunPage, error) {
+	records, err := runner.Repository.List(ctx, filter)
+	if err != nil {
+		return RunPage{}, err
+	}
+	items := make([]Run, 0, len(records))
+	for _, record := range records {
+		items = append(items, runner.runFromRecord(record))
+	}
+	return RunPage{Items: items}, nil
+}
+
 func (runner *Runner) execute(runID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), runner.timeout())
 	defer cancel()
@@ -290,25 +302,62 @@ func (runner *Runner) runFromRecord(record RunRecord) Run {
 	if traceID == nil {
 		traceID = record.Actual.TraceID
 	}
-	return Run{
+	run := Run{
 		RunID: record.RunID, Scenario: definition, CorrelationID: record.CorrelationID, TraceID: traceID,
 		Status: record.Status, ExecutionMode: record.ExecutionMode, Synthetic: record.Synthetic,
 		ExpectedEventTypes: record.ExpectedEventTypes, Actual: record.Actual, Checks: record.Checks,
 		Links: runner.links(record.CorrelationID, traceID), Error: record.Error,
 		AcceptedAt: record.AcceptedAt, StartedAt: record.StartedAt, CompletedAt: record.CompletedAt,
 	}
+	if record.StartedAt != nil {
+		end := runner.now()
+		if record.CompletedAt != nil {
+			end = *record.CompletedAt
+		}
+		duration := end.Sub(*record.StartedAt).Milliseconds()
+		if duration < 0 {
+			duration = 0
+		}
+		run.DurationMS = &duration
+	}
+	run.CurrentStep = scenarioCurrentStep(record.Status)
+	return run
+}
+
+func scenarioCurrentStep(status string) string {
+	switch status {
+	case "ACCEPTED":
+		return "等待執行"
+	case "RUNNING":
+		return "等待事件管線結果"
+	case "PASSED":
+		return "驗收通過"
+	case "TIMED_OUT":
+		return "等待結果逾時"
+	case "FAILED":
+		return "執行失敗"
+	default:
+		return "狀態未知"
+	}
 }
 
 func (runner *Runner) links(correlationID string, traceID *string) Links {
 	ui := strings.TrimRight(runner.EventHunterURL, "/")
 	grafana := strings.TrimRight(runner.GrafanaURL, "/")
-	encoded := url.QueryEscape(correlationID)
+	now := runner.now()
+	eventCheckQuery := url.Values{
+		"identifier_type": {"CORRELATION_ID"},
+		"identifier":      {correlationID},
+		"from":            {now.Add(-15 * time.Minute).UTC().Format(time.RFC3339Nano)},
+		"to":              {now.Add(5 * time.Minute).UTC().Format(time.RFC3339Nano)},
+		"tab":             {"timeline"},
+	}
 	rangeValue := map[string]string{
-		"from": strconv.FormatInt(runner.now().Add(-15*time.Minute).UnixMilli(), 10),
-		"to":   strconv.FormatInt(runner.now().Add(5*time.Minute).UnixMilli(), 10),
+		"from": strconv.FormatInt(now.Add(-15*time.Minute).UnixMilli(), 10),
+		"to":   strconv.FormatInt(now.Add(5*time.Minute).UnixMilli(), 10),
 	}
 	links := Links{
-		Timeline: ui + "/timeline?correlation_id=" + encoded,
+		Timeline: ui + "/event-check?" + eventCheckQuery.Encode(),
 		Grafana: grafanaExploreURL(grafana, "clickhouse", "grafana-clickhouse-datasource", map[string]any{
 			"rawSql": "SELECT * FROM canonical_forensics_events WHERE correlation_id = " + sqlLiteral(correlationID) + " ORDER BY occurred_at",
 			"format": 1,

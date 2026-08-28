@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.hardening.example
 *.local
 *.pem
 *.key

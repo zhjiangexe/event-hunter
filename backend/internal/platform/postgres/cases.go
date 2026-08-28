@@ -222,6 +222,10 @@ func (repository *CaseRepository) List(ctx context.Context, filter domain.CaseFi
        notes, workflow_id, lock_version, created_at, updated_at, closed_at
 FROM investigation_cases WHERE 1=1`
 	args := make([]any, 0, 6)
+	if value := strings.TrimSpace(filter.Query); value != "" {
+		args = append(args, value)
+		query += fmt.Sprintf(" AND (case_no ILIKE '%%' || $%d || '%%' OR title ILIKE '%%' || $%d || '%%')", len(args), len(args))
+	}
 	for _, candidate := range []struct {
 		column string
 		value  string

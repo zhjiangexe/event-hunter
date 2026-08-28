@@ -18,10 +18,11 @@ type SavedSearchTarget string
 type SavedSearchTimeMode string
 
 const (
-	SavedSearchTimeline SavedSearchTarget   = "TIMELINE"
-	SavedSearchJourney  SavedSearchTarget   = "JOURNEY"
-	SavedSearchAbsolute SavedSearchTimeMode = "ABSOLUTE"
-	SavedSearchRelative SavedSearchTimeMode = "RELATIVE"
+	SavedSearchTimeline   SavedSearchTarget   = "TIMELINE"
+	SavedSearchJourney    SavedSearchTarget   = "JOURNEY"
+	SavedSearchEventCheck SavedSearchTarget   = "EVENT_CHECK"
+	SavedSearchAbsolute   SavedSearchTimeMode = "ABSOLUTE"
+	SavedSearchRelative   SavedSearchTimeMode = "RELATIVE"
 )
 
 type SavedSearchQuery struct {
@@ -44,6 +45,13 @@ type SavedSearchQuery struct {
 	AlertID                   string              `json:"alert_id,omitempty"`
 	Severity                  string              `json:"severity,omitempty"`
 	IncludeProcessingAttempts bool                `json:"include_processing_attempts,omitempty"`
+	IdentifierType            string              `json:"identifier_type,omitempty"`
+	IdentifierValue           string              `json:"identifier_value,omitempty"`
+	AggregateType             string              `json:"aggregate_type,omitempty"`
+	BusinessKeyName           string              `json:"business_key_name,omitempty"`
+	ModelID                   string              `json:"model_id,omitempty"`
+	ModelVersion              *uint32             `json:"model_version,omitempty"`
+	WorkspaceTab              string              `json:"workspace_tab,omitempty"`
 }
 
 type SavedSearch struct {
@@ -102,6 +110,18 @@ func (saved SavedSearch) BuildOpenURLAt(reference time.Time) string {
 			values.Set(key, value)
 		}
 	}
+	if saved.Target == SavedSearchEventCheck {
+		add("identifier_type", saved.Query.IdentifierType)
+		add("identifier", saved.Query.IdentifierValue)
+		add("aggregate_type", saved.Query.AggregateType)
+		add("business_key_name", saved.Query.BusinessKeyName)
+		add("model_id", saved.Query.ModelID)
+		if saved.Query.ModelVersion != nil {
+			values.Set("model_version", strconv.FormatUint(uint64(*saved.Query.ModelVersion), 10))
+		}
+		add("tab", saved.Query.WorkspaceTab)
+		return "/event-check?" + values.Encode()
+	}
 	add("correlation_id", saved.Query.CorrelationID)
 	add("event_type", saved.Query.EventType)
 	add("aggregate_id", saved.Query.AggregateID)
@@ -141,11 +161,14 @@ func normalizeSavedSearchQuery(query SavedSearchQuery) SavedSearchQuery {
 	if query.TimeMode == "" {
 		query.TimeMode = SavedSearchAbsolute
 	}
+	if query.WorkspaceTab == "" && strings.TrimSpace(query.IdentifierValue) != "" {
+		query.WorkspaceTab = "summary"
+	}
 	return query
 }
 
 func validateSavedSearchQuery(target SavedSearchTarget, query SavedSearchQuery) error {
-	if target != SavedSearchTimeline && target != SavedSearchJourney {
+	if target != SavedSearchTimeline && target != SavedSearchJourney && target != SavedSearchEventCheck {
 		return ErrInvalidSavedSearch
 	}
 	if query.From.IsZero() || query.To.IsZero() || !query.To.After(query.From) || query.To.Sub(query.From) > 7*24*time.Hour {
@@ -164,6 +187,7 @@ func validateSavedSearchQuery(target SavedSearchTarget, query SavedSearchQuery) 
 	for _, value := range []string{
 		query.CorrelationID, query.EventType, query.AggregateID, query.TraceID, query.EventID,
 		query.Producer, query.CausationID, query.KafkaTopic, query.PatternID, query.AlertID,
+		query.IdentifierValue, query.AggregateType, query.BusinessKeyName, query.ModelID,
 	} {
 		if len(strings.TrimSpace(value)) > 200 {
 			return ErrInvalidSavedSearch
@@ -175,6 +199,24 @@ func validateSavedSearchQuery(target SavedSearchTarget, query SavedSearchQuery) 
 	if query.EventVersion != nil && *query.EventVersion < 1 {
 		return ErrInvalidSavedSearch
 	}
+	if target == SavedSearchEventCheck {
+		if !validEventCheckIdentifierType(query.IdentifierType) || strings.TrimSpace(query.IdentifierValue) == "" {
+			return ErrInvalidSavedSearch
+		}
+		if query.IdentifierType != "BUSINESS_KEY" && strings.TrimSpace(query.BusinessKeyName) != "" {
+			return ErrInvalidSavedSearch
+		}
+		if (strings.TrimSpace(query.ModelID) == "") != (query.ModelVersion == nil) {
+			return ErrInvalidSavedSearch
+		}
+		if query.ModelVersion != nil && *query.ModelVersion < 1 {
+			return ErrInvalidSavedSearch
+		}
+		if !validEventCheckWorkspaceTab(query.WorkspaceTab) {
+			return ErrInvalidSavedSearch
+		}
+		return nil
+	}
 	if target == SavedSearchJourney {
 		if strings.TrimSpace(query.CorrelationID) == "" {
 			return ErrInvalidSavedSearch
@@ -185,6 +227,24 @@ func validateSavedSearchQuery(target SavedSearchTarget, query SavedSearchQuery) 
 		return ErrInvalidSavedSearch
 	}
 	return nil
+}
+
+func validEventCheckIdentifierType(value string) bool {
+	switch value {
+	case "AUTO", "CORRELATION_ID", "EVENT_ID", "TRACE_ID", "AGGREGATE_ID", "BUSINESS_KEY":
+		return true
+	default:
+		return false
+	}
+}
+
+func validEventCheckWorkspaceTab(value string) bool {
+	switch value {
+	case "summary", "timeline", "flow", "findings", "cases":
+		return true
+	default:
+		return false
+	}
 }
 
 func savedSearchQueryHasFilter(query SavedSearchQuery) bool {

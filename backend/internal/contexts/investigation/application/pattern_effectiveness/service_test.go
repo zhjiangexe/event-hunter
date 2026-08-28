@@ -11,6 +11,7 @@ func TestServiceReturnsRegisteredPatternsWithBoundedMetrics(t *testing.T) {
 	lastHit := time.Date(2026, 8, 23, 10, 0, 0, 0, time.UTC)
 	reader := &readerFake{metrics: []Metric{{
 		PatternID: "payment-completed-without-shipment", HitCount: 7, LastHitAt: &lastHit, InvestigationCount: 4,
+		ConfirmedCount: 2, FalsePositiveCount: 1, NeedsReviewCount: 1, UnreviewedCount: 3, ReviewedCount: 4,
 	}}}
 	service := NewService(reader)
 	service.now = func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) }
@@ -24,6 +25,9 @@ func TestServiceReturnsRegisteredPatternsWithBoundedMetrics(t *testing.T) {
 	}
 	if result.Items[0].LastHitAt == nil || !result.Items[0].LastHitAt.Equal(lastHit) {
 		t.Fatalf("last hit = %v", result.Items[0].LastHitAt)
+	}
+	if result.Items[0].FalsePositiveRate == nil || *result.Items[0].FalsePositiveRate != 0.25 {
+		t.Fatalf("false positive rate = %v", result.Items[0].FalsePositiveRate)
 	}
 	if reader.from != result.GeneratedAt.Add(-30*24*time.Hour) || reader.to != result.GeneratedAt {
 		t.Fatalf("reader window = [%v, %v), result = %#v", reader.from, reader.to, result)

@@ -176,6 +176,77 @@ describe("Event Hunter API client", () => {
     expect(await request.clone().text()).toBe('{"input":"ORDER-2001"}');
   });
 
+  it("uses generated Event Check request types and Snapshot idempotency header", async () => {
+    const evaluationRequest = {
+      identifier: { type: "CORRELATION_ID" as const, value: "ORDER-2001" },
+      from: "2026-08-20T11:00:00Z",
+      to: "2026-08-20T11:10:00Z",
+    };
+    respond({ resolution_status: "EVALUATED" });
+    await api.evaluateEventCheck(evaluationRequest);
+
+    const evaluationHTTP = requestAt(0);
+    expect(pathAndQuery(evaluationHTTP)).toBe(
+      "/api/v1/event-checks/evaluations",
+    );
+    expect(JSON.parse(await evaluationHTTP.clone().text())).toEqual(
+      evaluationRequest,
+    );
+
+    const hash = "a".repeat(64);
+    respond({ id: "snapshot-1" }, 201);
+    await api.createCheckSnapshot(
+      {
+        evaluation_request: evaluationRequest,
+        expected_event_set_hash: hash,
+        expected_evaluation_hash: hash,
+      },
+      "save-event-check-1",
+    );
+
+    const snapshotHTTP = requestAt(1);
+    expect(pathAndQuery(snapshotHTTP)).toBe("/api/v1/check-snapshots");
+    expect(snapshotHTTP.headers.get("Idempotency-Key")).toBe(
+      "save-event-check-1",
+    );
+
+    respond({ items: [], page_size: 20, next_cursor: null });
+    await api.checkSnapshots(
+      { identifier: "ORDER-2001", check_status: "DEVIATED" },
+      "next-page",
+      20,
+    );
+    const listHTTP = requestAt(2);
+    const listURL = new URL(listHTTP.url);
+    expect(listURL.pathname).toBe("/api/v1/check-snapshots");
+    expect(listURL.searchParams.get("identifier")).toBe("ORDER-2001");
+    expect(listURL.searchParams.get("check_status")).toBe("DEVIATED");
+    expect(listURL.searchParams.get("cursor")).toBe("next-page");
+  });
+
+  it("uses optimistic locking for Finding feedback and Case handoff", async () => {
+    respond({ finding_id: "finding-1", lock_version: 1 });
+    await api.classifyCheckFinding("finding-1", 0, "NEEDS_REVIEW");
+
+    const feedbackHTTP = requestAt(0);
+    expect(pathAndQuery(feedbackHTTP)).toBe(
+      "/api/v1/check-findings/finding-1/feedback",
+    );
+    expect(feedbackHTTP.headers.get("If-Match")).toBe('"v0"');
+
+    respond({ investigation_id: "case-1", snapshot_id: "snapshot-1" }, 201);
+    await api.attachInvestigationCheckSnapshot("case-1", "snapshot-1", 4);
+
+    const attachHTTP = requestAt(1);
+    expect(pathAndQuery(attachHTTP)).toBe(
+      "/api/v1/investigations/case-1/check-snapshots",
+    );
+    expect(attachHTTP.headers.get("If-Match")).toBe('"v4"');
+    expect(await attachHTTP.clone().json()).toEqual({
+      snapshot_id: "snapshot-1",
+    });
+  });
+
   it("creates a bounded relative Saved Search without storing payload options", async () => {
     respond({
       id: "a11883b0-67f1-4fc2-832f-87d11173041f",

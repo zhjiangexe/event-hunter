@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -99,6 +101,57 @@ func run() error {
 	})
 	mux.HandleFunc("GET /api/v1/scenarios", func(writer http.ResponseWriter, _ *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]any{"items": scenariolab.Catalog()})
+	})
+	mux.HandleFunc("GET /api/v1/scenario-runs", func(writer http.ResponseWriter, request *http.Request) {
+		pageSize := 20
+		if raw := request.URL.Query().Get("page_size"); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 || parsed > 100 {
+				writeError(writer, http.StatusUnprocessableEntity, "INVALID_PAGE_SIZE")
+				return
+			}
+			pageSize = parsed
+		}
+		filter := scenariolab.RunFilter{
+			ScenarioID:    strings.TrimSpace(request.URL.Query().Get("scenario_id")),
+			Status:        strings.TrimSpace(request.URL.Query().Get("status")),
+			ExecutionMode: strings.TrimSpace(request.URL.Query().Get("execution_mode")),
+			PageSize:      pageSize,
+		}
+		if filter.ScenarioID != "" {
+			if _, err := scenariolab.Scenario(filter.ScenarioID); err != nil {
+				writeError(writer, http.StatusUnprocessableEntity, "INVALID_SCENARIO_ID")
+				return
+			}
+		}
+		if filter.Status != "" && !slices.Contains([]string{"ACCEPTED", "RUNNING", "PASSED", "FAILED", "TIMED_OUT"}, filter.Status) {
+			writeError(writer, http.StatusUnprocessableEntity, "INVALID_STATUS")
+			return
+		}
+		if filter.ExecutionMode != "" && !slices.Contains([]string{scenariolab.LiveServices, scenariolab.LabInjection}, filter.ExecutionMode) {
+			writeError(writer, http.StatusUnprocessableEntity, "INVALID_EXECUTION_MODE")
+			return
+		}
+		for name, target := range map[string]**time.Time{"from": &filter.From, "to": &filter.To} {
+			if raw := strings.TrimSpace(request.URL.Query().Get(name)); raw != "" {
+				parsed, err := time.Parse(time.RFC3339, raw)
+				if err != nil {
+					writeError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
+					return
+				}
+				*target = &parsed
+			}
+		}
+		if filter.From != nil && filter.To != nil && !filter.To.After(*filter.From) {
+			writeError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
+			return
+		}
+		result, err := runner.List(request.Context(), filter)
+		if err != nil {
+			writeError(writer, http.StatusServiceUnavailable, "SCENARIO_RUNS_UNAVAILABLE")
+			return
+		}
+		writeJSON(writer, http.StatusOK, result)
 	})
 	mux.HandleFunc("POST /api/v1/scenario-runs", func(writer http.ResponseWriter, request *http.Request) {
 		var input struct {

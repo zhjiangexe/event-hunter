@@ -1,0 +1,76 @@
+$schema: ./legacy-expectation-mapping.schema.json
+contract_version: 1
+target_model:
+  model_id: order-fulfillment
+  version: 2
+mappings:
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_MILESTONE
+    legacy_id: ORDER
+    target_kind: FLOW_NODE
+    target_id: ORDER_CREATED
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_MILESTONE
+    legacy_id: PAYMENT
+    target_kind: FLOW_NODE
+    target_id: PAYMENT_COMPLETED
+    disposition: MIGRATE
+    note: Payment failure and compensation are represented by explicit alternate paths.
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_MILESTONE
+    legacy_id: SHIPPING
+    target_kind: FLOW_NODE
+    target_id: SHIPMENT_CREATED
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_MILESTONE
+    legacy_id: DELIVERY
+    target_kind: FLOW_NODE
+    target_id: SHIPMENT_DELIVERED
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_MILESTONE
+    legacy_id: RETURN
+    target_kind: FLOW_NODE
+    target_id: RETURN_REQUESTED
+    disposition: MIGRATE
+    note: The target node is owned by pinned child model order-return version 1.
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_ANOMALY
+    legacy_id: MISSING_ORDER_CREATED
+    target_kind: FLOW_EXPECTATION
+    target_id: PAYMENT_REQUIRES_ORDER
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_ANOMALY
+    legacy_id: SHIPMENT_WITHOUT_PAYMENT
+    target_kind: FLOW_EXPECTATION
+    target_id: SHIPMENT_REQUIRES_PAYMENT
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_ANOMALY
+    legacy_id: MISSING_SHIPMENT_AFTER_PAYMENT
+    target_kind: FLOW_EXPECTATION
+    target_id: PAYMENT_REQUIRES_SHIPMENT
+    disposition: MERGE_DUPLICATE
+    duplicate_group: PAYMENT_TO_SHIPMENT_EXPECTATION
+  - legacy_source: contracts/patterns/payment-completed-without-shipment.yaml
+    legacy_kind: PATTERN
+    legacy_id: payment-completed-without-shipment
+    target_kind: FLOW_EXPECTATION
+    target_id: PAYMENT_REQUIRES_SHIPMENT
+    disposition: MERGE_DUPLICATE
+    duplicate_group: PAYMENT_TO_SHIPMENT_EXPECTATION
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_ANOMALY
+    legacy_id: MISSING_CANCELLATION_AFTER_PAYMENT_FAILURE
+    target_kind: FLOW_EXPECTATION
+    target_id: PAYMENT_FAILURE_REQUIRES_CANCELLATION
+    disposition: MIGRATE
+  - legacy_source: contracts/journeys/order-fulfillment.yaml
+    legacy_kind: JOURNEY_DATA_QUALITY
+    legacy_id: detect_duplicate_event_ids
+    target_kind: GLOBAL_RULE
+    target_id: UNIQUE_EVENT_ID
+    disposition: MIGRATE

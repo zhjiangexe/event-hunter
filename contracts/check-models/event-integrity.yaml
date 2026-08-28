@@ -1,0 +1,66 @@
+$schema: ./check-model.schema.json
+contract_version: 1
+model_id: event-integrity
+version: 1
+kind: GLOBAL_CHECK
+status: ACTIVE
+title: Event Integrity
+description: 對任何適用事件集合執行可重現的 ID、aggregate sequence 與 trace context 品質檢查。
+domain: platform
+source:
+  authoring: YAML_GIT
+  mutable_at_runtime: false
+applies_to:
+  aggregate_types: [Order, Payment, Shipment, Return]
+  trigger_event_types:
+    - OrderCreated
+    - OrderCancelled
+    - PaymentCompleted
+    - PaymentFailed
+    - PaymentRefunded
+    - PaymentVoided
+    - ShipmentCreated
+    - ShipmentDispatchFailed
+    - ShipmentDispatched
+    - ShipmentInTransit
+    - ShipmentDelivered
+    - ReturnRequested
+    - ReturnReceived
+  event_versions:
+    - {event_type: OrderCreated, versions: [1]}
+    - {event_type: OrderCancelled, versions: [1]}
+    - {event_type: PaymentCompleted, versions: [1]}
+    - {event_type: PaymentFailed, versions: [1]}
+    - {event_type: PaymentRefunded, versions: [1]}
+    - {event_type: PaymentVoided, versions: [1]}
+    - {event_type: ShipmentCreated, versions: [1]}
+    - {event_type: ShipmentDispatchFailed, versions: [1]}
+    - {event_type: ShipmentDispatched, versions: [1]}
+    - {event_type: ShipmentInTransit, versions: [1]}
+    - {event_type: ShipmentDelivered, versions: [1]}
+    - {event_type: ReturnRequested, versions: [1]}
+    - {event_type: ReturnReceived, versions: [1]}
+scope:
+  max_duration_seconds: 604800
+  max_events: 10000
+  max_correlations: 20
+  max_relationship_depth: 3
+  relations: [SAME_CORRELATION, SAME_AGGREGATE, CAUSATION]
+  business_keys: []
+  parent_child_relations: []
+rules:
+  - id: UNIQUE_EVENT_ID
+    type: DUPLICATE_EVENT_ID
+    severity: HIGH
+    finding_code: DUPLICATE_EVENT_ID
+  - id: MONOTONIC_AGGREGATE_SEQUENCE
+    type: NON_MONOTONIC_AGGREGATE_SEQUENCE
+    severity: MEDIUM
+    finding_code: NON_MONOTONIC_AGGREGATE_SEQUENCE
+  - id: TRACE_CONTEXT_PRESENT
+    type: MISSING_TRACE_CONTEXT
+    severity: LOW
+    finding_code: MISSING_TRACE_CONTEXT
+fixtures:
+  scenario_file: ../event-check/fixtures/check-model-scenarios.json
+  case_ids: [duplicate-event-id, source-trace-missing]

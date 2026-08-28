@@ -14,6 +14,12 @@ type Metric struct {
 	HitCount           int64      `json:"hit_count"`
 	LastHitAt          *time.Time `json:"last_hit_at"`
 	InvestigationCount int64      `json:"investigation_count"`
+	ConfirmedCount     int64      `json:"confirmed_count"`
+	FalsePositiveCount int64      `json:"false_positive_count"`
+	NeedsReviewCount   int64      `json:"needs_review_count"`
+	UnreviewedCount    int64      `json:"unreviewed_count"`
+	ReviewedCount      int64      `json:"reviewed_count"`
+	FalsePositiveRate  *float64   `json:"false_positive_rate"`
 }
 
 type Summary struct {
@@ -49,6 +55,10 @@ func (service *Service) Get(ctx context.Context) (Summary, error) {
 	}
 	byPattern := make(map[string]Metric, len(stored))
 	for _, metric := range stored {
+		if metric.ReviewedCount > 0 {
+			rate := float64(metric.FalsePositiveCount) / float64(metric.ReviewedCount)
+			metric.FalsePositiveRate = &rate
+		}
 		byPattern[metric.PatternID] = metric
 	}
 	items := make([]Metric, 0, len(domainpatterns.Registry()))

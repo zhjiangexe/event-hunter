@@ -1,33 +1,32 @@
 # Event Hunter
 
-Event Hunter 是一套從「業務事件」出發的事故調查平台。它把分散在 Kafka、ClickHouse、Logs 與
-Traces 的資訊，用同一個 `Correlation ID` 串成容易理解的業務脈絡。
+Event Hunter 是一套從「業務事件」出發的唯讀調查平台。輸入 Correlation、Trace、Event、Aggregate
+ID 或受治理的 Business Key，它會找出有明確關聯的事件，再用版本化 Check Model 判斷實際流程。
 
 它主要回答這幾個問題：
 
-- 這筆訂單經歷了哪些事件？
-- 流程停在哪個業務里程碑？
+- 這個 ID 關聯到哪些事件，資料是否完整可信？
+- 實際事件符合哪條合理路徑，正在等待還是已經違規？
 - 是否出現重複、亂序、缺少事件或 ingestion 問題？
 - 哪些 Logs 與 Traces 和這筆業務有關？
 - 是否需要建立案件，保存證據並交給其他人處理？
 
-Event Hunter 不取代 Grafana，也不是正式業務系統。Grafana 負責 Logs、Metrics、Traces 與 Alerting；
-Event Hunter 負責把這些技術訊號連回 Business Timeline、Journey、Pattern 與 Investigation Case。
+Event Hunter 不取代 Grafana，也不控制正式 workflow。Grafana 保存 Logs、Metrics、Traces 與 Alerting；
+Event Hunter 保存 canonical events、可重現 Check Snapshot、Investigation Case 與可信 deep links。
 
 ## 可以做什麼
 
 | 功能 | 用途 |
 |---|---|
 | Overview／Smart Search | 使用 Correlation、Trace、Event 或 Aggregate ID 快速定位業務資料 |
-| Business Timeline | 依時間還原 Domain Events 與 processing attempts |
-| Business Journey | 用 Journey Profile 對照預期里程碑，找出流程進行到哪裡 |
+| Event Check | 在同一工作區查看 Timeline、Flow、Expectations、Findings，並保存 immutable Snapshot |
+| Check Models | 查看版本化 Flow Models 與 Global Checks；這是唯一正式判定來源 |
 | Ingestion Issues | 查看格式、admission 與 connector technical DLQ 問題的安全摘要 |
-| Investigation Cases | 建立案件、指派、記錄 Notes、Evidence、Finding、Root cause 與 Resolution |
-| Pattern Library | 執行固定、可測試且唯讀的業務異常規則 |
-| Scenario Lab | 執行 S1～S14 情境，快速產生可供 Timeline 與 Journey 查詢的資料 |
+| Investigation Cases | 引用 Snapshot／Evidence，完成指派、Notes、Root cause、Resolution 與 Audit |
+| Scenario Lab | 執行 S1～S14 情境，快速產生可供 Event Check 查詢的資料 |
 | Event Hunter Guide | 查看操作方式、外部系統接入與調查 Runbook |
 
-目前完成的是 Phase 1.1：搜尋、調查、案件協作、Pattern、Scenario Lab、Grafana deep links 與
+目前完成的是 Phase 1.1：Event Check、Check Models、案件協作、Scenario Lab、Grafana deep links 與
 OpenTelemetry 整合。Temporal workflow、Projection Rebuild 與 Sandbox Replay 尚未接入，也不是目前
 操作 Event Hunter 的必要條件。
 
@@ -62,7 +61,7 @@ bash scripts/dev-up.sh       # 再次啟動並補齊 migration、topics 與 conn
 ```
 
 完整 port、持久化與故障處理請看 [Local development infrastructure](infra/README.md) 和
-[Operations Runbook](requirements/operations-runbook.md)。
+[Operations Runbook](requirements/operations/operations-runbook.md)。
 
 ## 第一次使用
 
@@ -70,17 +69,17 @@ bash scripts/dev-up.sh       # 再次啟動並補齊 migration、topics 與 conn
 
 1. 登入後開啟 **Scenario Lab**。
 2. 執行 `S1 正常訂單出貨`，取得 `Run ID` 與 `Correlation ID`。
-3. 複製 `Correlation ID`，到 **Business Timeline** 查詢事件序列。
-4. 開啟 **Business Journey**，查看 Order、Payment、Delivery 等里程碑。
+3. 在結果 modal 點 **Open Event Check**，或複製 `Correlation ID` 到 Event Check。
+4. 依序查看 **Timeline** 的事件事實、**Flow** 的合理路徑及 **Findings**。
 5. 從事件詳細資訊開啟 Grafana Logs 或 Trace。
-6. 若需要協作與保存調查結果，再建立 **Investigation Case**。
+6. 需要協作時先保存 **Check Snapshot**，再加入 **Investigation Case**。
 
 `S1`、`S12`～`S14` 會呼叫真實的 Order／Payment／Shipping demo services；`S2`～`S11` 使用隔離的
 synthetic topic 模擬缺少事件、重複、亂序、DLQ、配送與退貨等情境。
 
 ### 從事件深入調查
 
-在 Business Timeline 展開事件後，可直接把目前事件的識別碼與時間範圍帶到 Grafana：
+在 Event Check 的 Timeline 展開事件後，可直接把目前事件的識別碼與時間範圍帶到 Grafana：
 
 ![Event detail observability links](artifacts/screenshots/event-detail-grafana-links-annotated.png)
 
@@ -104,8 +103,8 @@ synthetic topic 模擬缺少事件、重複、亂序、DLQ、配送與退貨等�
 - `aggregateType`／`aggregateId`：識別事件所屬 Aggregate。
 - `eventType`／`eventVersion`／`occurredAt`：描述事件種類、版本與發生時間。
 
-Event Hunter 的 Timeline 查詢 ClickHouse 保存的 read model，不直接即時讀取 Kafka。完整 ingestion、
-Outbox、Trace Context 與資料儲存流程請看 [Current Architecture](requirements/current-architecture.md)；
+Event Check 查詢 ClickHouse 保存的 read model，不直接即時讀取 Kafka。完整 ingestion、
+Outbox、Trace Context 與資料儲存流程請看 [Current Architecture](requirements/architecture/current-architecture.md)；
 事件格式以 [Canonical Envelope Schema](contracts/events/canonical-envelope.schema.json)、
 [AsyncAPI](contracts/asyncapi.yaml) 與 [Topic Topology](contracts/platform/topic-topology.yaml) 為準。
 
@@ -131,12 +130,12 @@ README 只保留產品入口與快速操作。詳細設計集中在以下文件�
 
 | 文件 | 內容 |
 |---|---|
-| [Current Architecture](requirements/current-architecture.md) | 系統元件、資料流、ingestion、OTel、backend 邊界與架構圖 |
+| [Current Architecture](requirements/architecture/current-architecture.md) | 系統元件、資料流、ingestion、OTel、backend 邊界與架構圖 |
 | [Infrastructure](infra/README.md) | Compose 服務、ports、migration、持久化與本機環境 |
-| [Operations Runbook](requirements/operations-runbook.md) | 啟停、readiness、故障恢復、備份與 release 操作 |
+| [Operations Runbook](requirements/operations/operations-runbook.md) | 啟停、readiness、故障恢復、備份與 release 操作 |
 | [Requirements Index](requirements/README.md) | Phase 1／1.1 規劃、產品契約與 traceability |
-| [Application Architecture](requirements/application-screaming-architecture.md) | Investigation context 的 DDD 與 screaming architecture |
-| [Data Model](requirements/data-model.md) | PostgreSQL、ClickHouse 與資料所有權 |
+| [Application Architecture](requirements/architecture/application-screaming-architecture.md) | Investigation context 的 DDD 與 screaming architecture |
+| [Data Model](requirements/architecture/data-model.md) | PostgreSQL、ClickHouse 與資料所有權 |
 | [HTTP OpenAPI](openapi.yaml) | Event Hunter API 的唯一 HTTP 契約 |
 | [Event Contracts](contracts/asyncapi.yaml) | Kafka channels、事件格式與整合契約 |
 | [Frontend README](frontend/README.md) | React 開發、API client、測試與登入模式 |
@@ -144,13 +143,14 @@ README 只保留產品入口與快速操作。詳細設計集中在以下文件�
 
 架構圖原始檔也保存在 repository：
 
-- [System Architecture PlantUML](requirements/event-hunter-architecture.puml)
-- [Activity Diagram PlantUML](requirements/event-hunter-activity.puml)
+- [System Architecture PlantUML](requirements/architecture/diagrams/event-hunter-architecture.puml)
+- [Activity Diagram PlantUML](requirements/architecture/diagrams/event-hunter-activity.puml)
 
 ## 專案邊界
 
 - Event Hunter 是唯讀調查與案件協作平台，不修改正式訂單、付款、庫存或出貨資料。
-- Pattern Analysis 不會執行 Replay 或重新發布正式事件。
+- Check Model evaluation 不會執行 Replay、重新發布事件或推進正式業務流程。
+- 舊 `/timeline`、`/journey`、`/journey-profiles`、`/patterns` 與 `/saved-searches` 書籤由相容層導向新工作區；無法無損轉換的廣泛 Timeline 篩選暫留 Legacy Event Explorer。
 - 正式環境不得沿用 `.env.example` 的本機示範密碼。
 - MVP 登入使用 Demo Session；正式部署需替換為 OIDC／企業 Identity Provider。
 - Production Redrive 不屬於本專案的一般功能，避免重複扣款、通知、出貨或退款。

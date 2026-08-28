@@ -26,6 +26,7 @@ type CaseEvidenceRepository interface {
 }
 
 type CaseFilter struct {
+	Query         string
 	Status        string
 	Severity      string
 	Assignee      string

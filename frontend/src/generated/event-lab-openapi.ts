@@ -28,7 +28,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 列出近期 Scenario 執行歷程 */
+        get: operations["listScenarioRuns"];
         put?: never;
         /** 啟動一個固定劇本 */
         post: operations["createScenarioRun"];
@@ -99,6 +100,7 @@ export interface components {
             max_event_delay_ms: number;
         };
         ScenarioLinks: {
+            /** @description 相容欄位名稱；值為 Event Check 的 bounded correlation query URL。 */
             timeline: string;
             grafana: string;
             tempo: string | null;
@@ -125,6 +127,12 @@ export interface components {
             started_at?: string | null;
             /** Format: date-time */
             completed_at?: string | null;
+            /** Format: int64 */
+            duration_ms: number | null;
+            current_step: string;
+        };
+        ScenarioRunPage: {
+            items: components["schemas"]["ScenarioRun"][];
         };
     };
     responses: never;
@@ -154,6 +162,40 @@ export interface operations {
                         items: components["schemas"]["ScenarioDefinition"][];
                     };
                 };
+            };
+        };
+    };
+    listScenarioRuns: {
+        parameters: {
+            query?: {
+                scenario_id?: string;
+                status?: "ACCEPTED" | "RUNNING" | "PASSED" | "FAILED" | "TIMED_OUT";
+                execution_mode?: components["schemas"]["ExecutionMode"];
+                from?: string;
+                to?: string;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 依接受時間新到舊排序的近期執行紀錄。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioRunPage"];
+                };
+            };
+            /** @description 查詢條件不符合契約。 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

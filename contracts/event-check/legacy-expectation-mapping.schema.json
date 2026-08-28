@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/legacy-expectation-mapping.schema.json",
+  "title": "Legacy Journey Pattern to Check Model Mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "target_model", "mappings"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "contract_version": { "const": 1 },
+    "target_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "version"],
+      "properties": {
+        "model_id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["legacy_source", "legacy_kind", "legacy_id", "target_kind", "target_id", "disposition"],
+        "properties": {
+          "legacy_source": { "type": "string", "pattern": "^contracts/(journeys|patterns)/[a-z0-9._/-]+\\.yaml$" },
+          "legacy_kind": { "enum": ["JOURNEY_MILESTONE", "JOURNEY_ANOMALY", "JOURNEY_DATA_QUALITY", "PATTERN"] },
+          "legacy_id": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "target_kind": { "enum": ["FLOW_NODE", "FLOW_EXPECTATION", "GLOBAL_RULE"] },
+          "target_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+          "disposition": { "enum": ["MIGRATE", "MERGE_DUPLICATE", "DEPRECATE"] },
+          "duplicate_group": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+          "note": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

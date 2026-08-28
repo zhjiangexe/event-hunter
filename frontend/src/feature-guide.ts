@@ -1,5 +1,12 @@
 export type FeatureGuideKey =
-  "getting-started" | "timeline" | "journey" | "investigations" | "patterns";
+  | "getting-started"
+  | "overview"
+  | "event-check"
+  | "query-shortcuts"
+  | "check-models"
+  | "investigations"
+  | "ingestion-issues"
+  | "scenario-lab";
 
 export interface IntegrationTierDefinition {
   label: string;
@@ -126,8 +133,8 @@ export const featureGuides: FeatureGuideDefinition[] = [
     id: "getting-started",
     label: "Getting Started & Integration",
     layer: "平台使用與接入",
-    route: "/timeline",
-    actionLabel: "從 Business Timeline 開始 →",
+    route: "/event-check",
+    actionLabel: "從 Event Check 開始 →",
     purpose:
       "先用一條可重現的調查路徑理解 Event Hunter，再依需求選擇事件、觀測資料與自動建案的接入深度。",
     question:
@@ -135,29 +142,29 @@ export const featureGuides: FeatureGuideDefinition[] = [
     inputs: [
       "已知的業務識別碼或異常發生時間",
       "符合 Canonical Event Envelope 的 Kafka 事件，或可轉換的來源事件",
-      "選配的 processing attempt、OpenTelemetry、Journey、Pattern 與 Grafana Alert",
+      "選配的 processing attempt、OpenTelemetry、Check Model 與 Grafana Alert",
     ],
     outputs: [
-      "可重現的 Timeline → Journey／Pattern → Case 調查路徑",
+      "可重現的 Event Check → Snapshot → Case 調查路徑",
       "依 Minimum、Recommended、Full 分級的接入決策",
       "事件契約、資料管線、觀測連結與驗收清單",
     ],
     steps: [
-      "從 Overview／Smart Search 或已知識別碼進入 Business Timeline，先確認事實與查詢窗口。",
-      "用 Business Journey 對照預期里程碑，再以 Pattern 判斷是否命中已知異常。",
-      "需要協作時建立 Investigation Case，保存 Event、Trace、Alert 與 Pattern Evidence。",
+      "從 Overview／Smart Search 或已知識別碼進入 Event Check，先確認事件範圍與資料可信度。",
+      "在同一 workspace 的 Timeline、Flow 與 Findings 對照實際事件和版本化 Check Model。",
+      "需要協作時保存 immutable Snapshot，再連結 Investigation Case。",
       "外部系統先選擇直接送 canonical event，或以獨立 Normalization Adapter 轉成 canonical event。",
-      "依需要補上 OTel、processing attempt、Journey profile、Pattern 與 Grafana 自動建案。",
-      "用 contract validation、fixture 與端到端測試確認 Timeline、Journey、Case、Tempo 與 Loki 的資料一致。",
+      "依需要補上 OTel、processing attempt、Check Model 與 Grafana 自動建案。",
+      "用 contract validation、fixture 與端到端測試確認 Event Check、Case、Tempo 與 Loki 的資料一致。",
     ],
     capabilities: [
-      "已具備 Kafka → ClickHouse → Timeline 的 canonical event ingestion",
+      "已具備 Kafka → ClickHouse → Event Check 的 canonical event ingestion",
       "已具備 OTel → Tempo／Loki／Grafana deep links 與真實跨服務 trace 範例",
-      "已具備 YAML Journey／Pattern 與簽署 Grafana webhook 自動建案範例",
+      "已具備版本化 YAML Check Models 與簽署 Grafana webhook 自動建案範例",
     ],
     gaps: [
       "目前沒有輸入 topic 與 schema 後自動完成接入的 self-service onboarding UI",
-      "新增 topic、ACL、mapping、Journey 或 Pattern 仍需修改契約／YAML、部署並驗收",
+      "新增 topic、ACL、mapping 或 Check Model 仍需修改契約／YAML、部署並驗收",
       "Event Hunter 不直接輪詢業務資料庫，也不提供 Event Catalog／Topic Registry 管理 UI",
     ],
     integration: {
@@ -168,9 +175,9 @@ export const featureGuides: FeatureGuideDefinition[] = [
           no: "需要 Normalization Adapter，把來源格式翻譯後再發布。",
         },
         {
-          question: "只需要用 Timeline 搜尋事件嗎？",
+          question: "只需要用識別碼檢查一組事件嗎？",
           yes: "先做 Minimum：事件契約、Kafka topic 與 ClickHouse ingestion 即可。",
-          no: "要查重試、log、trace 時再做 Recommended；要 Journey／Pattern／自動建案時做 Full。",
+          no: "要查重試、log、trace 時再做 Recommended；要 Check Model／自動建案時做 Full。",
         },
         {
           question: "這是既有 event type／topic，還是全新的？",
@@ -203,10 +210,9 @@ export const featureGuides: FeatureGuideDefinition[] = [
             "Sink 先忠實保存 Kafka record；Materialized View 再把可搜尋資料與 admission failure 分流。",
         },
         {
-          label: "在 Timeline 查詢",
+          label: "在 Event Check 查詢",
           example: "Correlation ID = ORDER-1001",
-          meaning:
-            "Business Timeline 查 ClickHouse 的歷史事件，不會直接掃描 Kafka。",
+          meaning: "Event Check 查 ClickHouse 的歷史事件，不會直接掃描 Kafka。",
         },
       ],
       changeCases: [
@@ -289,9 +295,9 @@ export const featureGuides: FeatureGuideDefinition[] = [
         },
       ],
       noDataChecks: [
-        "先確認 Timeline 的時間範圍涵蓋事件 occurredAt，而且輸入的是正確 ID 類型。",
+        "先確認 Event Check 的時間範圍涵蓋事件 occurredAt，而且輸入的是正確 ID 類型。",
         "確認 producer 真的把訊息送到已訂閱 topic，而不是名稱相近的其他 topic。",
-        "確認 event type／version 已登錄；若未通過契約，改查 ingestion failure，而不是正常 Timeline。",
+        "確認 event type／version 已登錄；若未通過契約，改查 Ingestion Issues，而不是正常 Event Check。",
         "確認 ingestion consumer group 有 member、lag 可下降，而且 ClickHouse insert 沒有失敗。",
         "最後直接用 eventId 或 correlationId 查 ClickHouse，區分『未落庫』與『UI 查詢條件不符』。",
       ],
@@ -305,7 +311,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
             "穩定的 Correlation／Aggregate ID 語意",
           ],
           outcomes: [
-            "Business Timeline",
+            "Event Check Timeline",
             "基本搜尋",
             "手動 Investigation Case",
           ],
@@ -329,12 +335,12 @@ export const featureGuides: FeatureGuideDefinition[] = [
           summary: "補上領域語意與主動偵測。",
           requirements: [
             "Recommended 全部項目",
-            "Journey profile 與 deterministic Pattern YAML",
+            "versioned Flow Model／Global Check YAML",
             "Grafana alert rule 與簽署 webhook",
           ],
           outcomes: [
-            "Business Journey",
-            "Pattern Analysis",
+            "Event Check Flow／Findings",
+            "immutable Check Snapshot",
             "符合資格時自動建案",
           ],
         },
@@ -365,12 +371,12 @@ export const featureGuides: FeatureGuideDefinition[] = [
         {
           label: "Kafka",
           role: "事件傳輸與 7 天緩衝",
-          note: "Producer／Adapter 將事件送到 topic；Business Timeline 不直接掃描 Kafka。",
+          note: "Producer／Adapter 將事件送到 topic；Event Check 不直接掃描 Kafka。",
         },
         {
           label: "ClickHouse",
           role: "合法事件與處理紀錄的 90 天查詢庫",
-          note: "官方 Sink 保存 raw record，Materialized View 完成 admission 與 mapping 後，Business Timeline 才能查到。",
+          note: "官方 Sink 保存 raw record，Materialized View 完成 admission 與 mapping 後，Event Check 才能查到。",
         },
         {
           label: "PostgreSQL",
@@ -423,20 +429,20 @@ export const featureGuides: FeatureGuideDefinition[] = [
         {
           id: "scope",
           title: "決定接入層級與責任人",
-          goal: "先確認要解決的是 Timeline、技術診斷，還是 Journey／Pattern／自動建案。",
+          goal: "先確認要解決的是 Event Check、技術診斷，還是 Check Model／自動建案。",
           actions: [
             "選擇 Minimum、Recommended 或 Full，不要求每個系統一次完成所有能力。",
             "指定 event producer owner、topic owner、schema reviewer 與 Event Hunter ingestion owner。",
             "寫清楚 Correlation、Aggregate、Event、Causation、Trace ID 由誰產生及其生命週期。",
           ],
           sourceFiles: [
-            "requirements/project-scope.yaml",
+            "requirements/product/project-scope.yaml",
             "contracts/platform/topic-topology.yaml",
             "contracts/platform/identity-time-policy.yaml",
           ],
           verification: [
             "每個 ID 有唯一語意，不使用相同欄位混放 order、customer、request 等不同概念。",
-            "已決定是否需要 processing attempts、OTel、Journey、Pattern 與 Grafana alert intake。",
+            "已決定是否需要 processing attempts、OTel、Check Models 與 Grafana alert intake。",
           ],
           doneWhen: "接入範圍、owner、識別碼語意與驗收責任都有人承接。",
         },
@@ -539,23 +545,23 @@ export const featureGuides: FeatureGuideDefinition[] = [
           title: "加入領域判讀與自動案件（選配）",
           goal: "在事件已可信後，再定義『流程應該怎麼走』與『哪些異常需要調查』。",
           actions: [
-            "以 versioned Journey YAML 定義 milestones、state 與 anomaly rules。",
-            "以 deterministic Pattern YAML、schema 與 fixtures 定義可重現的已知異常。",
+            "以 versioned Flow Model YAML 定義合理路徑、expectations、提醒與違規 deadline。",
+            "以 Global Check YAML 與 fixtures 定義跨流程、可重現的事件品質規則。",
             "只有帶有效 Correlation ID 且符合 eligibility 的 Grafana firing alert 才透過 HMAC webhook 建案。",
             "resolved alert 追加 Evidence，不自動把案件結案。",
           ],
           sourceFiles: [
-            "contracts/journeys/*.yaml",
-            "contracts/patterns/*.yaml",
+            "contracts/check-models/*.yaml",
+            "contracts/event-check/fixtures/*.json",
             "contracts/integrations/grafana-alert-webhook.schema.json",
             "infra/grafana/provisioning/",
           ],
           verification: [
-            "Journey／Pattern generator drift check 通過。",
+            "Check Model schema、fixture 與 generated registry drift check 通過。",
             "Completed、failed、missing event、no match、match 與 alert dedup 都有 E2E。",
           ],
           doneWhen:
-            "流程判讀、Pattern finding 與自動建案都可由固定輸入重現，且不依賴人工猜測。",
+            "流程判讀、Check Finding 與自動建案都可由固定輸入重現，且不依賴人工猜測。",
         },
         {
           id: "release",
@@ -564,12 +570,12 @@ export const featureGuides: FeatureGuideDefinition[] = [
           actions: [
             "先跑 contract validation，再確認 Debezium、兩個 ClickHouse Sink connectors 與 ClickHouse readiness。",
             "以新的 Correlation ID 發布代表性事件，驗證 Timeline、failure route 與 processing attempts。",
-            "Recommended／Full 再驗證 Tempo、Loki、Journey、Pattern 與 Case deep links。",
+            "Recommended／Full 再驗證 Tempo、Loki、Check Models、Snapshot 與 Case deep links。",
             "更新 owner、故障處理、retention、known gaps 與 rollback／停用方式。",
           ],
           sourceFiles: [
-            "requirements/operations-runbook.md",
-            "requirements/backend-e2e-test-plan.md",
+            "requirements/operations/operations-runbook.md",
+            "requirements/testing/backend-e2e-test-plan.md",
             "scripts/verify-event-pipeline-readiness.sh",
             "scripts/test-phase-1-exit.sh",
           ],
@@ -603,14 +609,14 @@ export const featureGuides: FeatureGuideDefinition[] = [
         {
           label: "合法的業務失敗",
           signal: "PaymentFailed、ShipmentDispatchFailed 等已登錄 domain event",
-          lookAt: "Business Timeline、Business Journey 與案件 Evidence",
+          lookAt: "Event Check Timeline／Flow 與案件 Evidence",
           interpretation: "這是可觀測的業務結果，不必然代表服務程式有 bug。",
         },
         {
           label: "格式正確但語意錯誤",
           signal: "Schema 全部通過，但事件內容或流程判斷與真實業務不符",
           lookAt:
-            "Journey anomalies、Pattern、Domain invariants、Trace／Log 與人工 Investigation",
+            "Event Check Findings、Domain invariants、Trace／Log 與人工 Investigation",
           interpretation:
             "Ingestion 無法單獨識別，需要領域規則與證據交叉驗證。",
         },
@@ -621,7 +627,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
           label: "驗證契約與 Registry drift",
           command: "python3 scripts/validate-contracts.py",
           expected:
-            "所有 YAML／JSON、references、fixtures、Journey／Pattern registry 都通過。",
+            "所有 YAML／JSON、references、fixtures 與 Check Model registry 都通過。",
         },
         {
           risk: "SAFE",
@@ -680,8 +686,8 @@ export const featureGuides: FeatureGuideDefinition[] = [
         "若來源不是 canonical，建立可冪等的 Normalization Adapter 並發布到核准 topic。",
         "更新 ingestion mapping、schema allowlist 與資料分類／遮罩規則。",
         "接入 OTel Collector，驗證 Kafka header 能注入與還原 W3C trace context。",
-        "需要流程判讀時新增 Journey YAML；需要異常判讀時新增 Pattern YAML 與 fixtures。",
-        "以 contract、backend E2E 與 browser E2E 驗證 Timeline、Journey、Case、Tempo、Loki 與重啟保存。",
+        "需要領域判讀時新增版本化 Check Model YAML 與 fixtures。",
+        "以 contract、backend E2E 與 browser E2E 驗證 Event Check、Snapshot、Case、Tempo、Loki 與重啟保存。",
       ],
       boundaries: [
         "不能只發布到任意 Kafka topic；現行 ingestion topic、schema 與 mapping 都是 allowlisted 設定。",
@@ -692,101 +698,132 @@ export const featureGuides: FeatureGuideDefinition[] = [
     },
   },
   {
-    id: "timeline",
-    label: "Business Timeline",
-    layer: "事實層",
-    route: "/timeline",
-    purpose:
-      "依事件時間還原真正發生過的業務與技術事件，是開始調查時最直接的入口。",
-    question:
-      "這筆訂單實際發生了什麼？哪個事件、服務或 Kafka 處理步驟出現異常？",
+    id: "overview",
+    label: "Overview",
+    layer: "營運入口",
+    route: "/dashboard",
+    purpose: "先確認資料來源健康度、案件壓力與近期異常，再選擇下一個調查入口。",
+    question: "現在平台資料可信嗎？有哪些高風險案件或異常值得優先查看？",
     inputs: [
-      "Correlation、Trace、Event 或 Aggregate ID",
-      "最長 7 天的事件時間範圍",
-      "Event type、Producer、Kafka metadata 等進階條件",
+      "ClickHouse／PostgreSQL／observability source health",
+      "案件狀態與 Severity 統計",
+      "任意已知識別碼",
     ],
     outputs: [
-      "依 occurred_at 排序的 canonical event 序列",
-      "Event metadata、processing attempts 與遮罩後 payload",
-      "Grafana、Tempo、Loki deep links 與案件 Evidence 操作",
+      "來源 fresh／stale／partial／unavailable 狀態",
+      "案件與嚴重度摘要",
+      "Smart Search 導向正確功能",
     ],
     steps: [
-      "選擇識別碼類型並輸入值。",
-      "確認時間範圍涵蓋事件實際發生時間。",
-      "搜尋並展開事件，檢查因果鏈、處理狀態與觀測連結。",
-      "用「查詢捷徑」保存固定時間或每次重算的相對時間查詢。",
-      "需要追蹤時建立案件，或把事件加入既有案件。",
+      "先確認 Source Health 沒有 unavailable。",
+      "查看高嚴重度與待處理案件。",
+      "以 Smart Search 輸入已知 ID，選擇識別碼語意後開始調查。",
     ],
     capabilities: [
-      "支援四種基本識別碼與 allowlist 進階條件",
-      "同一 Correlation ID 可回傳帶有不同 Trace ID 的事件",
-      "事件日期、時間、技術 metadata 與 processing summary 可追溯",
-      "內建 Preset 與個人 Saved Search 集中在頁面右側查詢捷徑",
-      "空白頁使用最近 72 小時，已提交查詢可由 URL 分享並在重新整理或返回後還原",
+      "後端統一計算 overview 與 source health",
+      "Smart Search 不會擅自猜測模糊識別碼",
+      "統計卡可連回 Investigation 篩選",
+    ],
+    gaps: ["不是即時 NOC 監控牆", "告警通知與值班升級仍由外部系統負責"],
+  },
+  {
+    id: "event-check",
+    label: "Event Check",
+    layer: "事實與判讀工作區",
+    route: "/event-check",
+    purpose:
+      "用一個已知識別碼建立有界事件集合，並在同一工作區查看事實、流程、判定與案件交接。",
+    question: "這個 ID 關聯到哪些事件？依指定版本規則判斷後，結果是否合理？",
+    inputs: [
+      "Correlation、Trace、Event、Aggregate ID 或受治理的 Business Key",
+      "最長 7 天的事件時間範圍",
+      "選用的 Flow Model 版本與有理由的 scope adjustment",
+    ],
+    outputs: [
+      "可解釋的事件集合與 relationship reasons",
+      "Summary、Timeline、Flow、Expectations 與 Findings",
+      "可重現的 immutable Snapshot、Case handoff 與 observability deep links",
+    ],
+    steps: [
+      "選擇識別碼語意、輸入值並確認時間範圍。",
+      "先看 Source Health 與 Timeline，確認資料完整度和關聯理由。",
+      "切換 Flow／Findings 查看 Check Model 的路徑、提醒與異常判定。",
+      "必要時保存 Snapshot，再加入 Investigation Case。",
+      "用查詢捷徑保存 ID、時間模式、Model 與目前分頁。",
+    ],
+    capabilities: [
+      "同一 bounded request 同時驅動事件查詢與 deterministic evaluation",
+      "同一 Correlation ID 可包含多個 Trace ID，事件仍保留各自 trace reference",
+      "Snapshot 固定 Model checksum、事件集合與 evaluation hash",
+      "舊 Timeline／Journey 單一 ID 書籤會無損導入對應分頁",
     ],
     gaps: [
-      "尚未將同一 Correlation ID 下的多條 Trace 分段呈現",
-      "大量結果目前以查詢上限保護，尚無事件列表分頁",
+      "event type、producer、Kafka offset 等無 ID 的廣泛探索暫留 Legacy Event Explorer",
+      "同一 Correlation ID 下的多條 Trace 尚未獨立分段視覺化",
     ],
   },
   {
-    id: "journey",
-    label: "Business Journey",
-    layer: "流程層",
-    route: "/journey",
+    id: "query-shortcuts",
+    label: "Query Shortcuts",
+    layer: "查詢輔助",
+    route: "/event-check?panel=query-shortcuts",
     purpose:
-      "把實際事件與版本化 Journey YAML 的預期里程碑比較，快速判斷流程完成、失敗或停滯的位置。",
-    question: "這筆業務走到哪一步？下一個預期事件是什麼？目前缺少哪個里程碑？",
-    inputs: ["Correlation ID", "事件時間範圍", "後端已啟用的 Journey profile"],
+      "在 Event Check 內保存、重用固定時間或相對時間的 bounded request。",
+    question: "我要如何快速重跑常用查詢，又不誤用已過期的絕對時間？",
+    inputs: [
+      "目前 Event Check 識別碼、時間、Model 與分頁",
+      "使用者命名的 saved search",
+    ],
     outputs: [
-      "Journey 狀態與完成比例",
-      "各里程碑的實際事件、時間與耗時",
-      "缺少事件、失敗或補償狀態",
+      "可重放的 URL 查詢",
+      "固定時間或開啟時重算的相對時間",
+      "個人 saved search 清單",
     ],
     steps: [
-      "輸入 Correlation ID 與事件時間範圍。",
-      "查看整體 Journey 狀態與目前里程碑。",
-      "展開里程碑，回到實際 Event 或技術觀測資料。",
-      "需要反覆追蹤時，以「查詢捷徑」保存固定或相對時間範圍。",
+      "在 Event Check 點「查詢捷徑」。",
+      "保存目前 bounded request，或開啟既有個人捷徑。",
+      "再次開啟時先確認解析後的實際時間窗口。",
     ],
     capabilities: [
-      "預期流程由 YAML 明確定義，不用畫面硬編碼猜測",
-      "能區分沒有事件、進行中、完成、失敗與補償",
-      "里程碑與 Timeline canonical events 使用同一事實來源",
+      "集中在 Event Check 的 drawer",
+      "區分 FIXED 與 RELATIVE 時間語意",
+      "Saved Search 依目前使用者隔離",
     ],
-    journeyInterpretation: {
-      principles: [
-        "整體與里程碑狀態，是 Journey Profile 用同一 Correlation ID 的完整事件集合推導出來的。",
-        "里程碑卡片的『實際事件』只列該里程碑 expected_event_types 內的事件，不會重複列前一階段事件。",
-        "因此前置事件可以讓下一個里程碑進入 IN_PROGRESS，但下一個里程碑仍可能尚無自己的實際事件。",
-        "NOT_APPLICABLE 表示選配或尚未觸發的支線目前不適用，不代表事件遺失或系統故障。",
-      ],
-      exampleEvents: ["OrderCreated", "PaymentCompleted", "ShipmentCreated"],
-      exampleResults: [
-        {
-          label: "整體 Journey",
-          state: "進行中",
-          reason:
-            "已有流程事件，但尚未出現 ShipmentDelivered，也沒有符合失敗或補償規則。",
-        },
-        {
-          label: "Delivery",
-          state: "進行中",
-          reason:
-            "ShipmentCreated 是 Delivery 的啟動條件；正在等待自己的預期事件 ShipmentDelivered。",
-        },
-        {
-          label: "Return",
-          state: "尚未適用",
-          reason:
-            "退貨是選配支線；尚未出現 ReturnRequested 或 ReturnReceived，所以沒有被觸發。",
-        },
-      ],
-    },
+    gaps: ["尚無團隊共享與權限管理", "尚無排程執行 saved search"],
+  },
+  {
+    id: "check-models",
+    label: "Check Models",
+    layer: "版本化判讀契約",
+    route: "/check-models",
+    purpose:
+      "以一個 registry 管理合理業務路徑、時間 expectation 與跨流程事件品質規則。",
+    question:
+      "Event Check 依哪個版本判斷？哪些路徑合理，何時提醒、何時判定異常？",
+    inputs: [
+      "Git-managed Flow Model／Global Check YAML",
+      "版本、source path 與 checksum",
+      "deterministic fixture scenarios",
+    ],
+    outputs: [
+      "Flow paths、expectations 與 Global rules",
+      "版本歷程、scope bounds 與適用事件",
+      "唯一正式判定來源與可重現測試案例",
+    ],
+    steps: [
+      "選擇 Flow Models 或 Global Checks。",
+      "確認 model ID、版本、狀態與適用範圍。",
+      "查看 paths／expectations／rules 與 fixture scenarios。",
+      "回到 Event Check 選用該版本執行判讀。",
+    ],
+    capabilities: [
+      "Journey 定義與 Pattern 規則已收斂為同一版本化 model registry",
+      "Runtime 唯讀且由 CI 驗證 schema、fixtures 與 generator drift",
+      "舊 Pattern reference 可導向對應的 canonical expectation",
+    ],
     gaps: [
-      "目前主要提供物流 Order profile",
-      "已有唯讀 Profile Registry；尚無畫面編輯、版本選擇與發布 UI",
-      "跨多個 Correlation ID 的複合旅程尚未產品化",
+      "尚無線上編輯、審核與發布 UI",
+      "新增模型仍需透過 Git review、contract test 與部署",
     ],
   },
   {
@@ -799,18 +836,18 @@ export const featureGuides: FeatureGuideDefinition[] = [
     question: "這個問題由誰處理、判斷依據是什麼、最後如何解決？",
     inputs: [
       "案件標題、Severity、Priority 與 Correlation ID",
-      "Timeline event、Pattern finding、Grafana alert 等 Evidence reference",
+      "Event Check Snapshot、Finding、Event、Trace 與 Grafana alert reference",
       "Assignee、Tags、Notes、Root cause 與 Resolution",
     ],
     outputs: [
       "具序號、狀態與分頁的案件清單",
-      "右側 drawer 的 Summary、Timeline、Patterns、Evidence、Audit",
+      "右側 drawer 的 Summary、Event Check、Evidence 與 Audit",
       "完整狀態異動與協作稽核紀錄",
     ],
     steps: [
-      "由 Timeline 手動建立，或由符合規則的 Grafana alert 自動建立。",
+      "由 Event Check 保存 Snapshot 後加入，或由符合規則的 Grafana alert 自動建立。",
       "設定負責人、優先級與標籤，加入調查 Notes 與 Evidence。",
-      "執行 Pattern Analysis，記錄 root cause 與 resolution 後結案。",
+      "檢視 Check Finding 與 Snapshot，記錄 root cause 與 resolution 後結案。",
     ],
     capabilities: [
       "Viewer 唯讀，Investigator／Admin 可協作與結案",
@@ -824,47 +861,81 @@ export const featureGuides: FeatureGuideDefinition[] = [
     ],
   },
   {
-    id: "patterns",
-    label: "Pattern Library",
-    layer: "規則層",
-    route: "/patterns",
+    id: "ingestion-issues",
+    label: "Ingestion Issues",
+    layer: "資料接入品質",
+    route: "/ingestion-issues",
     purpose:
-      "展示由程式碼與 YAML 管理的確定性異常規則，以及規則來源、版本、測試覆蓋與歷史成效。",
-    question: "這是否符合已知故障模式？規則為何命中，而且能否被重現與稽核？",
+      "集中呈現無法安全進入 canonical event read model 的契約、admission 與 connector 問題。",
+    question:
+      "事件為什麼沒有出現在 Event Check？是格式、版本、資料治理或管線故障嗎？",
     inputs: [
-      "版本化 Pattern YAML 與 JSON Schema",
-      "Correlation ID 的 event-time window",
-      "Fixture regression 與案件 finding feedback",
+      "contract validation failure metadata",
+      "admission quarantine 與 technical DLQ metadata",
+      "來源 topic、partition、offset、correlation ID 與 payload checksum",
     ],
     outputs: [
-      "Pattern ID、版本、Severity、條件與建議查詢",
-      "來源路徑、SHA-256 checksum 與 fixture coverage",
-      "Finding 命中、案件數與 Confirmed／Dismissed 回饋",
+      "不暴露 raw payload 的失敗摘要",
+      "可定位 producer／adapter／connector 的技術欄位",
+      "有 Correlation ID 時可帶入 Event Check 交叉確認",
     ],
     steps: [
-      "先在 Library 理解規則條件與資料窗口。",
-      "於案件執行 Pattern Analysis，取得可解釋 finding。",
-      "調查員確認或排除 finding，讓成效統計反映真實品質。",
+      "先用時間、問題類型或來源 topic 縮小範圍。",
+      "開啟明細確認 error code、failure stage 與 Kafka position。",
+      "依 Runbook 修正來源契約或管線，再重送測試資料驗證。",
     ],
     capabilities: [
-      "Runtime 規則唯讀，避免 UI 即時修改造成不可追溯漂移",
-      "Generator drift、Schema 與 fixture regression 可驗證",
-      "NO_EVENTS 與 NO_MATCH 明確區分，不把缺資料誤判為正常",
+      "明確區分 contract、admission 與 technical DLQ",
+      "正常 Event Check 不混入不可安全理解的事件",
+      "UI 僅提供 checksum 與 allowlisted metadata",
     ],
     gaps: [
-      "尚無視覺化 Pattern 編輯、審核與發布流程",
-      "目前 Pattern 數量與領域覆蓋仍有限",
-      "成效統計需要足夠的案件回饋才能具有代表性",
+      "不提供 production redrive 按鈕",
+      "raw payload 需透過受管控的 restricted workflow 另行存取",
+    ],
+  },
+  {
+    id: "scenario-lab",
+    label: "Scenario Lab",
+    layer: "驗證與示範",
+    route: "/scenario-lab",
+    purpose:
+      "以固定 S1～S14 劇本產生可重現資料，實際驗證事件管線、服務鏈與故障情境。",
+    question: "我如何快速產生一組有明確預期、可在其他功能查詢的真實結果？",
+    inputs: [
+      "固定 Scenario definition",
+      "LIVE_SERVICES 或 LAB_INJECTION 執行模式",
+      "後端實際事件管線",
+    ],
+    outputs: [
+      "Run ID 與 Correlation ID",
+      "後端保存的 PASS／FAIL／timeout 結果",
+      "Event Check、Loki 等調查入口",
+    ],
+    steps: [
+      "先依執行模式與情境目的選劇本。",
+      "啟動後立即保存 Run ID 與 Correlation ID。",
+      "到近期執行歷程手動更新結果，再開啟 Event Check 或 Logs。",
+    ],
+    capabilities: [
+      "啟動 response 不輪詢 trace ID",
+      "近期 run history 可依 Scenario／狀態／模式篩選",
+      "actual 與 checks 由後端觀察產生",
+    ],
+    gaps: [
+      "Scenario 是受治理測試資料，不代表任意業務流程設計器",
+      "執行結果需手動更新，不做背景高頻輪詢",
     ],
   },
 ];
 
 export const featureGuideWorkflow = [
   "Overview／Smart Search 找到調查入口",
-  "Timeline 還原事件事實",
-  "Journey 對照預期流程",
-  "Pattern 辨識已知異常",
-  "Case 保存證據並協作處理",
+  "Event Check 建立有界事件範圍",
+  "Timeline／Flow／Findings 在同一工作區完成判讀",
+  "Snapshot 固定可重現證據",
+  "Case 引用 Snapshot 並協作處理",
+  "Check Models 管理唯一版本化判定來源",
   "Query Shortcut 重複使用有效查詢",
 ];
 

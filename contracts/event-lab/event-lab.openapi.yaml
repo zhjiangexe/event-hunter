@@ -27,6 +27,35 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/ScenarioDefinition' }
   /api/v1/scenario-runs:
+    get:
+      operationId: listScenarioRuns
+      summary: 列出近期 Scenario 執行歷程
+      parameters:
+        - name: scenario_id
+          in: query
+          schema: { type: string, pattern: '^S([1-9]|1[0-4])$' }
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACCEPTED, RUNNING, PASSED, FAILED, TIMED_OUT] }
+        - name: execution_mode
+          in: query
+          schema: { $ref: '#/components/schemas/ExecutionMode' }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: 依接受時間新到舊排序的近期執行紀錄。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScenarioRunPage' }
+        '422': { description: 查詢條件不符合契約。 }
     post:
       operationId: createScenarioRun
       summary: 啟動一個固定劇本
@@ -135,14 +164,17 @@ components:
       additionalProperties: false
       required: [timeline, grafana, tempo, loki]
       properties:
-        timeline: { type: string }
+        timeline:
+          type: string
+          description: 相容欄位名稱；值為 Event Check 的 bounded correlation query URL。
+          pattern: '^https?://.+/event-check\?'
         grafana: { type: string }
         tempo: { type: [string, 'null'] }
         loki: { type: string }
     ScenarioRun:
       type: object
       additionalProperties: false
-      required: [run_id, scenario, correlation_id, status, execution_mode, synthetic, expected_event_types, actual, checks, links, accepted_at]
+      required: [run_id, scenario, correlation_id, status, execution_mode, synthetic, expected_event_types, actual, checks, links, accepted_at, duration_ms, current_step]
       properties:
         run_id: { type: string, format: uuid }
         scenario: { $ref: '#/components/schemas/ScenarioDefinition' }
@@ -159,3 +191,13 @@ components:
         accepted_at: { type: string, format: date-time }
         started_at: { type: [string, 'null'], format: date-time }
         completed_at: { type: [string, 'null'], format: date-time }
+        duration_ms: { type: [integer, 'null'], format: int64, minimum: 0 }
+        current_step: { type: string }
+    ScenarioRunPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ScenarioRun' }

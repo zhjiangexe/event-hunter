@@ -97,7 +97,10 @@ Feature: REQ-EH-003 確定性 Domain Pattern
     And match response.generated_at == '#string'
     And match response.window == { from: '#string', to: '#string' }
     * def metric = karate.filter(response.items, function(x){ return x.pattern_id == 'payment-completed-without-shipment' })[0]
-    * match metric == { pattern_id: 'payment-completed-without-shipment', hit_count: '#number', last_hit_at: '#string', investigation_count: '#number' }
+    * match metric contains { pattern_id: 'payment-completed-without-shipment', hit_count: '#number', last_hit_at: '#string', investigation_count: '#number', confirmed_count: '#number', false_positive_count: '#number', needs_review_count: '#number', unreviewed_count: '#number', reviewed_count: '#number' }
+    * match metric.false_positive_rate == '#? _ == null || typeof _ == "number"'
+    * assert metric.reviewed_count == metric.confirmed_count + metric.false_positive_count + metric.needs_review_count
+    * assert metric.unreviewed_count == metric.hit_count - metric.reviewed_count
     * assert metric.hit_count >= 1
     * assert metric.investigation_count >= 1
 

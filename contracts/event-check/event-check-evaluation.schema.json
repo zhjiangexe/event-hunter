@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://event-hunter.local/schemas/event-check-evaluation.schema.json",
+  "title": "Event Check Evaluation Response",
+  "$ref": "#/$defs/EvaluationResponse",
+  "$defs": {
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "IdentifierType": {
+      "enum": ["EVENT_ID", "TRACE_ID", "CORRELATION_ID", "AGGREGATE_ID", "BUSINESS_KEY", "AUTO"]
+    },
+    "IdentifierQualifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "business_key_name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$" }
+      },
+      "minProperties": 1
+    },
+    "Identifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "$ref": "#/$defs/IdentifierType" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "qualifier": { "$ref": "#/$defs/IdentifierQualifier" }
+      }
+    },
+    "RequestedModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+        "version": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ScopeAdjustment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "reason"],
+      "properties": {
+        "event_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "ScopeAdjustments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["include", "exclude"],
+      "properties": {
+        "include": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/ScopeAdjustment" }
+        },
+        "exclude": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/ScopeAdjustment" }
+        }
+      }
+    },
+    "EvaluationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "from", "to"],
+      "properties": {
+        "identifier": { "$ref": "#/$defs/Identifier" },
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" },
+        "model": { "$ref": "#/$defs/RequestedModel" },
+        "scope_adjustments": { "$ref": "#/$defs/ScopeAdjustments" }
+      }
+    },
+    "SourceComponentHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "status", "detail_code"],
+      "properties": {
+        "component": { "enum": ["CANONICAL_EVENTS", "INGESTION_WATERMARK", "RELATION_INDEX"] },
+        "status": { "enum": ["HEALTHY", "STALE", "PARTIAL", "UNAVAILABLE"] },
+        "detail_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+      }
+    },
+    "SourceHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checked_at", "coverage_from", "coverage_to", "watermark", "truncated", "components"],
+      "properties": {
+        "status": { "enum": ["HEALTHY", "STALE", "PARTIAL", "UNAVAILABLE"] },
+        "checked_at": { "type": "string", "format": "date-time" },
+        "coverage_from": { "type": "string", "format": "date-time" },
+        "coverage_to": { "type": "string", "format": "date-time" },
+        "watermark": { "type": ["string", "null"], "format": "date-time" },
+        "truncated": { "type": "boolean" },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/SourceComponentHealth" }
+        }
+      }
+    },
+    "EventReferenceCore": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "occurred_at",
+        "producer",
+        "aggregate_type",
+        "aggregate_id",
+        "sequence",
+        "correlation_id",
+        "trace_id",
+        "payload_sha256",
+        "ordinal"
+      ],
+      "properties": {
+        "event_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "event_type": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{1,127}$" },
+        "event_version": { "type": "integer", "minimum": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "producer": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "aggregate_type": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "aggregate_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "correlation_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "trace_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{32}$" },
+        "payload_sha256": { "$ref": "#/$defs/Sha256" },
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "masked_payload": { "type": ["object", "null"] }
+      }
+    },
+    "EventReference": {
+      "allOf": [
+        { "$ref": "#/$defs/EventReferenceCore" }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ExcludedEventReference": {
+      "allOf": [
+        { "$ref": "#/$defs/EventReferenceCore" },
+        {
+          "type": "object",
+          "required": ["reason"],
+          "properties": {
+            "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "from_event_id", "to_event_id", "relation_type", "source_field", "source_model_id", "source_rule_id"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "from_event_id": { "type": ["string", "null"], "maxLength": 200 },
+        "to_event_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "relation_type": {
+          "enum": ["SEED", "SAME_CORRELATION", "SAME_AGGREGATE", "CAUSATION", "BUSINESS_KEY", "PARENT_CHILD", "CUSTOM_INCLUDE"]
+        },
+        "source_field": { "type": ["string", "null"], "maxLength": 200 },
+        "source_model_id": { "type": ["string", "null"], "maxLength": 64 },
+        "source_rule_id": { "type": ["string", "null"], "maxLength": 64 }
+      }
+    },
+    "ScopeLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_duration_seconds", "max_events", "max_correlations", "max_relationship_depth"],
+      "properties": {
+        "max_duration_seconds": { "type": "integer", "minimum": 1, "maximum": 604800 },
+        "max_events": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "max_correlations": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "max_relationship_depth": { "type": "integer", "minimum": 0, "maximum": 3 }
+      }
+    },
+    "ResolvedScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "seeds", "events", "excluded_events", "relationships", "limits"],
+      "properties": {
+        "mode": { "enum": ["STANDARD_SCOPE", "CUSTOM_SCOPE"] },
+        "seeds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": { "$ref": "#/$defs/EventReference" }
+        },
+        "excluded_events": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/ExcludedEventReference" }
+        },
+        "relationships": {
+          "type": "array",
+          "maxItems": 30000,
+          "items": { "$ref": "#/$defs/Relationship" }
+        },
+        "limits": { "$ref": "#/$defs/ScopeLimits" }
+      }
+    },
+    "IdentifierCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "confidence", "reason_code"],
+      "properties": {
+        "type": { "$ref": "#/$defs/IdentifierType" },
+        "confidence": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "reason_code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+      }
+    },
+    "ModelRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "kind", "source_path", "checksum"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$" },
+        "version": { "type": "integer", "minimum": 1 },
+        "kind": { "enum": ["FLOW", "GLOBAL_CHECK"] },
+        "source_path": { "type": "string", "pattern": "^contracts/check-models/[a-z0-9._/-]+\\.yaml$" },
+        "checksum": { "$ref": "#/$defs/Sha256" }
+      }
+    },
+    "ModelCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "confidence", "reason_codes"],
+      "properties": {
+        "model": { "$ref": "#/$defs/ModelRef" },
+        "confidence": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+        }
+      }
+    },
+    "BusinessOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "code", "label"],
+      "properties": {
+        "category": { "enum": ["SUCCESS", "EXPECTED_FAILURE", "COMPENSATED", "INCOMPLETE"] },
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "ExpectationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "state", "trigger_event_ids", "satisfying_event_ids", "reminder_at", "deadline_at"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "state": { "enum": ["SATISFIED", "WAITING", "REMINDER", "VIOLATED", "LATE_SATISFIED"] },
+        "trigger_event_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "satisfying_event_ids": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "reminder_at": { "type": ["string", "null"], "format": "date-time" },
+        "deadline_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "EvidenceReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "enum": ["EVENT", "TRACE", "LOG_QUERY", "TIMELINE_QUERY", "SOURCE_HEALTH"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 500 }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "rule_kind", "rule_id", "rule_version", "rule_checksum", "severity", "code", "expectation_state", "evidence_references", "recommended_query_template_id"],
+      "properties": {
+        "id": { "type": ["string", "null"], "format": "uuid" },
+        "rule_kind": { "enum": ["FLOW_EXPECTATION", "MODEL_RULE", "GLOBAL_CHECK"] },
+        "rule_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "rule_version": { "type": "integer", "minimum": 1 },
+        "rule_checksum": { "$ref": "#/$defs/Sha256" },
+        "severity": { "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "expectation_state": {
+          "type": ["string", "null"],
+          "enum": ["SATISFIED", "WAITING", "REMINDER", "VIOLATED", "LATE_SATISFIED", null]
+        },
+        "evidence_references": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceReference" }
+        },
+        "recommended_query_template_id": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+    "FlowResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "role", "status", "candidate_path_ids", "matched_path_id", "outcome"],
+      "properties": {
+        "model": { "$ref": "#/$defs/ModelRef" },
+        "role": { "enum": ["ROOT", "CHILD"] },
+        "status": { "enum": ["IN_PROGRESS", "CONFORMANT", "DEVIATED", "INCONCLUSIVE", "AMBIGUOUS"] },
+        "candidate_path_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+        },
+        "matched_path_id": { "type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]{1,63}$" },
+        "outcome": { "oneOf": [{ "$ref": "#/$defs/BusinessOutcome" }, { "type": "null" }] }
+      }
+    },
+    "GlobalCheckResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "status", "finding_codes"],
+      "properties": {
+        "model": { "$ref": "#/$defs/ModelRef" },
+        "status": { "enum": ["CONFORMANT", "DEVIATED", "INCONCLUSIVE"] },
+        "finding_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+        }
+      }
+    },
+    "CheckResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_status", "business_outcome", "expectations", "flows", "global_checks", "findings", "unmapped_event_ids", "evaluator_contract_version", "evaluator_build_version"],
+      "properties": {
+        "check_status": { "enum": ["NO_DATA", "IN_PROGRESS", "CONFORMANT", "DEVIATED", "INCONCLUSIVE", "AMBIGUOUS"] },
+        "business_outcome": { "oneOf": [{ "$ref": "#/$defs/BusinessOutcome" }, { "type": "null" }] },
+        "expectations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExpectationResult" }
+        },
+        "flows": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/FlowResult" }
+        },
+        "global_checks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GlobalCheckResult" }
+        },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Finding" }
+        },
+        "unmapped_event_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "evaluator_contract_version": { "const": 1 },
+        "evaluator_build_version": { "type": "string", "minLength": 1, "maxLength": 100 }
+      }
+    },
+    "EvaluationResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resolution_status", "normalized_request", "source_health", "scope", "identifier_candidates", "model_candidates", "model", "result", "event_set_hash", "evaluation_hash", "warnings"],
+      "properties": {
+        "resolution_status": {
+          "enum": ["NO_DATA", "IDENTIFIER_SELECTION_REQUIRED", "MODEL_SELECTION_REQUIRED", "NO_APPLICABLE_MODEL", "EVALUATED"]
+        },
+        "normalized_request": { "$ref": "#/$defs/EvaluationRequest" },
+        "source_health": { "$ref": "#/$defs/SourceHealth" },
+        "scope": { "$ref": "#/$defs/ResolvedScope" },
+        "identifier_candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/IdentifierCandidate" }
+        },
+        "model_candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ModelCandidate" }
+        },
+        "model": { "oneOf": [{ "$ref": "#/$defs/ModelRef" }, { "type": "null" }] },
+        "result": { "oneOf": [{ "$ref": "#/$defs/CheckResult" }, { "type": "null" }] },
+        "event_set_hash": { "oneOf": [{ "$ref": "#/$defs/Sha256" }, { "type": "null" }] },
+        "evaluation_hash": { "oneOf": [{ "$ref": "#/$defs/Sha256" }, { "type": "null" }] },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,63}$" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "resolution_status": { "const": "EVALUATED" } } },
+          "then": {
+            "properties": {
+              "model": { "$ref": "#/$defs/ModelRef" },
+              "result": { "$ref": "#/$defs/CheckResult" },
+              "event_set_hash": { "$ref": "#/$defs/Sha256" },
+              "evaluation_hash": { "$ref": "#/$defs/Sha256" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "resolution_status": { "const": "NO_DATA" } } },
+          "then": {
+            "properties": {
+              "model": { "type": "null" },
+              "result": { "type": "null" },
+              "event_set_hash": { "type": "null" },
+              "evaluation_hash": { "type": "null" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

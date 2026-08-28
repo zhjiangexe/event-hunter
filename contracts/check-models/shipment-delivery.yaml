@@ -1,0 +1,77 @@
+$schema: ./check-model.schema.json
+contract_version: 1
+model_id: shipment-delivery
+version: 1
+kind: FLOW
+status: ACTIVE
+title: Shipment Delivery
+description: 以 Shipment aggregate 為起點檢查派送、運送與送達結果；可作為獨立主要流程候選。
+domain: logistics
+source:
+  authoring: YAML_GIT
+  mutable_at_runtime: false
+applies_to:
+  aggregate_types: [Shipment]
+  trigger_event_types: [ShipmentCreated, ShipmentDispatchFailed, ShipmentDispatched]
+  event_versions:
+    - {event_type: ShipmentCreated, versions: [1]}
+    - {event_type: ShipmentDispatchFailed, versions: [1]}
+    - {event_type: ShipmentDispatched, versions: [1]}
+    - {event_type: ShipmentInTransit, versions: [1]}
+    - {event_type: ShipmentDelivered, versions: [1]}
+scope:
+  max_duration_seconds: 604800
+  max_events: 2000
+  max_correlations: 5
+  max_relationship_depth: 2
+  relations: [SAME_CORRELATION, SAME_AGGREGATE, CAUSATION, BUSINESS_KEY]
+  business_keys:
+    - name: order_id
+      json_pointer: /payload/orderId
+      event_types: [ShipmentCreated, ShipmentDispatchFailed, ShipmentDispatched, ShipmentInTransit, ShipmentDelivered]
+  parent_child_relations: []
+nodes:
+  - id: SHIPMENT_CREATED
+    label: 出貨建立
+    event: {event_types: [ShipmentCreated]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: SHIPMENT_DISPATCHED
+    label: 已派送
+    event: {event_types: [ShipmentDispatched]}
+    min_occurs: 0
+    max_occurs: 20
+  - id: SHIPMENT_IN_TRANSIT
+    label: 運送中
+    event: {event_types: [ShipmentInTransit]}
+    min_occurs: 0
+    max_occurs: 20
+  - id: SHIPMENT_DELIVERED
+    label: 已送達
+    event: {event_types: [ShipmentDelivered]}
+    min_occurs: 1
+    max_occurs: 1
+  - id: SHIPMENT_DISPATCH_FAILED
+    label: 派送失敗
+    event: {event_types: [ShipmentDispatchFailed]}
+    min_occurs: 1
+    max_occurs: 1
+paths:
+  - id: DELIVERY_SUCCESS
+    label: 配送完成
+    nodes: [SHIPMENT_CREATED, SHIPMENT_DISPATCHED, SHIPMENT_IN_TRANSIT, SHIPMENT_DELIVERED]
+    terminal: true
+    outcome: {code: DELIVERED, label: 已完成配送, category: SUCCESS}
+  - id: DELIVERY_FAILED
+    label: 派送失敗
+    nodes: [SHIPMENT_CREATED, SHIPMENT_DISPATCH_FAILED]
+    terminal: true
+    outcome: {code: DISPATCH_FAILED, label: 出貨派送失敗, category: EXPECTED_FAILURE}
+expectations: []
+child_models: []
+unmapped_event_policy:
+  default: INFORMATIONAL
+  escalate_event_types: []
+fixtures:
+  scenario_file: ../event-check/fixtures/check-model-scenarios.json
+  case_ids: [model-selection-required]
