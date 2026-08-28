@@ -1,0 +1,49 @@
+apiVersion: 1
+
+# Grafana 是技術觀測與事件品質 Dashboard 的主要入口；Event Hunter UI 不重做這些查詢畫面。
+datasources:
+  - name: ClickHouse
+    uid: clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    editable: true
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      username: grafana_reader
+      defaultDatabase: event_hunter
+      dialTimeout: "10"
+      queryTimeout: "30"
+      validateSql: true
+      enableRowLimit: true
+    secureJsonData:
+      password: ${GRAFANA_CLICKHOUSE_PASSWORD}
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true
+    jsonData:
+      httpMethod: GET
+      nodeGraph:
+        enabled: true
+      serviceMap:
+        datasourceUid: prometheus

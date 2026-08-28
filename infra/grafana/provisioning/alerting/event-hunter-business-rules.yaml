@@ -1,0 +1,63 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: event-hunter-business-investigation
+    folder: Event Hunter
+    interval: 10s
+    rules:
+      - uid: event-hunter-dlq-investigation
+        title: Event Hunter DLQ business investigation
+        condition: C
+        data:
+          # A terminal DLQ processing attempt is attributable to one real
+          # correlation. String columns become labels; the numeric column is
+          # the alert value. A later successful attempt resolves the instance.
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT correlation_id, event_id, consumer_group_id, toFloat64(1) AS value FROM (SELECT event_id, consumer_group_id, argMax(correlation_id, tuple(observed_at, attempt, attempt_id)) AS correlation_id, argMax(processing_status, tuple(observed_at, attempt, attempt_id)) AS processing_status FROM canonical_event_processing_attempts WHERE observed_at >= now() - INTERVAL 10 MINUTE GROUP BY event_id, consumer_group_id) WHERE processing_status = 'DLQ' AND correlation_id != ''
+              refId: A
+          # Reduce and threshold expressions preserve A's dimensional labels;
+          # a classic condition would collapse them and lose correlation_id.
+          - refId: B
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions: []
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: B
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: 'Grafana: DLQ processing requires investigation [{{ $labels.correlation_id }}]'
+          description: 'Event {{ $labels.event_id }} reached DLQ in {{ $labels.consumer_group_id }}.'
+        labels:
+          event_hunter: investigate
+          incident_window_seconds: "600"
+          event_hunter_scope: business_investigation
+          severity: HIGH

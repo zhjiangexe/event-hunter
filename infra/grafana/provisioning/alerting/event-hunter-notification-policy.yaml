@@ -1,0 +1,17 @@
+apiVersion: 1
+
+# The root remains a no-op receiver. Only explicitly eligible business alerts
+# enter Event Hunter; aggregate platform-quality alerts stay inside Grafana.
+policies:
+  - orgId: 1
+    receiver: empty
+    group_by: [grafana_folder, alertname]
+    routes:
+      - receiver: event-hunter-investigation
+        object_matchers:
+          - [event_hunter, "=", investigate]
+        group_by: [grafana_folder, alertname, correlation_id]
+        group_wait: 1s
+        group_interval: 10s
+        repeat_interval: 4h
+

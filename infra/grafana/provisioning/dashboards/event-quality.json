@@ -1,0 +1,43 @@
+{
+  "uid": "event-quality",
+  "title": "Event Hunter · Event Quality",
+  "tags": ["event-hunter", "quality"],
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Event count",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "editorType": "sql", "format": 0, "pluginVersion": "4.20.0", "queryType": "time_series", "rawSql": "SELECT window_start AS time, argMax(event_count, calculated_at) AS event_count, concat(topic_name, ' p', toString(kafka_partition)) AS series FROM event_quality_metrics WHERE $__timeFilter(window_start) AND consumer_group_id = '' GROUP BY window_start, topic_name, kafka_partition ORDER BY time", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Duplicates / schema violations / out of order",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "editorType": "sql", "format": 0, "pluginVersion": "4.20.0", "queryType": "time_series", "rawSql": "SELECT window_start AS time, argMax(duplicate_count, calculated_at) AS duplicates, argMax(schema_violation_count, calculated_at) AS schema_violations, argMax(out_of_order_count, calculated_at) AS out_of_order FROM event_quality_metrics WHERE $__timeFilter(window_start) AND consumer_group_id = '' GROUP BY window_start, topic_name, kafka_partition ORDER BY time", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DLQ / event delay / processing latency",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "editorType": "sql", "format": 0, "pluginVersion": "4.20.0", "queryType": "time_series", "rawSql": "SELECT window_start AS time, max(dlq_count) AS dlq, max(max_event_delay_ms) AS event_delay_ms, max(max_processing_latency_ms) AS processing_latency_ms FROM (SELECT window_start, topic_name, kafka_partition, consumer_group_id, argMax(dlq_count, calculated_at) AS dlq_count, argMax(max_event_delay_ms, calculated_at) AS max_event_delay_ms, argMax(max_processing_latency_ms, calculated_at) AS max_processing_latency_ms FROM event_quality_metrics WHERE $__timeFilter(window_start) GROUP BY window_start, topic_name, kafka_partition, consumer_group_id) GROUP BY window_start ORDER BY time", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Consumer lag",
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" }, "editorType": "sql", "format": 0, "pluginVersion": "4.20.0", "queryType": "time_series", "rawSql": "SELECT window_start AS time, argMax(consumer_lag_messages, calculated_at) AS consumer_lag, concat(consumer_group_id, ' / ', topic_name, ' p', toString(kafka_partition)) AS series FROM event_quality_metrics WHERE $__timeFilter(window_start) AND consumer_group_id != '' GROUP BY window_start, topic_name, kafka_partition, consumer_group_id ORDER BY time", "refId": "A" }]
+    }
+  ]
+}

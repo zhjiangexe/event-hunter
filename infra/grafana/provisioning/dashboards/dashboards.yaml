@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: Event Hunter
+    orgId: 1
+    folder: Event Hunter
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards

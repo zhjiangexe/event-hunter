@@ -1,0 +1,234 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: event-hunter-quality
+    folder: Event Hunter
+    interval: 1m
+    rules:
+      - uid: event-quality-duplicate-warning
+        title: Event Hunter duplicate rate warning
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(duplicate_count / greatest(event_count, 1))) AS value FROM (SELECT argMax(duplicate_count, calculated_at) AS duplicate_count, argMax(event_count, calculated_at) AS event_count FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 10 MINUTE AND consumer_group_id = '' GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0.001], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Event duplicate rate exceeded 0.1 percent
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: MEDIUM
+
+      - uid: event-quality-duplicate-critical
+        title: Event Hunter duplicate rate critical
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(duplicate_count / greatest(event_count, 1))) AS value FROM (SELECT argMax(duplicate_count, calculated_at) AS duplicate_count, argMax(event_count, calculated_at) AS event_count FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 10 MINUTE AND consumer_group_id = '' GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0.01], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Event duplicate rate exceeded 1 percent
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: HIGH
+
+      - uid: event-quality-schema
+        title: Event Hunter schema violation detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(schema_violation_count)) AS value FROM (SELECT argMax(schema_violation_count, calculated_at) AS schema_violation_count FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 5 MINUTE GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Event schema violation detected
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: HIGH
+
+      - uid: event-quality-dlq
+        title: Event Hunter DLQ detected
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(dlq_count)) AS value FROM (SELECT argMax(dlq_count, calculated_at) AS dlq_count FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 5 MINUTE GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [0], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Event processing or ingestion DLQ detected
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: HIGH
+
+      - uid: event-quality-delay
+        title: Event Hunter event delay warning
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(max_event_delay_ms)) AS value FROM (SELECT argMax(max_event_delay_ms, calculated_at) AS max_event_delay_ms FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 10 MINUTE AND consumer_group_id = '' GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [30000], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Maximum event ingestion delay exceeded 30 seconds
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: MEDIUM
+
+      - uid: event-quality-consumer-lag
+        title: Event Hunter consumer lag critical
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: clickhouse
+            model:
+              datasource: { type: grafana-clickhouse-datasource, uid: clickhouse }
+              editorType: sql
+              format: 1
+              pluginVersion: 4.20.0
+              queryType: table
+              rawSql: SELECT toFloat64(max(consumer_lag_messages)) AS value FROM (SELECT argMax(consumer_lag_messages, calculated_at) AS consumer_lag_messages FROM event_quality_metrics WHERE window_end >= now() - INTERVAL 10 MINUTE AND consumer_group_id != '' GROUP BY window_start, window_end, topic_name, kafka_partition, consumer_group_id)
+              refId: A
+          - refId: C
+            relativeTimeRange: { from: 0, to: 0 }
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [10000], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: classic_conditions
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: Consumer lag exceeded 10000 messages
+        labels:
+          event_hunter_scope: aggregate_quality
+          severity: HIGH

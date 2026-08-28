@@ -1,0 +1,22 @@
+apiVersion: 1
+
+# Only alerts that carry event_hunter=investigate are routed here. Grafana
+# expands the environment variable at provisioning time and encrypts the HMAC
+# secret in its database; the checked-in file never contains a deployment
+# secret.
+contactPoints:
+  - orgId: 1
+    name: event-hunter-investigation
+    receivers:
+      - uid: event-hunter-investigation-webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: http://event-hunter-api:8080/api/v1/integrations/grafana/alerts
+          httpMethod: POST
+          maxAlerts: "0"
+          hmacConfig:
+            secret: $GRAFANA_WEBHOOK_SECRET
+            header: X-Grafana-Alerting-Signature
+            timestampHeader: X-Grafana-Alerting-Timestamp
+

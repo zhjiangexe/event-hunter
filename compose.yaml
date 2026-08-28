@@ -1,0 +1,589 @@
+name: event-hunter
+
+# 本檔案只提供本機開發依賴；Go API、React SPA 與示範微服務完成後再加入 build service。
+# Temporal 位於 temporal profile，預設不啟動，也不在 Kafka 高流量資料路徑上。
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-event_hunter}
+      POSTGRES_USER: ${POSTGRES_USER:-event_hunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-event_hunter_local_only}
+    ports:
+      - "${POSTGRES_PORT:-28313}:5432"
+    volumes:
+      # PostgreSQL 18 的 image 將主要 volume 掛在 /var/lib/postgresql。
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  demo-order-postgres:
+    image: postgres:18.4-alpine
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    environment:
+      POSTGRES_DB: demo_order
+      POSTGRES_USER: ${DEMO_ORDER_POSTGRES_USER:-demo_order}
+      POSTGRES_PASSWORD: ${DEMO_ORDER_POSTGRES_PASSWORD:-demo_order_local_only}
+    ports:
+      - "${DEMO_ORDER_POSTGRES_PORT:-28314}:5432"
+    volumes:
+      - demo_order_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  demo-payment-postgres:
+    image: postgres:18.4-alpine
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    environment:
+      POSTGRES_DB: demo_payment
+      POSTGRES_USER: ${DEMO_PAYMENT_POSTGRES_USER:-demo_payment}
+      POSTGRES_PASSWORD: ${DEMO_PAYMENT_POSTGRES_PASSWORD:-demo_payment_local_only}
+    ports:
+      - "${DEMO_PAYMENT_POSTGRES_PORT:-28315}:5432"
+    volumes:
+      - demo_payment_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  demo-shipping-postgres:
+    image: postgres:18.4-alpine
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_replication_slots=10", "-c", "max_wal_senders=10"]
+    environment:
+      POSTGRES_DB: demo_shipping
+      POSTGRES_USER: ${DEMO_SHIPPING_POSTGRES_USER:-demo_shipping}
+      POSTGRES_PASSWORD: ${DEMO_SHIPPING_POSTGRES_PASSWORD:-demo_shipping_local_only}
+    ports:
+      - "${DEMO_SHIPPING_POSTGRES_PORT:-28316}:5432"
+    volumes:
+      - demo_shipping_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.6.2.160-alpine
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-event_hunter}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-28317}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-28318}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1'",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: unless-stopped
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.1
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --memory
+      - 1G
+      - --reserve-memory
+      - 0M
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://localhost:${KAFKA_PORT:-28319}
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://redpanda:8082,external://localhost:${REDPANDA_HTTP_PROXY_PORT:-28321}
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - redpanda:33145
+      - --advertise-rpc-addr
+      - redpanda:33145
+      - --default-log-level=info
+    ports:
+      - "${KAFKA_PORT:-28319}:19092"
+      - "${SCHEMA_REGISTRY_PORT:-28320}:18081"
+      - "${REDPANDA_HTTP_PROXY_PORT:-28321}:18082"
+      - "${REDPANDA_ADMIN_PORT:-28322}:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info", "-X", "brokers=localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v3.10.0
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+    ports:
+      - "${REDPANDA_CONSOLE_PORT:-28323}:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  kafka-connect:
+    image: debezium/connect:3.0.0.Final
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: event-hunter-kafka-connect
+      CONFIG_STORAGE_TOPIC: event-hunter.connect-configs
+      OFFSET_STORAGE_TOPIC: event-hunter.connect-offsets
+      STATUS_STORAGE_TOPIC: event-hunter.connect-status
+      CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_PLUGIN_PATH: /kafka/connect,/usr/share/java
+    ports:
+      - "${KAFKA_CONNECT_REST_PORT:-28324}:8083"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      demo-order-postgres:
+        condition: service_healthy
+      demo-payment-postgres:
+        condition: service_healthy
+      demo-shipping-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # 正式 ClickHouse-first ingestion worker。為保留既有環境的 connector offsets 與
+  # rolling-upgrade 相容性，service/group 名稱暫時沿用最初 POC 的內部識別字。
+  kafka-connect-clickhouse-poc:
+    build:
+      context: .
+      dockerfile: infra/kafka-connect-clickhouse/Dockerfile
+      args:
+        CLICKHOUSE_KAFKA_CONNECT_VERSION: "1.5.0"
+        CLICKHOUSE_KAFKA_CONNECT_SHA256: 53e31ccd96734b8fb1f251279da17863b9b193f0764a61280461aa314050ecc6
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: event-hunter-clickhouse-poc-connect
+      CONFIG_STORAGE_TOPIC: event-hunter.poc-connect-configs
+      OFFSET_STORAGE_TOPIC: event-hunter.poc-connect-offsets
+      STATUS_STORAGE_TOPIC: event-hunter.poc-connect-status
+      CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+      OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+      STATUS_STORAGE_REPLICATION_FACTOR: "1"
+      KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect-clickhouse-poc
+      CONNECT_PLUGIN_PATH: /kafka/connect,/usr/share/java
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "${CLICKHOUSE_POC_CONNECT_REST_PORT:-28345}:8083"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connector-plugins >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # 將 Kafka Connect technical DLQ 投影為不含 raw payload、exception message
+  # 與 stack trace 的安全摘要，供 Ingestion Issues API 查詢。
+  technical-dlq-projector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-technical-dlq-projector
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      TECHNICAL_DLQ_TOPIC: event-hunter.poc-clickhouse-sink.dlq
+      TECHNICAL_DLQ_CONSUMER_GROUP: event-hunter-technical-dlq-projector-v1
+      TECHNICAL_DLQ_HEALTH_ADDRESS: :8080
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-event_hunter}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
+    ports:
+      - "${TECHNICAL_DLQ_PROJECTOR_HEALTH_PORT:-28346}:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-28326}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.5
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "${LOKI_PORT:-28327}:3100"
+    volumes:
+      - ./infra/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+
+  tempo:
+    # Tempo 3 的 ingestion 架構有 breaking changes；本機單節點先固定在仍維護的 2.10 patch line。
+    image: grafana/tempo:2.10.7
+    user: "0:0"
+    command: -config.file=/etc/tempo/tempo.yaml
+    ports:
+      - "${TEMPO_PORT:-28328}:3200"
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.158.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    ports:
+      - "${OTEL_GRPC_PORT:-28329}:4317"
+      - "${OTEL_HTTP_PORT:-28330}:4318"
+      - "${OTEL_HEALTH_PORT:-28331}:13133"
+    volumes:
+      - ./infra/otel-collector/config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    depends_on:
+      - loki
+      - tempo
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.1.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_local_only}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PLUGINS_PREINSTALL: grafana-clickhouse-datasource@4.20.0
+      # Used by the provisioned Event Hunter webhook contact point. Grafana
+      # encrypts the expanded HMAC secret in its own persistent database.
+      GRAFANA_WEBHOOK_SECRET: ${GRAFANA_WEBHOOK_SECRET:-grafana_webhook_local_only}
+      # 必須與 infra/clickhouse/initdb 的本機唯讀帳號一致；正式環境不可沿用。
+      GRAFANA_CLICKHOUSE_PASSWORD: grafana_reader_local_only
+    ports:
+      - "${GRAFANA_PORT:-28332}:3000"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  event-hunter-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-api
+    environment:
+      EVENT_HUNTER_API_PORT: "8080"
+      EVENT_HUNTER_HTTP_REQUEST_TIMEOUT: ${EVENT_HUNTER_HTTP_REQUEST_TIMEOUT:-5s}
+      EVENT_HUNTER_POSTGRES_QUERY_TIMEOUT: ${EVENT_HUNTER_POSTGRES_QUERY_TIMEOUT:-2s}
+      EVENT_HUNTER_CLICKHOUSE_QUERY_TIMEOUT: ${EVENT_HUNTER_CLICKHOUSE_QUERY_TIMEOUT:-3s}
+      EVENT_HUNTER_RATE_LIMIT_WINDOW: ${EVENT_HUNTER_RATE_LIMIT_WINDOW:-1m}
+      EVENT_HUNTER_RATE_LIMIT_REQUESTS: ${EVENT_HUNTER_RATE_LIMIT_REQUESTS:-300}
+      EVENT_HUNTER_CLICKHOUSE_MAX_RESULT_ROWS: ${EVENT_HUNTER_CLICKHOUSE_MAX_RESULT_ROWS:-10000}
+      EVENT_HUNTER_CLICKHOUSE_MAX_RESULT_BYTES: ${EVENT_HUNTER_CLICKHOUSE_MAX_RESULT_BYTES:-8388608}
+      EVENT_HUNTER_CLICKHOUSE_MAX_ROWS_TO_READ: ${EVENT_HUNTER_CLICKHOUSE_MAX_ROWS_TO_READ:-5000000}
+      EVENT_HUNTER_CLICKHOUSE_MAX_BYTES_TO_READ: ${EVENT_HUNTER_CLICKHOUSE_MAX_BYTES_TO_READ:-536870912}
+      EVENT_HUNTER_CLICKHOUSE_MAX_THREADS: ${EVENT_HUNTER_CLICKHOUSE_MAX_THREADS:-4}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-event_hunter}
+      POSTGRES_USER: ${POSTGRES_USER:-event_hunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-event_hunter_local_only}
+      DEMO_SESSION_SECRET: ${DEMO_SESSION_SECRET:-demo_session_local_only}
+      GRAFANA_WEBHOOK_SECRET: ${GRAFANA_WEBHOOK_SECRET:-grafana_webhook_local_only}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-event_hunter}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
+      TEMPO_INTERNAL_URL: http://tempo:3200
+      LOKI_INTERNAL_URL: http://loki:3100
+      GRAFANA_INTERNAL_URL: http://grafana:3000
+      KAFKA_BROKERS: redpanda:9092
+      EVENT_HUNTER_INGESTION_MODE: ${EVENT_HUNTER_INGESTION_MODE:-clickhouse-mv}
+      EVENT_HUNTER_ATTEMPTS_INGESTION_MODE: ${EVENT_HUNTER_ATTEMPTS_INGESTION_MODE:-clickhouse-mv}
+      CLICKHOUSE_POC_CONNECT_STATUS_URL: http://kafka-connect-clickhouse-poc:8083/connectors/event-hunter-poc-raw-landing/status
+      CLICKHOUSE_POC_ATTEMPTS_CONNECT_STATUS_URL: http://kafka-connect-clickhouse-poc:8083/connectors/event-hunter-poc-processing-attempt-raw-landing/status
+      TECHNICAL_DLQ_PROJECTOR_READY_URL: http://technical-dlq-projector:8080/health/ready
+      EVENT_HUNTER_FORENSICS_CONSUMER_GROUP: event-hunter-forensics-ingestion-v1
+    ports:
+      - "${EVENT_HUNTER_API_PORT:-28333}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka-connect-clickhouse-poc:
+        condition: service_healthy
+      technical-dlq-projector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  quality-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-quality-worker
+    command: ["schedule", "--interval=1m", "--window=1m", "--late-grace=2m", "--health-addr=:28338"]
+    environment:
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-event_hunter}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
+    ports:
+      - "${QUALITY_WORKER_HEALTH_PORT:-28338}:28338"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:28338/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  event-hunter-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_GRAFANA_URL: ${VITE_GRAFANA_URL:-http://localhost:28332}
+    ports:
+      - "${EVENT_HUNTER_FRONTEND_PORT:-28334}:8080"
+    depends_on:
+      event-hunter-api:
+        condition: service_healthy
+      event-lab:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/login >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  demo-order-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-order
+    environment:
+      DEMO_ORDER_API_PORT: "8080"
+      DEMO_ORDER_POSTGRES_HOST: demo-order-postgres
+      DEMO_ORDER_POSTGRES_PORT: "5432"
+      KAFKA_BROKERS: redpanda:9092
+      DEMO_EVENT_EMISSION_DELAY: ${DEMO_EVENT_EMISSION_DELAY:-2s}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      DEPLOYMENT_ENVIRONMENT: local-demo
+    ports:
+      - "${DEMO_ORDER_API_PORT:-28335}:8080"
+    depends_on:
+      demo-order-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
+
+  demo-payment-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-payment
+    environment:
+      DEMO_PAYMENT_POSTGRES_HOST: demo-payment-postgres
+      DEMO_PAYMENT_POSTGRES_PORT: "5432"
+      KAFKA_BROKERS: redpanda:9092
+      DEMO_EVENT_EMISSION_DELAY: ${DEMO_EVENT_EMISSION_DELAY:-2s}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      DEPLOYMENT_ENVIRONMENT: local-demo
+    depends_on:
+      demo-payment-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
+
+  demo-shipping-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-shipping
+    environment:
+      DEMO_SHIPPING_POSTGRES_HOST: demo-shipping-postgres
+      DEMO_SHIPPING_POSTGRES_PORT: "5432"
+      KAFKA_BROKERS: redpanda:9092
+      DEMO_EVENT_EMISSION_DELAY: ${DEMO_EVENT_EMISSION_DELAY:-2s}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      DEPLOYMENT_ENVIRONMENT: local-demo
+    depends_on:
+      demo-shipping-postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
+
+  event-lab:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime-event-lab
+    environment:
+      EVENT_LAB_PORT: "28343"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-event_hunter}
+      POSTGRES_USER: ${POSTGRES_USER:-event_hunter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-event_hunter_local_only}
+      KAFKA_BROKERS: redpanda:9092
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-event_hunter}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-event_hunter}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-event_hunter_local_only}
+      DEMO_ORDER_API_URL: http://demo-order-service:8080
+      EVENT_HUNTER_UI_URL: http://localhost:${EVENT_HUNTER_FRONTEND_PORT:-28334}
+      GRAFANA_URL: http://localhost:${GRAFANA_PORT:-28332}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      DEPLOYMENT_ENVIRONMENT: local-demo
+    ports:
+      - "${EVENT_LAB_PORT:-28343}:28343"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      demo-order-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:28343/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/temporal:1.8.2
+    profiles: [temporal]
+    command: server start-dev --ip 0.0.0.0 --db-filename /home/temporal/temporal.db
+    ports:
+      - "${TEMPORAL_GRPC_PORT:-28341}:7233"
+      - "${TEMPORAL_UI_PORT:-28342}:8233"
+    volumes:
+      - temporal_data:/home/temporal
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  demo_order_postgres_data:
+  demo_payment_postgres_data:
+  demo_shipping_postgres_data:
+  clickhouse_data:
+  redpanda_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+  temporal_data:

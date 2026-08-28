@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus 自身健康與查詢指標。
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  # OpenTelemetry Collector 自身的 internal telemetry。
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+
+  # 應用程式經 OTLP 傳入的 Metrics，由 Collector 轉成 Prometheus scrape endpoint。
+  - job_name: event-hunter-otlp
+    static_configs:
+      - targets: ["otel-collector:8889"]
