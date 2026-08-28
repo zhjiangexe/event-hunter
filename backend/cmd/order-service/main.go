@@ -190,7 +190,7 @@ func consumePaymentEvents(ctx context.Context, consumer *kgo.Client, kafkaTracer
 				slog.ErrorContext(processCtx, "commit payment event", append([]any{"error", err}, telemetry.ConsumerLogAttrs(envelope, record)...)...)
 				return
 			}
-			slog.InfoContext(processCtx, "processed event", telemetry.ConsumerLogAttrs(envelope, record)...)
+			slog.InfoContext(processCtx, fmt.Sprintf("processed domain event: %s", envelope.EventType), telemetry.ConsumerLogAttrs(envelope, record)...)
 		})
 	}
 }

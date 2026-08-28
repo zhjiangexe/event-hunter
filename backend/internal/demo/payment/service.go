@@ -106,13 +106,18 @@ func (service *Service) HandleOrderCreated(ctx context.Context, orderEvent event
 	}
 	telemetry.PreparingOutboxEvent(ctx, envelope, "payment.events", service.eventDelay)
 	if err := emission.Wait(ctx, service.eventDelay); err != nil {
-		return fmt.Errorf("wait before %s emission: %w", eventType, err)
+		wrapped := fmt.Errorf("wait before %s emission: %w", eventType, err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureDelay, wrapped)
+		return wrapped
 	}
 	if err := service.outbox.Append(ctx, tx, envelope, "payment.events", service.serviceVersion); err != nil {
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureOutboxAppend, err)
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit payment transaction: %w", err)
+		wrapped := fmt.Errorf("commit payment transaction: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		return wrapped
 	}
 	telemetry.CommittedOutboxEvent(ctx, envelope, "payment.events")
 	return nil
@@ -163,13 +168,18 @@ func (service *Service) HandleReturnReceived(ctx context.Context, returnEvent ev
 	}
 	telemetry.PreparingOutboxEvent(ctx, envelope, "payment.events", service.eventDelay)
 	if err := emission.Wait(ctx, service.eventDelay); err != nil {
-		return fmt.Errorf("wait before PaymentRefunded emission: %w", err)
+		wrapped := fmt.Errorf("wait before PaymentRefunded emission: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureDelay, wrapped)
+		return wrapped
 	}
 	if err := service.outbox.Append(ctx, tx, envelope, "payment.events", service.serviceVersion); err != nil {
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureOutboxAppend, err)
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit refund transaction: %w", err)
+		wrapped := fmt.Errorf("commit refund transaction: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "payment.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		return wrapped
 	}
 	telemetry.CommittedOutboxEvent(ctx, envelope, "payment.events")
 	return nil

@@ -146,19 +146,26 @@ func (service *Service) CreateOrder(ctx context.Context, idempotencyKey string, 
 	}
 	telemetry.PreparingOutboxEvent(ctx, envelope, "order.events", service.eventDelay)
 	if err := emission.Wait(ctx, service.eventDelay); err != nil {
-		return AcceptedOrder{}, fmt.Errorf("wait before OrderCreated emission: %w", err)
+		wrapped := fmt.Errorf("wait before OrderCreated emission: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureDelay, wrapped)
+		return AcceptedOrder{}, wrapped
 	}
 	if err := service.outbox.Append(ctx, tx, envelope, "order.events", service.serviceVersion); err != nil {
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureOutboxAppend, err)
 		return AcceptedOrder{}, err
 	}
 	if _, err := tx.ExecContext(ctx,
 		"INSERT INTO idempotency_keys (key, request_hash, order_id, accepted_response) SELECT $1, $2, id, $3::jsonb FROM orders WHERE correlation_id = $4",
 		idempotencyKey, hex.EncodeToString(requestHash[:]), acceptedBytes, accepted.CorrelationID,
 	); err != nil {
-		return AcceptedOrder{}, fmt.Errorf("insert idempotency key: %w", err)
+		wrapped := fmt.Errorf("insert idempotency key: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		return AcceptedOrder{}, wrapped
 	}
 	if err := tx.Commit(); err != nil {
-		return AcceptedOrder{}, fmt.Errorf("commit order transaction: %w", err)
+		wrapped := fmt.Errorf("commit order transaction: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		return AcceptedOrder{}, wrapped
 	}
 	telemetry.CommittedOutboxEvent(ctx, envelope, "order.events")
 	return accepted, nil
@@ -209,13 +216,18 @@ func (service *Service) HandlePaymentFailed(ctx context.Context, paymentEvent ev
 	}
 	telemetry.PreparingOutboxEvent(ctx, envelope, "order.events", service.eventDelay)
 	if err := emission.Wait(ctx, service.eventDelay); err != nil {
-		return fmt.Errorf("wait before OrderCancelled emission: %w", err)
+		wrapped := fmt.Errorf("wait before OrderCancelled emission: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureDelay, wrapped)
+		return wrapped
 	}
 	if err := service.outbox.Append(ctx, tx, envelope, "order.events", service.serviceVersion); err != nil {
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureOutboxAppend, err)
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit order cancellation: %w", err)
+		wrapped := fmt.Errorf("commit order cancellation: %w", err)
+		telemetry.FailedOutboxEvent(ctx, envelope, "order.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		return wrapped
 	}
 	telemetry.CommittedOutboxEvent(ctx, envelope, "order.events")
 	return nil

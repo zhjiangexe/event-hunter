@@ -100,9 +100,12 @@ func (service *Service) HandlePaymentCompleted(ctx context.Context, paymentEvent
 	}
 	telemetry.PreparingOutboxEvent(ctx, created, "shipping.events", service.eventDelay)
 	if err := emission.Wait(ctx, service.eventDelay); err != nil {
-		return fmt.Errorf("wait before ShipmentCreated emission: %w", err)
+		wrapped := fmt.Errorf("wait before ShipmentCreated emission: %w", err)
+		telemetry.FailedOutboxEvent(ctx, created, "shipping.events", telemetry.EmissionFailureDelay, wrapped)
+		return wrapped
 	}
 	if err := service.outbox.Append(ctx, tx, created, "shipping.events", service.serviceVersion); err != nil {
+		telemetry.FailedOutboxEvent(ctx, created, "shipping.events", telemetry.EmissionFailureOutboxAppend, err)
 		return err
 	}
 	events := []event.Envelope{created}
@@ -118,9 +121,12 @@ func (service *Service) HandlePaymentCompleted(ctx context.Context, paymentEvent
 		}
 		telemetry.PreparingOutboxEvent(ctx, envelope, "shipping.events", service.eventDelay)
 		if waitErr := emission.Wait(ctx, service.eventDelay); waitErr != nil {
-			return fmt.Errorf("wait before %s emission: %w", eventType, waitErr)
+			wrapped := fmt.Errorf("wait before %s emission: %w", eventType, waitErr)
+			telemetry.FailedOutboxEvent(ctx, envelope, "shipping.events", telemetry.EmissionFailureDelay, wrapped)
+			return wrapped
 		}
 		if appendErr := service.outbox.Append(ctx, tx, envelope, "shipping.events", service.serviceVersion); appendErr != nil {
+			telemetry.FailedOutboxEvent(ctx, envelope, "shipping.events", telemetry.EmissionFailureOutboxAppend, appendErr)
 			return appendErr
 		}
 		events = append(events, envelope)
@@ -165,9 +171,12 @@ func (service *Service) HandlePaymentCompleted(ctx context.Context, paymentEvent
 		}
 		telemetry.PreparingOutboxEvent(ctx, requested, "shipping.events", service.eventDelay)
 		if err := emission.Wait(ctx, service.eventDelay); err != nil {
-			return fmt.Errorf("wait before ReturnRequested emission: %w", err)
+			wrapped := fmt.Errorf("wait before ReturnRequested emission: %w", err)
+			telemetry.FailedOutboxEvent(ctx, requested, "shipping.events", telemetry.EmissionFailureDelay, wrapped)
+			return wrapped
 		}
 		if err := service.outbox.Append(ctx, tx, requested, "shipping.events", service.serviceVersion); err != nil {
+			telemetry.FailedOutboxEvent(ctx, requested, "shipping.events", telemetry.EmissionFailureOutboxAppend, err)
 			return err
 		}
 		received, buildErr := event.NewEnvelope(
@@ -180,9 +189,12 @@ func (service *Service) HandlePaymentCompleted(ctx context.Context, paymentEvent
 		}
 		telemetry.PreparingOutboxEvent(ctx, received, "shipping.events", service.eventDelay)
 		if err := emission.Wait(ctx, service.eventDelay); err != nil {
-			return fmt.Errorf("wait before ReturnReceived emission: %w", err)
+			wrapped := fmt.Errorf("wait before ReturnReceived emission: %w", err)
+			telemetry.FailedOutboxEvent(ctx, received, "shipping.events", telemetry.EmissionFailureDelay, wrapped)
+			return wrapped
 		}
 		if err := service.outbox.Append(ctx, tx, received, "shipping.events", service.serviceVersion); err != nil {
+			telemetry.FailedOutboxEvent(ctx, received, "shipping.events", telemetry.EmissionFailureOutboxAppend, err)
 			return err
 		}
 		events = append(events, requested, received)
@@ -194,7 +206,11 @@ func (service *Service) HandlePaymentCompleted(ctx context.Context, paymentEvent
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit shipping transaction: %w", err)
+		wrapped := fmt.Errorf("commit shipping transaction: %w", err)
+		for _, envelope := range events {
+			telemetry.FailedOutboxEvent(ctx, envelope, "shipping.events", telemetry.EmissionFailureTransactionCommit, wrapped)
+		}
+		return wrapped
 	}
 	for _, envelope := range events {
 		telemetry.CommittedOutboxEvent(ctx, envelope, "shipping.events")

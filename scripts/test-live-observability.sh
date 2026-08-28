@@ -31,7 +31,7 @@ wait_for_clickhouse_trace() {
   for _ in $(seq 1 90); do
     EVENT_HUNTER_ACTUAL_TRACE_ID="$(curl --fail --silent --show-error \
       --user "${EVENT_HUNTER_CLICKHOUSE_USER}:${EVENT_HUNTER_CLICKHOUSE_PASSWORD}" \
-      --data-binary "SELECT if(count() = 3 AND uniqExact(trace_id) = 1, any(trace_id), '') FROM event_hunter.forensics_events WHERE correlation_id = '${EVENT_HUNTER_CORRELATION_ID}' AND event_type IN ('OrderCreated','PaymentCompleted','ShipmentCreated')" \
+      --data-binary "SELECT if(count() = 3 AND uniqExact(trace_id) = 1, any(trace_id), '') FROM event_hunter.canonical_forensics_events WHERE correlation_id = '${EVENT_HUNTER_CORRELATION_ID}' AND event_type IN ('OrderCreated','PaymentCompleted','ShipmentCreated')" \
       "${EVENT_HUNTER_CLICKHOUSE_URL}")"
     if [[ "${EVENT_HUNTER_ACTUAL_TRACE_ID}" =~ ^[0-9a-f]{32}$ ]]; then
       printf '%s' "${EVENT_HUNTER_ACTUAL_TRACE_ID}"
@@ -76,12 +76,24 @@ wait_for_loki_logs() {
     if python3 -c 'import json,sys
 p=json.load(open(sys.argv[1])); trace_id=sys.argv[2]; correlation_id=sys.argv[3]
 expected={"order-service","payment-service","shipping-service"}; found=set()
+expected_lifecycle={
+  ("order-service","OrderCreated","PREPARING"),
+  ("order-service","OrderCreated","COMMITTED"),
+  ("payment-service","PaymentCompleted","PREPARING"),
+  ("payment-service","PaymentCompleted","COMMITTED"),
+  ("shipping-service","ShipmentCreated","PREPARING"),
+  ("shipping-service","ShipmentCreated","COMMITTED"),
+}; found_lifecycle=set()
 required=("event_id","event_type","kafka_topic","kafka_partition","kafka_offset","span_id")
 for item in p.get("data",{}).get("result",[]):
   stream=item.get("stream",{})
   if stream.get("trace_id") != trace_id or stream.get("correlation_id") != correlation_id: continue
   if all(stream.get(key) not in (None, "") for key in required): found.add(stream.get("service_name"))
-raise SystemExit(0 if expected <= found else 1)' "${EVENT_HUNTER_LOG_FILE}" "${EVENT_HUNTER_TRACE_ID}" "${EVENT_HUNTER_CORRELATION_ID}"; then
+  lifecycle=(stream.get("service_name"),stream.get("event_type"),stream.get("event_emission_phase"))
+  expected_body=("domain event emission starting: " if lifecycle[2]=="PREPARING" else "domain event committed to outbox: ")+str(lifecycle[1])
+  bodies={value[1] for value in item.get("values",[]) if len(value)>1}
+  if lifecycle in expected_lifecycle and expected_body in bodies: found_lifecycle.add(lifecycle)
+raise SystemExit(0 if expected <= found and expected_lifecycle <= found_lifecycle else 1)' "${EVENT_HUNTER_LOG_FILE}" "${EVENT_HUNTER_TRACE_ID}" "${EVENT_HUNTER_CORRELATION_ID}"; then
       return 0
     fi
     sleep 1
@@ -104,7 +116,7 @@ assert_live_observability() {
     return 1
   fi
   if ! wait_for_loki_logs; then
-    echo "Loki logs are missing canonical fields or matching trace ${EVENT_HUNTER_TRACE_ID} for all three services." >&2
+    echo "Loki logs are missing canonical fields, matching trace ${EVENT_HUNTER_TRACE_ID}, or PREPARING/COMMITTED lifecycle pairs for all three events." >&2
     return 1
   fi
 }

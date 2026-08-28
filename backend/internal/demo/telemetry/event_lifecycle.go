@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -9,6 +10,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"event-hunter/backend/internal/demo/event"
+)
+
+const (
+	EmissionFailureDelay             = "PRE_EMISSION_DELAY"
+	EmissionFailureOutboxAppend      = "OUTBOX_APPEND"
+	EmissionFailureTransactionCommit = "TRANSACTION_COMMIT"
 )
 
 // PreparingOutboxEvent records the exact event identity before the artificial
@@ -20,7 +27,7 @@ func PreparingOutboxEvent(ctx context.Context, envelope event.Envelope, topic st
 		"event.emission.phase", "PREPARING",
 		"event.emission.delay_ms", delay.Milliseconds(),
 	)
-	slog.InfoContext(ctx, "preparing outbox event", attrs...)
+	slog.InfoContext(ctx, fmt.Sprintf("domain event emission starting: %s", envelope.EventType), attrs...)
 	trace.SpanFromContext(ctx).AddEvent("domain.event.preparing", trace.WithAttributes(
 		outboxSpanAttributes(envelope, topic, "PREPARING", delay.Milliseconds())...,
 	))
@@ -33,10 +40,27 @@ func CommittedOutboxEvent(ctx context.Context, envelope event.Envelope, topic st
 	attrs := append(ProducerLogAttrs(envelope, topic),
 		"event.emission.phase", "COMMITTED",
 	)
-	slog.InfoContext(ctx, "enqueued outbox event", attrs...)
+	slog.InfoContext(ctx, fmt.Sprintf("domain event committed to outbox: %s", envelope.EventType), attrs...)
 	trace.SpanFromContext(ctx).AddEvent("domain.event.committed", trace.WithAttributes(
 		outboxSpanAttributes(envelope, topic, "COMMITTED", 0)...,
 	))
+}
+
+// FailedOutboxEvent records why a prepared event never reached a committed
+// outbox row. The stage distinguishes an interrupted demo delay, an outbox
+// append failure, and a business transaction commit failure.
+func FailedOutboxEvent(ctx context.Context, envelope event.Envelope, topic, stage string, err error) {
+	attrs := append(ProducerLogAttrs(envelope, topic),
+		"event.emission.phase", "FAILED",
+		"event.emission.failure_stage", stage,
+		"error", err,
+	)
+	slog.ErrorContext(ctx, fmt.Sprintf("domain event emission failed: %s", envelope.EventType), attrs...)
+	spanAttrs := append(outboxSpanAttributes(envelope, topic, "FAILED", 0),
+		attribute.String("event.emission.failure_stage", stage),
+		attribute.String("error.message", err.Error()),
+	)
+	trace.SpanFromContext(ctx).AddEvent("domain.event.failed", trace.WithAttributes(spanAttrs...))
 }
 
 func outboxSpanAttributes(envelope event.Envelope, topic, phase string, delayMilliseconds int64) []attribute.KeyValue {

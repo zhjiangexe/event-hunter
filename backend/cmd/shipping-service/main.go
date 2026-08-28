@@ -129,7 +129,7 @@ func run() error {
 				slog.ErrorContext(processCtx, "commit payment event", append([]any{"error", commitErr}, telemetry.ConsumerLogAttrs(envelope, record)...)...)
 				return
 			}
-			slog.InfoContext(processCtx, "processed event", telemetry.ConsumerLogAttrs(envelope, record)...)
+			slog.InfoContext(processCtx, fmt.Sprintf("processed domain event: %s", envelope.EventType), telemetry.ConsumerLogAttrs(envelope, record)...)
 		})
 		time.Sleep(10 * time.Millisecond)
 	}
