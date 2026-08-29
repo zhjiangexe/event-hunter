@@ -192,34 +192,81 @@ function Login() {
   });
   return (
     <main className="login-shell">
-      <section className="login-card">
-        <p className="eyebrow">EVENT HUNTER / BUSINESS FORENSICS</p>
-        <h1>找出事件流裡的業務真相。</h1>
-        <p className="muted">選擇展示角色，開始執行 Event Check。</p>
+      <section className="login-intro" aria-labelledby="login-product-title">
+        <div className="login-brand" aria-label="Event Hunter">
+          EH<span>.</span>
+        </div>
+        <div>
+          <p className="eyebrow">BUSINESS EVENT INVESTIGATION</p>
+          <h1 id="login-product-title">從事件，找到業務真相。</h1>
+          <p className="login-lede">
+            用一個業務識別碼重建實際事件流、比對預期路徑，並直達相關 Logs 與
+            Traces。
+          </p>
+        </div>
+        <ol className="login-story" aria-label="Event Hunter 工作方式">
+          <li>
+            <span>01</span>
+            <div>
+              <strong>找回完整脈絡</strong>
+              <small>彙整同一筆業務的 0～N 個事件</small>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <strong>檢查實際路徑</strong>
+              <small>用版本化 Check Model 找出缺漏、亂序與失敗</small>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <strong>帶著證據協作</strong>
+              <small>保存結果、連結觀測資料並建立調查案件</small>
+            </div>
+          </li>
+        </ol>
+        <p className="login-boundary">
+          Read-only by design · 不控制正式 workflow，也不重送業務事件
+        </p>
+      </section>
+      <section className="login-card" aria-labelledby="login-role-title">
+        <div className="login-card-heading">
+          <p className="eyebrow">LOCAL DEMO ACCESS</p>
+          <h2 id="login-role-title">選擇角色開始探索</h2>
+          <p className="muted">建議使用調查員，體驗完整調查流程。</p>
+        </div>
         <div className="role-grid">
-          {(["VIEWER", "INVESTIGATOR", "ADMIN"] as Role[]).map((role) => (
+          {(["INVESTIGATOR", "VIEWER", "ADMIN"] as Role[]).map((role) => (
             <button
               data-testid={`role-${role.toLowerCase()}`}
-              className="role-card"
+              className={
+                role === "INVESTIGATOR"
+                  ? "role-card role-card-recommended"
+                  : "role-card"
+              }
               disabled={login.isPending}
               aria-busy={login.isPending && login.variables === role}
               onClick={() => login.mutate(role)}
               key={role}
             >
-              <span>
+              <span className="role-card-title">
                 {role === "VIEWER"
                   ? "觀察者"
                   : role === "INVESTIGATOR"
                     ? "調查員"
                     : "管理員"}
+                {role === "INVESTIGATOR" && <em>建議</em>}
               </span>
               <small>
                 {role === "VIEWER"
-                  ? "唯讀查看 Event Check、Check Models 與案件"
+                  ? "唯讀查看檢查結果、Models 與案件"
                   : role === "INVESTIGATOR"
-                    ? "查詢、建立案件、分析與回饋 finding"
-                    : "包含調查員能力與完整示範管理權限"}
+                    ? "查詢、保存結果、建立案件與分析 finding"
+                    : "包含調查能力與完整示範管理權限"}
               </small>
+              <b aria-hidden="true">→</b>
               {login.isPending && login.variables === role && (
                 <small role="status">登入中…</small>
               )}
