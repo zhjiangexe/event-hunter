@@ -4,6 +4,11 @@ Event Hunter 的 React 前端，與 Go backend 分離部署，使用 TypeScript 
 初始版本線以 [`../contracts/platform/toolchain-policy.yaml`](../contracts/platform/toolchain-policy.yaml)
 為準；使用 Node 24 LTS，不使用已 EOL 的 Node 25。
 
+公開產品介紹頁位於 repository root 的 `site/`，由 `.github/workflows/pages.yml` 在 `main` push 後發布到
+GitHub Pages。`site/event-hunter-social-preview.jpg` 是 Facebook／Open Graph 使用的 1200×630 分享圖；
+對應的可維護原始檔為同名 SVG。正式 Event Hunter 前端的 `index.html` 也引用這張公開圖片作為
+`og:image`，但實際操作介面與 API 不會部署到 GitHub Pages。
+
 ## 技術棧
 
 - React 19 + TypeScript strict

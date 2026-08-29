@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#132d2a" />
+    <meta
+      name="description"
+      content="Event Hunter 從業務事件出發，重建實際流程、檢查異常，並串起 Logs、Traces 與調查案件。"
+    />
+    <link rel="canonical" href="https://zhjiangexe.github.io/event-hunter/" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_TW" />
+    <meta property="og:site_name" content="Event Hunter" />
+    <meta
+      property="og:url"
+      content="https://zhjiangexe.github.io/event-hunter/"
+    />
+    <meta property="og:title" content="Event Hunter｜從事件找到業務真相" />
+    <meta
+      property="og:description"
+      content="用一個業務識別碼重建事件流、比對預期路徑，並直達相關 Logs 與 Traces。"
+    />
+    <meta
+      property="og:image"
+      content="https://zhjiangexe.github.io/event-hunter/event-hunter-social-preview.jpg"
+    />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Event Hunter 產品畫面，顯示由事件時間軸連結 Grafana、Loki 與 Tempo"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Event Hunter｜從事件找到業務真相" />
+    <meta
+      name="twitter:description"
+      content="重建實際事件流、檢查異常，並串起 Logs、Traces 與調查案件。"
+    />
+    <meta
+      name="twitter:image"
+      content="https://zhjiangexe.github.io/event-hunter/event-hunter-social-preview.jpg"
+    />
+    <title>Event Hunter｜Business Event Investigation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Event Hunter 首頁"
+        >EH<span>.</span></a
+      >
+      <nav aria-label="頁面導覽">
+        <a href="#how-it-works">如何運作</a>
+        <a href="https://github.com/zhjiangexe/event-hunter">GitHub ↗</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">BUSINESS EVENT INVESTIGATION</p>
+          <h1>從事件，<br />找到業務真相。</h1>
+          <p class="lede">
+            輸入一個業務識別碼，重建實際事件流、比對預期路徑，並直達相關 Logs 與
+            Traces。
+          </p>
+          <div class="hero-actions">
+            <a
+              class="primary-action"
+              href="https://github.com/zhjiangexe/event-hunter"
+              >查看 GitHub 專案 <span>→</span></a
+            >
+            <span class="boundary">Read-only by design</span>
+          </div>
+        </div>
+
+        <figure
+          class="product-frame"
+          aria-label="Event Hunter Event Check 示意畫面"
+        >
+          <div class="product-bar">
+            <span class="product-mark">EH<span>.</span></span>
+            <span>Event Check</span>
+            <i></i>
+          </div>
+          <div class="product-body">
+            <div class="query-chip">
+              <small>Correlation ID</small>
+              <strong>ORDER-1135D8FC17BFE850</strong>
+            </div>
+            <div class="timeline">
+              <article>
+                <b>01</b>
+                <span class="event-dot"></span>
+                <div>
+                  <strong>OrderCreated</strong
+                  ><small>order-service · 14:28:12</small>
+                </div>
+              </article>
+              <article>
+                <b>02</b>
+                <span class="event-dot"></span>
+                <div>
+                  <strong>PaymentCompleted</strong
+                  ><small>payment-service · 14:28:15</small>
+                </div>
+              </article>
+              <article class="active-event">
+                <b>03</b>
+                <span class="event-dot"></span>
+                <div>
+                  <strong>ShipmentCreated</strong
+                  ><small>shipping-service · 14:28:18</small>
+                  <footer>
+                    <span>Grafana Explore ↗</span><span>Loki logs ↗</span
+                    ><span>Tempo trace ↗</span>
+                  </footer>
+                </div>
+              </article>
+            </div>
+          </div>
+          <figcaption>事件、Logs 與 Traces，在同一條調查脈絡裡。</figcaption>
+        </figure>
+      </section>
+
+      <section class="promise" aria-label="產品價值">
+        <p>不是另一套 Workflow Engine。</p>
+        <h2>
+          Event Hunter 觀察已經發生的事，<br />把碎片整理成可檢查、可交接的證據。
+        </h2>
+      </section>
+
+      <section class="steps" id="how-it-works">
+        <article>
+          <span>01</span>
+          <h3>找回完整脈絡</h3>
+          <p>
+            用 Correlation、Trace、Event、Aggregate ID 彙整同一筆業務的 0～N
+            個事件。
+          </p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>檢查實際路徑</h3>
+          <p>
+            用版本化 Check Model 判斷缺漏、亂序、逾時、Happy Path 與 Failure
+            Path。
+          </p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>帶著證據協作</h3>
+          <p>
+            保存 immutable Snapshot，連結 Grafana、Loki、Tempo，再建立
+            Investigation Case。
+          </p>
+        </article>
+      </section>
+
+      <section class="stack">
+        <p class="eyebrow">BUILT FOR EVENT-DRIVEN SYSTEMS</p>
+        <div>
+          <span>Kafka</span><span>ClickHouse</span><span>OpenTelemetry</span
+          ><span>Grafana</span>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <strong>Event Hunter</strong>
+      <p>唯讀的業務事件檢查與調查平台。</p>
+      <a href="https://github.com/zhjiangexe/event-hunter"
+        >Source on GitHub ↗</a
+      >
+    </footer>
+  </body>
+</html>

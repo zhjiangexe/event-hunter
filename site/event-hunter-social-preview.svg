@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102a27"/>
+      <stop offset="1" stop-color="#1d4741"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.8" cy="0.1" r="0.75">
+      <stop offset="0" stop-color="#76cabb" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#76cabb" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#061512" flood-opacity=".42"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <circle cx="1120" cy="590" r="270" fill="none" stroke="#fff" stroke-opacity=".045"/>
+  <circle cx="1120" cy="590" r="210" fill="none" stroke="#fff" stroke-opacity=".04"/>
+
+  <text x="72" y="86" fill="#eef8f5" font-family="Arial, sans-serif" font-size="34" font-weight="900" letter-spacing="-3">EH</text>
+  <circle cx="121" cy="79" r="5" fill="#70c5b6"/>
+  <text x="72" y="153" fill="#7bc1b5" font-family="Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="2.4">BUSINESS EVENT INVESTIGATION</text>
+  <text x="72" y="230" fill="#f2faf8" font-family="Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="-3">從事件，找到</text>
+  <text x="72" y="298" fill="#f2faf8" font-family="Arial, sans-serif" font-size="56" font-weight="800" letter-spacing="-3">業務真相。</text>
+  <text x="72" y="350" fill="#b4cfca" font-family="Arial, sans-serif" font-size="18">重建事件流 · 比對路徑 · 串起觀測資料</text>
+
+  <g transform="translate(72 407)">
+    <rect width="148" height="37" rx="18.5" fill="#214b45" stroke="#81c8bc" stroke-opacity=".38"/>
+    <text x="74" y="24" fill="#c6e3de" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">Event Check</text>
+    <rect x="158" width="148" height="37" rx="18.5" fill="#214b45" stroke="#81c8bc" stroke-opacity=".38"/>
+    <text x="232" y="24" fill="#c6e3de" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">Check Models</text>
+    <rect y="47" width="148" height="37" rx="18.5" fill="#214b45" stroke="#81c8bc" stroke-opacity=".38"/>
+    <text x="74" y="71" fill="#c6e3de" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">Logs &amp; Traces</text>
+    <rect x="158" y="47" width="148" height="37" rx="18.5" fill="#214b45" stroke="#81c8bc" stroke-opacity=".38"/>
+    <text x="232" y="71" fill="#c6e3de" font-family="Arial, sans-serif" font-size="12" font-weight="700" text-anchor="middle">Cases</text>
+  </g>
+  <text x="72" y="570" fill="#73958f" font-family="Arial, sans-serif" font-size="12" letter-spacing="1.1">READ-ONLY BY DESIGN</text>
+
+  <g transform="translate(470 73) rotate(1 328 235)" filter="url(#shadow)">
+    <rect width="658" height="470" rx="18" fill="#f8faf9"/>
+    <path d="M18 0h622a18 18 0 0 1 18 18v42H0V18A18 18 0 0 1 18 0Z" fill="#183a36"/>
+    <text x="24" y="38" fill="#f3faf8" font-family="Arial, sans-serif" font-size="16" font-weight="900" letter-spacing="-1">EH</text>
+    <circle cx="51" cy="34" r="3" fill="#70c5b6"/>
+    <text x="329" y="37" fill="#c0d4d0" font-family="Arial, sans-serif" font-size="11" font-weight="700" text-anchor="middle">Event Check</text>
+    <circle cx="620" cy="30" r="4" fill="#70c5b6"/>
+
+    <rect x="34" y="87" width="590" height="49" rx="8" fill="#fff" stroke="#dce7e4"/>
+    <rect x="48" y="99" width="91" height="25" rx="5" fill="#e7f4f0"/>
+    <text x="93" y="116" fill="#39796e" font-family="Arial, sans-serif" font-size="9" font-weight="800" text-anchor="middle">Correlation ID</text>
+    <text x="159" y="117" fill="#324844" font-family="Courier New, monospace" font-size="11" font-weight="700">ORDER-1135D8FC17BFE850</text>
+
+    <path d="M95 178V387" fill="none" stroke="#b6d1cb"/>
+
+    <g transform="translate(34 156)">
+      <rect width="590" height="67" rx="8" fill="#fff" stroke="#e0e9e7"/>
+      <text x="15" y="36" fill="#8c9c99" font-family="Arial, sans-serif" font-size="9" font-weight="700">01</text>
+      <circle cx="61" cy="33" r="8" fill="#e5f2ef"/>
+      <circle cx="61" cy="33" r="4" fill="#4b9487"/>
+      <text x="85" y="29" fill="#263c38" font-family="Arial, sans-serif" font-size="13" font-weight="800">OrderCreated</text>
+      <text x="85" y="48" fill="#84938f" font-family="Arial, sans-serif" font-size="9">order-service · 14:28:12</text>
+    </g>
+
+    <g transform="translate(34 233)">
+      <rect width="590" height="67" rx="8" fill="#fff" stroke="#e0e9e7"/>
+      <text x="15" y="36" fill="#8c9c99" font-family="Arial, sans-serif" font-size="9" font-weight="700">02</text>
+      <circle cx="61" cy="33" r="8" fill="#e5f2ef"/>
+      <circle cx="61" cy="33" r="4" fill="#4b9487"/>
+      <text x="85" y="29" fill="#263c38" font-family="Arial, sans-serif" font-size="13" font-weight="800">PaymentCompleted</text>
+      <text x="85" y="48" fill="#84938f" font-family="Arial, sans-serif" font-size="9">payment-service · 14:28:15</text>
+    </g>
+
+    <g transform="translate(34 310)">
+      <rect width="590" height="118" rx="8" fill="#fff" stroke="#70b3a7" stroke-width="1.5"/>
+      <text x="15" y="37" fill="#8c9c99" font-family="Arial, sans-serif" font-size="9" font-weight="700">03</text>
+      <circle cx="61" cy="34" r="8" fill="#e5f2ef"/>
+      <circle cx="61" cy="34" r="4" fill="#4b9487"/>
+      <text x="85" y="30" fill="#263c38" font-family="Arial, sans-serif" font-size="13" font-weight="800">ShipmentCreated</text>
+      <text x="85" y="49" fill="#84938f" font-family="Arial, sans-serif" font-size="9">shipping-service · 14:28:18</text>
+      <g transform="translate(85 69)">
+        <rect width="126" height="29" rx="5" fill="#eff8f6" stroke="#c4ddd8"/>
+        <text x="63" y="19" fill="#356f66" font-family="Arial, sans-serif" font-size="9" font-weight="700" text-anchor="middle">Grafana Explore ↗</text>
+        <rect x="136" width="104" height="29" rx="5" fill="#eff8f6" stroke="#c4ddd8"/>
+        <text x="188" y="19" fill="#356f66" font-family="Arial, sans-serif" font-size="9" font-weight="700" text-anchor="middle">Loki logs ↗</text>
+        <rect x="250" width="112" height="29" rx="5" fill="#eff8f6" stroke="#c4ddd8"/>
+        <text x="306" y="19" fill="#356f66" font-family="Arial, sans-serif" font-size="9" font-weight="700" text-anchor="middle">Tempo trace ↗</text>
+      </g>
+    </g>
+  </g>
+</svg>

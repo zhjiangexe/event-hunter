@@ -1,5 +1,7 @@
 # Event Hunter
 
+[產品介紹](https://zhjiangexe.github.io/event-hunter/) · [架構說明](requirements/architecture/current-architecture.md) · [快速啟動](#快速啟動)
+
 Event Hunter 是一套從「業務事件」出發的唯讀調查平台。輸入 Correlation、Trace、Event、Aggregate
 ID 或受治理的 Business Key，它會找出有明確關聯的事件，再用版本化 Check Model 判斷實際流程。
 
