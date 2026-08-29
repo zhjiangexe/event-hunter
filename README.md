@@ -14,6 +14,19 @@ ID 或受治理的 Business Key，它會找出有明確關聯的事件，再用�
 Event Hunter 不取代 Grafana，也不控制正式 workflow。Grafana 保存 Logs、Metrics、Traces 與 Alerting；
 Event Hunter 保存 canonical events、可重現 Check Snapshot、Investigation Case 與可信 deep links。
 
+## 從事件深入調查
+
+在 Event Check 用 Correlation ID 查出事件後，切換到 **Timeline**；每一筆事件都會帶著自己的
+Event ID、Correlation ID、Producer 與 Trace ID，並提供紅框標示的觀測入口：
+
+![Event Check Timeline 的 Grafana、Loki、Tempo 與 Quality Dashboard 觀測入口](artifacts/screenshots/event-check-observability-links-annotated.png)
+
+- **Grafana Explore**：用 `Event ID` 直接查看 ClickHouse 中保存的該筆 canonical event。
+- **Loki logs**：用 `Producer` 與 `Correlation ID` 查看服務在事件發布前後留下的執行紀錄。
+- **Tempo trace**：用 `Trace ID` 還原同一次請求經過各服務與 Kafka 的跨服務呼叫路徑。
+- **Quality Dashboard**：查看該時段的事件量、重複、延遲、legacy contract violation 與 processing DLQ
+  聚合；目前 admission quarantine 的逐筆安全摘要以 Ingestion Issues 為準。
+
 ## 可以做什麼
 
 | 功能 | 用途 |
@@ -81,19 +94,6 @@ synthetic topic 模擬缺少事件、重複、亂序、DLQ、配送與退貨等�
 如果預期事件完全找不到，先確認 Event Check 的 ID 類型與時間範圍；若 producer 已送出但事件未通過
 契約、admission 或 connector 寫入，改到 **Ingestion Issues** 查 safe failure summary。服務在事件送出前
 就當機時，不一定會產生 ingestion issue，應改查 Loki／Tempo 與服務 readiness。
-
-### 從事件深入調查
-
-在 Event Check 用 Correlation ID 查出事件後，切換到 **Timeline**；每一筆事件都會帶著自己的
-Event ID、Correlation ID、Producer 與 Trace ID，並提供紅框標示的觀測入口：
-
-![Event Check Timeline 的 Grafana、Loki、Tempo 與 Quality Dashboard 觀測入口](artifacts/screenshots/event-check-observability-links-annotated.png)
-
-- **Grafana Explore**：用 `Event ID` 直接查看 ClickHouse 中保存的該筆 canonical event。
-- **Loki logs**：用 `Producer` 與 `Correlation ID` 查看服務在事件發布前後留下的執行紀錄。
-- **Tempo trace**：用 `Trace ID` 還原同一次請求經過各服務與 Kafka 的跨服務呼叫路徑。
-- **Quality Dashboard**：查看該時段的事件量、重複、延遲、legacy contract violation 與 processing DLQ
-  聚合；目前 admission quarantine 的逐筆安全摘要以 Ingestion Issues 為準。
 
 ## 外部系統如何接入
 
