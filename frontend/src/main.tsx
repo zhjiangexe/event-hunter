@@ -56,6 +56,7 @@ import {
   traceObservabilityLink,
 } from "./observability-links";
 import { parseInvestigationListQuery } from "./investigation-list-query";
+import { investigationWindowWithEndBoundary } from "./investigation-window";
 import {
   scenarioApi,
   type ScenarioRun,
@@ -3709,8 +3710,10 @@ export function TimelinePage({ principal }: { principal: Principal }) {
         title,
         severity,
         correlation_id: activeFilters?.correlation_id || "",
-        incident_from: activeFilters?.from,
-        incident_to: activeFilters?.to,
+        ...investigationWindowWithEndBoundary(
+          activeFilters?.from,
+          activeFilters?.to,
+        ),
       }),
     onSuccess: (item) => {
       setInvestigation(item);

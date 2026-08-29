@@ -46,6 +46,9 @@ describe("observability links", () => {
     expect(explore.searchParams.get("schemaVersion")).toBe("1");
     const panes = JSON.parse(explore.searchParams.get("panes")!);
     expect(panes["event-hunter"].queries[0].rawSql).toContain(
+      "FROM canonical_forensics_events",
+    );
+    expect(panes["event-hunter"].queries[0].rawSql).toContain(
       "event_id = 'evt-''quoted'",
     );
     const trace = new URL(links.find((link) => link.kind === "trace")!.href);
@@ -84,6 +87,9 @@ describe("observability links", () => {
 
     expect(link?.external).toBe(true);
     const panes = JSON.parse(new URL(link!.href).searchParams.get("panes")!);
+    expect(panes["event-hunter"].queries[0].rawSql).toContain(
+      "FROM canonical_forensics_events",
+    );
     expect(panes["event-hunter"].queries[0].rawSql).toContain(
       "event_id = 'evt-''quoted'",
     );

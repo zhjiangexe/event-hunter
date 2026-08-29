@@ -20,6 +20,7 @@ type ObservableEvent = Pick<
 
 const defaultGrafanaUrl =
   import.meta.env.VITE_GRAFANA_URL || "http://localhost:28332";
+const canonicalEventView = "canonical_forensics_events";
 const grafanaAlertPathPattern =
   /^\/alerting\/(?:grafana\/)?[A-Za-z0-9_-]+\/(?:view|edit)$/;
 
@@ -99,7 +100,7 @@ export function eventObservabilityLinks(
         "clickhouse",
         "grafana-clickhouse-datasource",
         {
-          rawSql: `SELECT * FROM forensics_events WHERE event_id = ${sqlLiteral(event.event_id)} ORDER BY occurred_at`,
+          rawSql: `SELECT * FROM ${canonicalEventView} WHERE event_id = ${sqlLiteral(event.event_id)} ORDER BY occurred_at`,
           format: 1,
         },
         range,
@@ -189,7 +190,7 @@ export function evidenceSourceLink(
           "clickhouse",
           "grafana-clickhouse-datasource",
           {
-            rawSql: `SELECT * FROM forensics_events WHERE event_id = ${sqlLiteral(item.reference)} ORDER BY occurred_at`,
+            rawSql: `SELECT * FROM ${canonicalEventView} WHERE event_id = ${sqlLiteral(item.reference)} ORDER BY occurred_at`,
             format: 1,
           },
           range,

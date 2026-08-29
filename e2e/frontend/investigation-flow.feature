@@ -28,6 +28,7 @@ Feature: Event Hunter 調查員主要操作流程
     When click("[data-testid='timeline-event-0-type']")
     Then waitFor("[data-testid='timeline-event-0-detail']")
     And match exists("[data-testid='timeline-event-0-link-event'][href^='http://localhost:28332/explore?']") == true
+    And match script("decodeURIComponent(document.querySelector('[data-testid=timeline-event-0-link-event]').href)") contains 'canonical_forensics_events'
     And match exists("[data-testid='timeline-event-0-link-logs'][href^='http://localhost:28332/explore?']") == true
     And match exists("[data-testid='timeline-event-0-link-trace'][href^='http://localhost:28332/explore?']") == true
 
@@ -319,6 +320,12 @@ Feature: Event Hunter 調查員主要操作流程
     Then waitUntil("new URLSearchParams(window.location.search).get('panel') == 'scenarios'")
     And match text("[data-testid='check-model-detail']") contains 'success-happy-path'
     And match text("[data-testid='check-model-detail']") contains 'cross-correlation-child-flow'
+
+    When click("[data-testid='check-model-panel-source']")
+    Then waitUntil("new URLSearchParams(window.location.search).get('panel') == 'source'")
+    And waitFor("[data-testid='check-model-source-yaml']")
+    And match text("[data-testid='check-model-source-yaml']") contains 'model_id: order-fulfillment'
+    And match text("[data-testid='check-model-source-yaml']") contains 'MISSING_SHIPMENT_AFTER_PAYMENT'
 
     Given driver webBaseUrl + '/journey-profiles'
     Then waitUntil("window.location.pathname == '/check-models' && new URLSearchParams(window.location.search).get('kind') == 'FLOW'")
