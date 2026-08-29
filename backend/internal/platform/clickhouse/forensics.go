@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	forensics "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 const (

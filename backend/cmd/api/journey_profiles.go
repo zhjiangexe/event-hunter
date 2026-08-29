@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	journeyprofiles "event-hunter/backend/internal/contexts/investigation/application/journey_profiles"
+	journeyprofiles "event-hunter/backend/internal/contexts/investigation/application/compatibility"
 )
 
 type journeyProfilesAPI struct {
-	service *journeyprofiles.Service
+	service *journeyprofiles.JourneyProfileQueries
 }
 
 func (api journeyProfilesAPI) list(writer http.ResponseWriter, _ *http.Request) {

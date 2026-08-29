@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/ingestion_issues"
+	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 func (model *HTTPReadModel) SearchIngestionIssues(ctx context.Context, filter ingestionissues.Filter) ([]ingestionissues.Issue, error) {

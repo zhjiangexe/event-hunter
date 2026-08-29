@@ -380,28 +380,24 @@ bounded context 根目錄不得再出現 flat production source；`cmd` 不得�
 
 `contexts/investigation/application` 依使用者能力採 screaming architecture：
 
-- `overview`
-- `forensics`
-- `event_search`
-- `business_journey`
-- `journey_profiles`
-- `case_lifecycle`
-- `evidence_attachment`
-- `saved_search`
-- `pattern_analysis`
-- `pattern_effectiveness`
-- `pattern_feedback`
-- `alert_intake`
+- `cases`：案件生命週期、事件 Evidence、Summary、Evidence Manifest
+- `search`：Forensics、進階事件搜尋、Ingestion Issues
+- `operations`：Overview 與來源健康彙整
+- `alerts`：Grafana alert intake
+- `savedsearch`：owner-scoped Saved Search
+- `compatibility`：deprecated Journey／Journey Profile／Pattern APIs
 
-`contexts/eventcheck/application` 另依 Event Check use case 切分：
+`contexts/eventcheck/application` 採單一 Go package，依 use case 使用具名檔案切分：
 
-- `evaluate_event_check`
-- `list_check_models`
-- `save_check_snapshot`
-- `list_check_snapshots`
-- `get_check_snapshot`
-- `classify_check_finding`
-- `attach_check_snapshot`
+- `evaluate.go`／`evaluation_types.go`
+- `check_models.go`
+- `save_snapshot.go`／`get_snapshot.go`／`list_snapshots.go`／`snapshot_view.go`
+- `classify_finding.go`
+- `attach_snapshot.go`
+
+這裡的 screaming architecture 是「從 package／檔名可辨識業務能力」，不是每個 method 建一個 package。
+Event Check 的 use cases 共用同一 vocabulary 與 snapshot contract，放在單一 package 可移除 DTO 中介層；
+Investigation 規模較大，才以六個穩定 capability packages 控制依賴與名稱空間。
 
 一般 evaluation 只查 ClickHouse 與 immutable Check Model Registry，不寫 PostgreSQL；只有明確保存 Snapshot、
 Finding feedback 或 Case handoff 才寫 PostgreSQL。Snapshot 不複製 raw payload。

@@ -11,12 +11,8 @@ import (
 	"strings"
 	"time"
 
-	caselifecycle "event-hunter/backend/internal/contexts/investigation/application/case_lifecycle"
-	evidenceattachment "event-hunter/backend/internal/contexts/investigation/application/evidence_attachment"
-	generateevidencemanifest "event-hunter/backend/internal/contexts/investigation/application/generate_evidence_manifest"
-	getinvestigationsummary "event-hunter/backend/internal/contexts/investigation/application/get_investigation_summary"
-	patternanalysis "event-hunter/backend/internal/contexts/investigation/application/pattern_analysis"
-	patternfeedback "event-hunter/backend/internal/contexts/investigation/application/pattern_feedback"
+	cases "event-hunter/backend/internal/contexts/investigation/application/cases"
+	compatibility "event-hunter/backend/internal/contexts/investigation/application/compatibility"
 	"event-hunter/backend/internal/contexts/investigation/domain"
 	domainpatterns "event-hunter/backend/internal/contexts/investigation/domain/patterns"
 )
@@ -24,13 +20,13 @@ import (
 const defaultInvestigationQueryWindow = 72 * time.Hour
 
 type investigationAPI struct {
-	commands    caselifecycle.Commands
-	queries     caselifecycle.Queries
-	patterns    *patternanalysis.PatternService
-	feedback    *patternfeedback.Service
-	attachments *evidenceattachment.Service
-	summaries   *getinvestigationsummary.Service
-	manifests   *generateevidencemanifest.Service
+	commands    cases.Commands
+	queries     cases.Queries
+	patterns    *compatibility.PatternService
+	feedback    *compatibility.PatternFeedbackService
+	attachments *cases.EventEvidenceService
+	summaries   *cases.SummaryService
+	manifests   *cases.EvidenceManifestService
 	sessions    sessionManager
 }
 
@@ -58,7 +54,7 @@ func (api investigationAPI) updateFindingFeedback(writer http.ResponseWriter, re
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_PATTERN_FEEDBACK")
 		return
 	}
-	updated, err := api.feedback.Reclassify(request.Context(), patternfeedback.Command{
+	updated, err := api.feedback.Reclassify(request.Context(), compatibility.Command{
 		InvestigationID: request.PathValue("id"), FindingID: request.PathValue("findingId"), ExpectedVersion: match,
 		Status: domain.PatternFeedbackStatus(input.Status), Actor: actorFromPrincipal(principal), RequestID: request.Header.Get("X-Request-ID"),
 	})
@@ -113,7 +109,7 @@ func (api investigationAPI) list(writer http.ResponseWriter, request *http.Reque
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_SORT")
 		return
 	}
-	filter := caselifecycle.CaseFilter{
+	filter := cases.CaseFilter{
 		Query:  strings.TrimSpace(request.URL.Query().Get("query")),
 		Status: strings.TrimSpace(request.URL.Query().Get("status")), Severity: strings.TrimSpace(request.URL.Query().Get("severity")),
 		Assignee: strings.TrimSpace(request.URL.Query().Get("assignee")), Priority: strings.TrimSpace(request.URL.Query().Get("priority")),
@@ -281,7 +277,7 @@ func (api investigationAPI) patch(writer http.ResponseWriter, request *http.Requ
 		writeAPIError(writer, 422, "INVALID_UPDATE")
 		return
 	}
-	patch := caselifecycle.CasePatch{Title: input.Title, Assignee: input.Assignee, Tags: input.Tags, RelatedCorrelationIDs: input.RelatedCorrelationIDs, RootCause: input.RootCause, ResolutionSummary: input.ResolutionSummary, FixedVersion: input.FixedVersion}
+	patch := cases.CasePatch{Title: input.Title, Assignee: input.Assignee, Tags: input.Tags, RelatedCorrelationIDs: input.RelatedCorrelationIDs, RootCause: input.RootCause, ResolutionSummary: input.ResolutionSummary, FixedVersion: input.FixedVersion}
 	if input.Status != nil {
 		status := domain.CaseStatus(*input.Status)
 		patch.Status = &status
@@ -295,7 +291,7 @@ func (api investigationAPI) patch(writer http.ResponseWriter, request *http.Requ
 		patch.Priority = &priority
 	}
 	updated, err := api.commands.Update(request.Context(), request.PathValue("id"), match, patch, actorFromPrincipal(principal), request.Header.Get("X-Request-ID"))
-	var conflict caselifecycle.VersionConflictError
+	var conflict cases.VersionConflictError
 	if errors.As(err, &conflict) {
 		writeAPIErrorWithData(writer, http.StatusConflict, "OPTIMISTIC_LOCK_CONFLICT", map[string]any{"current_lock_version": conflict.CurrentVersion})
 		return
@@ -304,15 +300,15 @@ func (api investigationAPI) patch(writer http.ResponseWriter, request *http.Requ
 		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
 		return
 	}
-	if errors.Is(err, caselifecycle.ErrInvalidTransition) {
+	if errors.Is(err, cases.ErrInvalidTransition) {
 		writeAPIError(writer, http.StatusConflict, "INVALID_STATE_TRANSITION")
 		return
 	}
-	if errors.Is(err, caselifecycle.ErrCloseRequired) {
+	if errors.Is(err, cases.ErrCloseRequired) {
 		writeAPIError(writer, http.StatusConflict, "CLOSE_OPERATION_REQUIRED")
 		return
 	}
-	if errors.Is(err, caselifecycle.ErrResolutionFields) {
+	if errors.Is(err, cases.ErrResolutionFields) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "RESOLUTION_FIELDS_REQUIRED")
 		return
 	}
@@ -358,7 +354,7 @@ func (api investigationAPI) addNote(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	updated, note, err := api.commands.AddNote(request.Context(), request.PathValue("id"), match, input.Body, actorFromPrincipal(principal), request.Header.Get("X-Request-ID"))
-	var conflict caselifecycle.VersionConflictError
+	var conflict cases.VersionConflictError
 	if errors.As(err, &conflict) {
 		writeAPIErrorWithData(writer, http.StatusConflict, "OPTIMISTIC_LOCK_CONFLICT", map[string]any{"current_lock_version": conflict.CurrentVersion})
 		return
@@ -417,12 +413,12 @@ func (api investigationAPI) attachEvent(writer http.ResponseWriter, request *htt
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_EVENT_ATTACHMENT")
 		return
 	}
-	result, err := api.attachments.AttachEvent(request.Context(), evidenceattachment.AttachEventCommand{
+	result, err := api.attachments.AttachEvent(request.Context(), cases.AttachEventCommand{
 		InvestigationID: request.PathValue("id"), ExpectedVersion: match,
 		EventID: input.EventID, From: from, To: to,
 		Actor: actorFromPrincipal(principal), RequestID: request.Header.Get("X-Request-ID"),
 	})
-	var conflict evidenceattachment.VersionConflictError
+	var conflict cases.VersionConflictError
 	if errors.As(err, &conflict) {
 		writeAPIErrorWithData(writer, http.StatusConflict, "OPTIMISTIC_LOCK_CONFLICT", map[string]any{"current_lock_version": conflict.CurrentVersion})
 		return
@@ -431,11 +427,11 @@ func (api investigationAPI) attachEvent(writer http.ResponseWriter, request *htt
 		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
 		return
 	}
-	if errors.Is(err, evidenceattachment.ErrEventNotFound) {
+	if errors.Is(err, cases.ErrEventNotFound) {
 		writeAPIError(writer, http.StatusNotFound, "EVENT_NOT_FOUND")
 		return
 	}
-	if errors.Is(err, evidenceattachment.ErrInvalidAttachment) || errors.Is(err, domain.ErrInvalidEvidence) || errors.Is(err, domain.ErrInvalidRelatedIDs) {
+	if errors.Is(err, cases.ErrInvalidAttachment) || errors.Is(err, domain.ErrInvalidEvidence) || errors.Is(err, domain.ErrInvalidRelatedIDs) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_EVENT_ATTACHMENT")
 		return
 	}
@@ -443,7 +439,7 @@ func (api investigationAPI) attachEvent(writer http.ResponseWriter, request *htt
 		writeAPIError(writer, http.StatusConflict, "CASE_NOT_MUTABLE")
 		return
 	}
-	var sourceErr evidenceattachment.SourceError
+	var sourceErr cases.SourceError
 	if errors.As(err, &sourceErr) {
 		writeClickHouseError(writer, sourceErr.Err, "EVENT_SOURCE_UNAVAILABLE", "EVENT_SOURCE_TIMEOUT")
 		return
@@ -488,7 +484,7 @@ func (api investigationAPI) close(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	closed, err := api.commands.Close(request.Context(), request.PathValue("id"), match, input.RootCause, input.ResolutionSummary, input.FixedVersion, actorFromPrincipal(principal), request.Header.Get("X-Request-ID"))
-	var conflict caselifecycle.VersionConflictError
+	var conflict cases.VersionConflictError
 	if errors.As(err, &conflict) {
 		writeAPIErrorWithData(writer, http.StatusConflict, "OPTIMISTIC_LOCK_CONFLICT", map[string]any{"current_lock_version": conflict.CurrentVersion})
 		return
@@ -539,7 +535,7 @@ func (api investigationAPI) analyze(writer http.ResponseWriter, request *http.Re
 		writeAPIError(writer, 404, "NOT_FOUND")
 		return
 	}
-	if errors.Is(err, patternanalysis.ErrUnknownPattern) {
+	if errors.Is(err, compatibility.ErrUnknownPattern) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "UNKNOWN_PATTERN")
 		return
 	}
@@ -547,7 +543,7 @@ func (api investigationAPI) analyze(writer http.ResponseWriter, request *http.Re
 		writeAPIError(writer, http.StatusConflict, "INVALID_TRANSITION")
 		return
 	}
-	var windowErr patternanalysis.AnalysisWindowError
+	var windowErr compatibility.AnalysisWindowError
 	if errors.As(err, &windowErr) {
 		writeAPIErrorWithData(writer, http.StatusUnprocessableEntity, "ANALYSIS_WINDOW_EXCEEDS_LIMIT", map[string]any{
 			"event_window_from": windowErr.FirstOccurredAt,
@@ -556,12 +552,12 @@ func (api investigationAPI) analyze(writer http.ResponseWriter, request *http.Re
 		})
 		return
 	}
-	var sourceErr patternanalysis.PatternSourceError
+	var sourceErr compatibility.PatternSourceError
 	if errors.As(err, &sourceErr) {
 		writeClickHouseError(writer, err, "PATTERN_SOURCE_UNAVAILABLE", "PATTERN_SOURCE_TIMEOUT")
 		return
 	}
-	var persistenceErr patternanalysis.PatternPersistenceError
+	var persistenceErr compatibility.PatternPersistenceError
 	if errors.As(err, &persistenceErr) {
 		writeAPIError(writer, http.StatusServiceUnavailable, "PATTERN_PERSISTENCE_UNAVAILABLE")
 		return
@@ -583,7 +579,7 @@ func (api investigationAPI) analyze(writer http.ResponseWriter, request *http.Re
 	})
 }
 
-func auditEntryResponses(entries []caselifecycle.AuditEntry) []auditEntry {
+func auditEntryResponses(entries []cases.AuditEntry) []auditEntry {
 	result := make([]auditEntry, 0, len(entries))
 	for _, item := range entries {
 		result = append(result, auditEntry{ID: item.ID, ActorID: item.ActorID, ActorRole: item.ActorRole, Action: item.Action, RequestID: item.RequestID, TraceID: item.TraceID, Metadata: item.Metadata, CreatedAt: item.CreatedAt})
@@ -591,7 +587,7 @@ func auditEntryResponses(entries []caselifecycle.AuditEntry) []auditEntry {
 	return result
 }
 
-func patternFindingResponses(findings []caselifecycle.PatternFinding) []map[string]any {
+func patternFindingResponses(findings []cases.PatternFinding) []map[string]any {
 	result := make([]map[string]any, 0, len(findings))
 	for _, finding := range findings {
 		result = append(result, patternFindingResponse(finding))
@@ -599,8 +595,8 @@ func patternFindingResponses(findings []caselifecycle.PatternFinding) []map[stri
 	return result
 }
 
-func evidenceResponses(evidence []caselifecycle.Evidence) []map[string]any {
-	items := generateevidencemanifest.ItemsFromEvidence(evidence)
+func evidenceResponses(evidence []cases.Evidence) []map[string]any {
+	items := cases.ItemsFromEvidence(evidence)
 	result := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		result = append(result, item.Response())
@@ -759,11 +755,11 @@ func nonNilStrings(values []string) []string {
 	return values
 }
 
-func actorFromPrincipal(value principal) caselifecycle.Actor {
-	return caselifecycle.Actor{Subject: value.Subject, Role: value.Role}
+func actorFromPrincipal(value principal) cases.Actor {
+	return cases.Actor{Subject: value.Subject, Role: value.Role}
 }
 
-func patternFindingResponse(value patternanalysis.PatternFinding) map[string]any {
+func patternFindingResponse(value compatibility.PatternFinding) map[string]any {
 	result := map[string]any{
 		"pattern_id": value.PatternID, "pattern_version": value.PatternVersion, "severity": value.Severity,
 		"matched_conditions": value.MatchedConditions, "evidence_references": value.EvidenceReferences,

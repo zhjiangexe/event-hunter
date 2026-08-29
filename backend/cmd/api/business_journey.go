@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	businessjourney "event-hunter/backend/internal/contexts/investigation/application/business_journey"
+	businessjourney "event-hunter/backend/internal/contexts/investigation/application/compatibility"
 )
 
 type businessJourneyAPI struct {
-	service *businessjourney.Service
+	service *businessjourney.JourneyService
 }
 
 func (api businessJourneyAPI) get(writer http.ResponseWriter, request *http.Request) {

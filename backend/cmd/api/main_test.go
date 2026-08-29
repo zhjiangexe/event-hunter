@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	forensics "event-hunter/backend/internal/contexts/investigation/application/search"
 	"event-hunter/backend/internal/platform/config"
 )
 

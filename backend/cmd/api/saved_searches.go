@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"regexp"
 
-	savedsearch "event-hunter/backend/internal/contexts/investigation/application/saved_search"
+	savedsearch "event-hunter/backend/internal/contexts/investigation/application/savedsearch"
 	"event-hunter/backend/internal/contexts/investigation/domain"
 )
 

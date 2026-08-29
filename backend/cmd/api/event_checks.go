@@ -11,26 +11,20 @@ import (
 
 	"github.com/google/uuid"
 
-	attachchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/attach_check_snapshot"
-	classifycheckfinding "event-hunter/backend/internal/contexts/eventcheck/application/classify_check_finding"
-	evaluateeventcheck "event-hunter/backend/internal/contexts/eventcheck/application/evaluate_event_check"
-	getchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/get_check_snapshot"
-	listcheckmodels "event-hunter/backend/internal/contexts/eventcheck/application/list_check_models"
-	listchecksnapshots "event-hunter/backend/internal/contexts/eventcheck/application/list_check_snapshots"
-	savechecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/save_check_snapshot"
+	eventcheckapp "event-hunter/backend/internal/contexts/eventcheck/application"
 	eventcheckdomain "event-hunter/backend/internal/contexts/eventcheck/domain"
 	eventcheckports "event-hunter/backend/internal/contexts/eventcheck/ports"
 	investigationdomain "event-hunter/backend/internal/contexts/investigation/domain"
 )
 
 type eventCheckAPI struct {
-	evaluator   *evaluateeventcheck.Service
-	models      *listcheckmodels.Service
-	saver       *savechecksnapshot.Service
-	getter      *getchecksnapshot.Service
-	lister      *listchecksnapshots.Service
-	classifier  *classifycheckfinding.Service
-	attachments *attachchecksnapshot.Service
+	evaluator   *eventcheckapp.EvaluateEventCheckHandler
+	models      *eventcheckapp.CheckModelQueries
+	saver       *eventcheckapp.SaveSnapshotHandler
+	getter      *eventcheckapp.GetSnapshotHandler
+	lister      *eventcheckapp.ListSnapshotsHandler
+	classifier  *eventcheckapp.ClassifyFindingHandler
+	attachments *eventcheckapp.SnapshotAttachmentHandler
 	sessions    sessionManager
 }
 
@@ -39,7 +33,7 @@ func (api eventCheckAPI) listSnapshots(writer http.ResponseWriter, request *http
 		writeAPIError(writer, http.StatusUnauthorized, "UNAUTHENTICATED")
 		return
 	}
-	pageSize := listchecksnapshots.DefaultPageSize
+	pageSize := eventcheckapp.DefaultSnapshotPageSize
 	if value := strings.TrimSpace(request.URL.Query().Get("page_size")); value != "" {
 		parsed, err := strconv.Atoi(value)
 		if err != nil {
@@ -48,16 +42,16 @@ func (api eventCheckAPI) listSnapshots(writer http.ResponseWriter, request *http
 		}
 		pageSize = parsed
 	}
-	cursor, err := listchecksnapshots.DecodeCursor(request.URL.Query().Get("cursor"))
+	cursor, err := eventcheckapp.DecodeSnapshotCursor(request.URL.Query().Get("cursor"))
 	if err != nil {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_CURSOR")
 		return
 	}
-	page, err := api.lister.List(request.Context(), listchecksnapshots.Filter{
+	page, err := api.lister.List(request.Context(), eventcheckapp.SnapshotListFilter{
 		Identifier: request.URL.Query().Get("identifier"), CheckStatus: request.URL.Query().Get("check_status"),
 		PageSize: pageSize, Cursor: cursor,
 	})
-	if errors.Is(err, listchecksnapshots.ErrInvalidFilter) {
+	if errors.Is(err, eventcheckapp.ErrInvalidSnapshotFilter) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_CHECK_SNAPSHOT_FILTER")
 		return
 	}
@@ -74,7 +68,7 @@ func (api eventCheckAPI) evaluate(writer http.ResponseWriter, request *http.Requ
 		writeAPIError(writer, http.StatusUnauthorized, "UNAUTHENTICATED")
 		return
 	}
-	var input evaluateeventcheck.Request
+	var input eventcheckapp.EvaluateRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64*1024))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
@@ -87,10 +81,10 @@ func (api eventCheckAPI) evaluate(writer http.ResponseWriter, request *http.Requ
 	}
 	result, err := api.evaluator.Evaluate(request.Context(), input)
 	switch {
-	case errors.Is(err, evaluateeventcheck.ErrInvalidRequest):
+	case errors.Is(err, eventcheckapp.ErrInvalidRequest):
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_EVENT_CHECK_REQUEST")
 		return
-	case errors.Is(err, evaluateeventcheck.ErrModelUnavailable):
+	case errors.Is(err, eventcheckapp.ErrModelUnavailable):
 		writeAPIError(writer, http.StatusUnprocessableEntity, "MODEL_VERSION_UNAVAILABLE")
 		return
 	case err != nil:
@@ -120,7 +114,7 @@ func (api eventCheckAPI) getModel(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 	result, err := api.models.Get(request.PathValue("modelId"), version)
-	if errors.Is(err, listcheckmodels.ErrNotFound) {
+	if errors.Is(err, eventcheckapp.ErrCheckModelNotFound) {
 		writeAPIError(writer, http.StatusNotFound, "CHECK_MODEL_NOT_FOUND")
 		return
 	}
@@ -142,7 +136,7 @@ func (api eventCheckAPI) getModelSource(writer http.ResponseWriter, request *htt
 		return
 	}
 	result, err := api.models.GetSource(request.PathValue("modelId"), version)
-	if errors.Is(err, listcheckmodels.ErrNotFound) {
+	if errors.Is(err, eventcheckapp.ErrCheckModelNotFound) {
 		writeAPIError(writer, http.StatusNotFound, "CHECK_MODEL_NOT_FOUND")
 		return
 	}
@@ -168,7 +162,7 @@ func (api eventCheckAPI) createSnapshot(writer http.ResponseWriter, request *htt
 		writeAPIError(writer, http.StatusPreconditionRequired, "IDEMPOTENCY_KEY_REQUIRED")
 		return
 	}
-	var input savechecksnapshot.Request
+	var input eventcheckapp.SaveSnapshotRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 64*1024))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&input) != nil || ensureJSONEOF(decoder) != nil {
@@ -177,20 +171,20 @@ func (api eventCheckAPI) createSnapshot(writer http.ResponseWriter, request *htt
 	}
 	result, created, err := api.saver.Save(request.Context(), input,
 		eventcheckdomain.SnapshotActor{Subject: principal.Subject, Role: principal.Role}, idempotencyKey, request.Header.Get("X-Request-ID"))
-	var changed savechecksnapshot.EvaluationChangedError
+	var changed eventcheckapp.EvaluationChangedError
 	switch {
 	case errors.As(err, &changed):
 		writeAPIErrorWithData(writer, http.StatusConflict, "EVALUATION_CHANGED", map[string]any{
 			"current_event_set_hash": changed.CurrentEventSetHash, "current_evaluation_hash": changed.CurrentEvaluationHash,
 		})
 		return
-	case errors.Is(err, savechecksnapshot.ErrIdempotencyKeyReused):
+	case errors.Is(err, eventcheckapp.ErrIdempotencyKeyReused):
 		writeAPIError(writer, http.StatusConflict, "IDEMPOTENCY_KEY_REUSED")
 		return
-	case errors.Is(err, evaluateeventcheck.ErrModelUnavailable):
+	case errors.Is(err, eventcheckapp.ErrModelUnavailable):
 		writeAPIError(writer, http.StatusConflict, "MODEL_VERSION_UNAVAILABLE")
 		return
-	case errors.Is(err, savechecksnapshot.ErrInvalidSaveRequest), errors.Is(err, eventcheckdomain.ErrInvalidSnapshot):
+	case errors.Is(err, eventcheckapp.ErrInvalidSaveRequest), errors.Is(err, eventcheckdomain.ErrInvalidSnapshot):
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_CHECK_SNAPSHOT_REQUEST")
 		return
 	case err != nil:

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"event-hunter/backend/internal/contexts/investigation/application/overview"
+	overview "event-hunter/backend/internal/contexts/investigation/application/operations"
 )
 
 type overviewAPI struct {

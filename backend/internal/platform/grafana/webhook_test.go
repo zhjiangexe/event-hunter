@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/alert_intake"
+	alertintake "event-hunter/backend/internal/contexts/investigation/application/alerts"
 )
 
 func TestWebhookHandlerVerifiesRawBodyAndDelegatesToApplication(t *testing.T) {

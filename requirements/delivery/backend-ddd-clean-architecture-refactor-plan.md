@@ -69,6 +69,7 @@ internal/platform/{config,observability,health,db}
 | `EH-ARCH-004` | Scenario Lab 拆成 domain／application／ports／adapters | 002 | completed | 必要 |
 | `EH-ARCH-005` | quality worker／technical DLQ projector 移出 `cmd` | 000 | completed | 必要 |
 | `EH-ARCH-006` | package dependency architecture tests、文件回填與完整 regression | 003,004,005 | completed | 必要 |
+| `EH-ARCH-007` | Go application package 粒度收斂：Event Check 單一 package、Investigation capability grouping | 006 | completed | 維護性 |
 
 `EH-ARCH-003`、`EH-ARCH-004`、`EH-ARCH-005` 可在 `EH-ARCH-002` 完成後分支，但每次只合併一個可驗證
 切片。正式執行順序採表格由上而下，避免同時大幅改動 API、Scenario 與 workers。
@@ -240,6 +241,38 @@ bash scripts/test-backend-e2e.sh
 - `docker compose config --quiet`、`gofmt -l cmd internal`、`go test ./...` 與 `go vet ./...` 全數通過。
 - Quality Karate 1 feature／2 scenarios、destructive ingestion recovery 與完整 Backend Karate 19 features／126 scenarios
   全數通過；測試後 API runtime profile 已恢復，非 canonical reports 已清理。
+
+### EH-ARCH-007：Go application package 粒度收斂
+
+狀態：`completed`（2026-08-29）
+
+交付：
+
+- Event Check 從每個 use case 一個 package 收斂為單一 `application` package，以
+  `EvaluateEventCheckHandler`、`SaveSnapshotHandler` 等具名型別及檔案避免通用 `Service`／`Request` 衝突。
+- 移除只因 package fragmentation 產生的 `snapshotview` 中介 package；Snapshot DTO 與 mapper 留在同一
+  application vocabulary。
+- Investigation 從 15 個細碎 package 收斂為 `alerts`、`cases`、`compatibility`、`operations`、
+  `savedsearch`、`search` 六個穩定 capability packages；use case 以檔案區分。
+- architecture test 固定 canonical package map，新增能力時必須明確擴充既有 capability 或審核新的邊界。
+
+驗收：
+
+- 不改 OpenAPI、database migration、Kafka contract、frontend API 或可觀察產品行為。
+- capability focused tests、完整 `go test ./...`、`go vet ./...`、contract validation 與 Backend Karate 通過。
+- 文件不再宣稱尖叫架構等於每個 method／use case 建一個資料夾。
+
+完成證據：
+
+- Event Check 與 Investigation focused tests、architecture package-map guardrail、完整 `go test ./...` 與
+  `go vet ./...` 全數通過。
+- `python3 scripts/validate-contracts.py` 通過：45 YAML、36 JSON、25 schemas、699 refs、44 documents、135 links。
+- 重建 API image 後，Backend Karate 19 features／126 scenarios 全數通過（0 failed、0 skipped）；API readiness
+  同時確認 PostgreSQL、ClickHouse、domain event ingestion、processing-attempt ingestion 與 technical DLQ
+  projection 全部 ready。
+- Frontend Vitest 8 test files／108 tests、TypeScript production build 與真實 Chrome Karate E2E
+  1 feature／26 scenarios 全數通過；涵蓋 Event Check、Saved Results、案件 handoff／狀態機、Scenario Lab、
+  Grafana alert link、browser history 與 390px viewport。
 
 ## 6. 風險與回滾
 

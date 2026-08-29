@@ -169,6 +169,29 @@ tasks:
       - Quality Karate passes 2 scenarios destructive ingestion recovery passes and complete Backend Karate passes 19 features and 126 scenarios
       - non-canonical reports were cleaned and the API runtime profile was restored after E2E
 
+  - id: EH-ARCH-007
+    title: Go application package granularity consolidation
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-017]
+    depends_on: [EH-ARCH-006]
+    outputs:
+      - one Go application package with named use-case files and handlers for Event Check
+      - six stable Investigation capability packages instead of package-per-use-case directories
+      - removal of snapshotview and caseview packages created only by package fragmentation
+      - canonical application package map enforced by architecture tests
+    acceptance:
+      - OpenAPI migrations Kafka contracts frontend APIs and observable product behavior remain unchanged
+      - focused application tests full Go tests vet contract validation and Backend Karate pass
+      - architecture documentation describes screaming architecture as business capability visibility rather than method-level folders
+    completed_progress:
+      - Event Check application now uses named Evaluate Save Get List Classify and Attach handlers in one package
+      - Investigation application now groups cases search alerts savedsearch operations and deprecated compatibility capabilities
+      - API composition PostgreSQL ClickHouse Grafana and source-health adapters compile against the consolidated package map
+      - architecture guardrail rejects unexpected Event Check and Investigation application packages
+      - focused and complete Go tests vet and contract validation pass after the package consolidation
+      - rebuilt API passes all 19 Backend Karate features and 126 scenarios with zero failures or skips and all readiness dependencies ready
+      - frontend Vitest passes 108 tests production build succeeds and Chrome Karate passes all 26 browser scenarios
+
   - id: EH-P1.1-022
     title: Canonical product documentation alignment after Event Check cutover
     status: completed

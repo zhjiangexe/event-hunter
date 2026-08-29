@@ -8,7 +8,7 @@ import (
 
 	"event-hunter/backend/internal/contexts/eventcheck/domain"
 	evaluateports "event-hunter/backend/internal/contexts/eventcheck/ports"
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	forensics "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 // FindCanonicalEvents implements the Event Check read port using the existing

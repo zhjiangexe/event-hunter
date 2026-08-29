@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	forensics "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 const forensicsEventColumns = "event_id,event_type,event_version,occurred_at,producer,correlation_id,causation_id,trace_id,aggregate_type,aggregate_id,sequence,kafka_topic,kafka_partition,kafka_offset,service_version,admission_status,quality_flags,admission_profile,ingested_at"

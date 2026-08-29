@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/ingestion_issues"
+	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 type stubIngestionIssueSearcher struct {

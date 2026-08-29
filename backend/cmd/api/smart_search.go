@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	eventsearch "event-hunter/backend/internal/contexts/investigation/application/event_search"
+	eventsearch "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 func identifySmartSearchInput(writer http.ResponseWriter, request *http.Request) {

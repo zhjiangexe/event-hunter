@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	listchecksnapshots "event-hunter/backend/internal/contexts/eventcheck/application/list_check_snapshots"
+	eventcheckapp "event-hunter/backend/internal/contexts/eventcheck/application"
 	eventcheckdomain "event-hunter/backend/internal/contexts/eventcheck/domain"
 	eventcheckports "event-hunter/backend/internal/contexts/eventcheck/ports"
 	investigationdomain "event-hunter/backend/internal/contexts/investigation/domain"
@@ -123,7 +123,7 @@ func (repository *CheckSnapshotRepository) Get(ctx context.Context, id string) (
 	return snapshot, nil
 }
 
-func (repository *CheckSnapshotRepository) ListCheckSnapshotSummaries(ctx context.Context, filter listchecksnapshots.Filter) ([]listchecksnapshots.Summary, error) {
+func (repository *CheckSnapshotRepository) ListCheckSnapshotSummaries(ctx context.Context, filter eventcheckapp.SnapshotListFilter) ([]eventcheckapp.SnapshotSummary, error) {
 	query := `SELECT snapshot.id::text,snapshot.created_by,snapshot.created_by_role,snapshot.created_at,
 		snapshot.evaluation_request,snapshot.as_of,snapshot.source_health->>'status',
 		snapshot.model_id,snapshot.model_version,snapshot.model_kind,snapshot.result->>'check_status',
@@ -152,9 +152,9 @@ func (repository *CheckSnapshotRepository) ListCheckSnapshotSummaries(ctx contex
 		return nil, err
 	}
 	defer rows.Close()
-	items := make([]listchecksnapshots.Summary, 0)
+	items := make([]eventcheckapp.SnapshotSummary, 0)
 	for rows.Next() {
-		var item listchecksnapshots.Summary
+		var item eventcheckapp.SnapshotSummary
 		var requestJSON []byte
 		if err := rows.Scan(&item.ID, &item.CreatedBy, &item.CreatedByRole, &item.CreatedAt, &requestJSON, &item.AsOf,
 			&item.SourceHealthStatus, &item.Model.ID, &item.Model.Version, &item.Model.Kind, &item.CheckStatus,

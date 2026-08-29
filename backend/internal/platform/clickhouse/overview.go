@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/overview"
+	overview "event-hunter/backend/internal/contexts/investigation/application/operations"
 )
 
 func (model *HTTPReadModel) Overview(ctx context.Context, from, to time.Time) (overview.EventSnapshot, error) {

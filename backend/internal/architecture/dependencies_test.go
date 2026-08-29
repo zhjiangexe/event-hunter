@@ -48,6 +48,63 @@ func TestContextDependencyDirection(t *testing.T) {
 	}
 }
 
+func TestCanonicalApplicationPackageMap(t *testing.T) {
+	root := moduleRoot(t)
+	assertApplicationDirectories(t, filepath.Join(root, "internal", "contexts", "eventcheck", "application"), map[string]bool{
+		"internal": true,
+	})
+	assertApplicationDirectories(t, filepath.Join(root, "internal", "contexts", "investigation", "application"), map[string]bool{
+		"alerts": true, "cases": true, "compatibility": true,
+		"operations": true, "savedsearch": true, "search": true,
+	})
+}
+
+func assertApplicationDirectories(t *testing.T, root string, expected map[string]bool) {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := make(map[string]bool, len(expected))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if !containsProductionGo(t, filepath.Join(root, entry.Name())) {
+			continue
+		}
+		if !expected[entry.Name()] {
+			t.Errorf("%s contains unexpected application package %q; group use cases by stable business capability", root, entry.Name())
+			continue
+		}
+		found[entry.Name()] = true
+	}
+	for name := range expected {
+		if !found[name] {
+			t.Errorf("%s is missing canonical application package %q", root, name)
+		}
+	}
+}
+
+func containsProductionGo(t *testing.T, root string) bool {
+	t.Helper()
+	found := false
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if !entry.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			found = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
 func TestCommandsContainNoPersistenceQueries(t *testing.T) {
 	root := moduleRoot(t)
 	commandsRoot := filepath.Join(root, "cmd")

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	patterneffectiveness "event-hunter/backend/internal/contexts/investigation/application/pattern_effectiveness"
+	patterneffectiveness "event-hunter/backend/internal/contexts/investigation/application/compatibility"
 )
 
 type patternEffectivenessService interface {

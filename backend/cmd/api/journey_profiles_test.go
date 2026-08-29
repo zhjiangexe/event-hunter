@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	forensics "event-hunter/backend/internal/contexts/investigation/application/search"
 )
 
 func TestJourneyProfileCatalogListsCompiledProfiles(t *testing.T) {

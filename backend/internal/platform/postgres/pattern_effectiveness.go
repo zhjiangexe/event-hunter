@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	patterneffectiveness "event-hunter/backend/internal/contexts/investigation/application/pattern_effectiveness"
+	patterneffectiveness "event-hunter/backend/internal/contexts/investigation/application/compatibility"
 )
 
 type PatternEffectivenessReader struct {

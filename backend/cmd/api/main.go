@@ -16,28 +16,13 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	attachchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/attach_check_snapshot"
-	classifycheckfinding "event-hunter/backend/internal/contexts/eventcheck/application/classify_check_finding"
-	evaluateeventcheck "event-hunter/backend/internal/contexts/eventcheck/application/evaluate_event_check"
-	getchecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/get_check_snapshot"
-	listcheckmodels "event-hunter/backend/internal/contexts/eventcheck/application/list_check_models"
-	listchecksnapshots "event-hunter/backend/internal/contexts/eventcheck/application/list_check_snapshots"
-	savechecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/save_check_snapshot"
-	"event-hunter/backend/internal/contexts/investigation/application/alert_intake"
-	businessjourney "event-hunter/backend/internal/contexts/investigation/application/business_journey"
-	caselifecycle "event-hunter/backend/internal/contexts/investigation/application/case_lifecycle"
-	eventsearch "event-hunter/backend/internal/contexts/investigation/application/event_search"
-	evidenceattachment "event-hunter/backend/internal/contexts/investigation/application/evidence_attachment"
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
-	generateevidencemanifest "event-hunter/backend/internal/contexts/investigation/application/generate_evidence_manifest"
-	getinvestigationsummary "event-hunter/backend/internal/contexts/investigation/application/get_investigation_summary"
-	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/ingestion_issues"
-	journeyprofiles "event-hunter/backend/internal/contexts/investigation/application/journey_profiles"
-	"event-hunter/backend/internal/contexts/investigation/application/overview"
-	patternanalysis "event-hunter/backend/internal/contexts/investigation/application/pattern_analysis"
-	patterneffectiveness "event-hunter/backend/internal/contexts/investigation/application/pattern_effectiveness"
-	patternfeedback "event-hunter/backend/internal/contexts/investigation/application/pattern_feedback"
-	savedsearch "event-hunter/backend/internal/contexts/investigation/application/saved_search"
+	eventcheckapp "event-hunter/backend/internal/contexts/eventcheck/application"
+	investigationalerts "event-hunter/backend/internal/contexts/investigation/application/alerts"
+	cases "event-hunter/backend/internal/contexts/investigation/application/cases"
+	compatibility "event-hunter/backend/internal/contexts/investigation/application/compatibility"
+	operations "event-hunter/backend/internal/contexts/investigation/application/operations"
+	savedsearch "event-hunter/backend/internal/contexts/investigation/application/savedsearch"
+	investigationsearch "event-hunter/backend/internal/contexts/investigation/application/search"
 	platformclickhouse "event-hunter/backend/internal/platform/clickhouse"
 	"event-hunter/backend/internal/platform/config"
 	"event-hunter/backend/internal/platform/grafana"
@@ -109,8 +94,8 @@ func newServer(cfg config.Config) http.Handler {
 func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, grafanaWebhookSecret string) http.Handler {
 	sessions := sessionManager{secret: []byte(sessionSecret)}
 	clickHouseReadModel := newClickHouseReadModel(cfg)
-	forensics := forensics.NewForensicsService(clickHouseReadModel)
-	grafanaAlerts := alertintake.NewGrafanaAlertService(platformpostgres.NewGrafanaAlertRepository(db))
+	forensics := investigationsearch.NewForensicsService(clickHouseReadModel)
+	grafanaAlerts := investigationalerts.NewGrafanaAlertService(platformpostgres.NewGrafanaAlertRepository(db))
 	readinessClient := &http.Client{Timeout: 1500 * time.Millisecond}
 	readinessProbes := []platformhealth.Probe{
 		platformhealth.Database("postgres", db),
@@ -169,31 +154,31 @@ func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, gra
 	mux.HandleFunc("DELETE /api/v1/auth/demo-session", sessions.demoSession)
 	mux.HandleFunc("GET /api/v1/auth/me", sessions.me)
 	mux.HandleFunc("GET /api/v1/patterns", sessions.requireRead(patternsHandler))
-	patternMetrics := patternEffectivenessAPI{service: patterneffectiveness.NewService(platformpostgres.NewPatternEffectivenessReader(db))}
+	patternMetrics := patternEffectivenessAPI{service: compatibility.NewPatternEffectivenessService(platformpostgres.NewPatternEffectivenessReader(db))}
 	mux.HandleFunc("GET /api/v1/patterns/effectiveness", sessions.requireRead(patternMetrics.get))
-	overviewService := overview.NewService(
+	overviewService := operations.NewService(
 		platformpostgres.NewOverviewReader(db),
 		clickHouseReadModel,
-		sourcehealth.NewHTTPProbe(overview.SourceTempo, strings.TrimRight(getenv("TEMPO_INTERNAL_URL", "http://localhost:28328"), "/")+"/ready", sourceHealthHTTPClient, time.Second),
-		sourcehealth.NewHTTPProbe(overview.SourceLoki, strings.TrimRight(getenv("LOKI_INTERNAL_URL", "http://localhost:28327"), "/")+"/ready", sourceHealthHTTPClient, time.Second),
-		sourcehealth.NewHTTPProbe(overview.SourceGrafana, strings.TrimRight(getenv("GRAFANA_INTERNAL_URL", "http://localhost:28332"), "/")+"/api/health", sourceHealthHTTPClient, time.Second),
+		sourcehealth.NewHTTPProbe(operations.SourceTempo, strings.TrimRight(getenv("TEMPO_INTERNAL_URL", "http://localhost:28328"), "/")+"/ready", sourceHealthHTTPClient, time.Second),
+		sourcehealth.NewHTTPProbe(operations.SourceLoki, strings.TrimRight(getenv("LOKI_INTERNAL_URL", "http://localhost:28327"), "/")+"/ready", sourceHealthHTTPClient, time.Second),
+		sourcehealth.NewHTTPProbe(operations.SourceGrafana, strings.TrimRight(getenv("GRAFANA_INTERNAL_URL", "http://localhost:28332"), "/")+"/api/health", sourceHealthHTTPClient, time.Second),
 	)
 	overviewHandler := overviewAPI{service: overviewService}
 	mux.HandleFunc("GET /api/v1/investigations/overview", sessions.requireRead(overviewHandler.get))
 	mux.HandleFunc("GET /api/v1/source-health", sessions.requireRead(overviewHandler.sourceHealth))
-	ingestionIssueHandler := ingestionIssuesAPI{service: ingestionissues.NewService(clickHouseReadModel)}
+	ingestionIssueHandler := ingestionIssuesAPI{service: investigationsearch.NewIngestionIssueService(clickHouseReadModel)}
 	mux.HandleFunc("GET /api/v1/ingestion-issues", sessions.requireRead(ingestionIssueHandler.list))
 	mux.HandleFunc("POST /api/v1/search/identify", sessions.requireRead(identifySmartSearchInput))
-	eventCheckEvaluator := evaluateeventcheck.NewService(clickHouseReadModel)
+	eventCheckEvaluator := eventcheckapp.NewEvaluateEventCheckHandler(clickHouseReadModel)
 	eventCheckRepository := platformpostgres.NewCheckSnapshotRepository(db)
 	eventCheckUnitOfWork := platformpostgres.NewUnitOfWork(db)
 	eventChecks := eventCheckAPI{
-		evaluator: eventCheckEvaluator, models: listcheckmodels.NewService(),
-		saver:       savechecksnapshot.NewService(eventCheckEvaluator, eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
-		getter:      getchecksnapshot.NewService(eventCheckRepository),
-		lister:      listchecksnapshots.NewService(eventCheckRepository),
-		classifier:  classifycheckfinding.NewService(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
-		attachments: attachchecksnapshot.NewService(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		evaluator: eventCheckEvaluator, models: eventcheckapp.NewCheckModelQueries(),
+		saver:       eventcheckapp.NewSaveSnapshotHandler(eventCheckEvaluator, eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		getter:      eventcheckapp.NewGetSnapshotHandler(eventCheckRepository),
+		lister:      eventcheckapp.NewListSnapshotsHandler(eventCheckRepository),
+		classifier:  eventcheckapp.NewClassifyFindingHandler(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
+		attachments: eventcheckapp.NewSnapshotAttachmentHandler(eventCheckRepository, eventCheckRepository, eventCheckUnitOfWork),
 		sessions:    sessions,
 	}
 	mux.HandleFunc("POST /api/v1/event-checks/evaluations", eventChecks.evaluate)
@@ -214,13 +199,13 @@ func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, gra
 	caseRepository := platformpostgres.NewCaseRepository(db)
 	detailsRepository := platformpostgres.NewInvestigationDetailsRepository(db)
 	unitOfWork := platformpostgres.NewUnitOfWork(db)
-	caseLifecycle := caselifecycle.NewService(caseRepository, detailsRepository, unitOfWork)
+	caseLifecycle := cases.NewCaseService(caseRepository, detailsRepository, unitOfWork)
 	investigations := investigationAPI{
-		commands: caseLifecycle, queries: caseLifecycle, patterns: patternanalysis.NewPatternService(caseRepository, detailsRepository, forensics, clickHouseReadModel, unitOfWork),
-		feedback:    patternfeedback.NewService(detailsRepository, detailsRepository, unitOfWork),
-		attachments: evidenceattachment.NewService(caseRepository, forensics, detailsRepository, unitOfWork),
-		summaries:   getinvestigationsummary.NewService(caseLifecycle, forensics),
-		manifests:   generateevidencemanifest.NewService(caseLifecycle),
+		commands: caseLifecycle, queries: caseLifecycle, patterns: compatibility.NewPatternService(caseRepository, detailsRepository, forensics, clickHouseReadModel, unitOfWork),
+		feedback:    compatibility.NewPatternFeedbackService(detailsRepository, detailsRepository, unitOfWork),
+		attachments: cases.NewEventEvidenceService(caseRepository, forensics, detailsRepository, unitOfWork),
+		summaries:   cases.NewSummaryService(caseLifecycle, forensics),
+		manifests:   cases.NewEvidenceManifestService(caseLifecycle),
 		sessions:    sessions,
 	}
 	mux.HandleFunc("GET /api/v1/investigations", investigations.list)
@@ -241,15 +226,15 @@ func newServerWithWebhook(cfg config.Config, webhook http.Handler, sessions *ses
 	return protectAPI(cfg, defaultJSONContentType(newServeMuxWithWebhook(webhook, sessions, newForensicsService(cfg))))
 }
 
-func newServeMuxWithWebhook(webhook http.Handler, sessions *sessionManager, forensics *forensics.ForensicsService, qualifierRepositories ...eventsearch.EventSearchQualifierRepository) *http.ServeMux {
+func newServeMuxWithWebhook(webhook http.Handler, sessions *sessionManager, forensics *investigationsearch.ForensicsService, qualifierRepositories ...investigationsearch.EventSearchQualifierRepository) *http.ServeMux {
 	return newServeMuxWithReadiness(webhook, sessions, forensics, http.HandlerFunc(healthHandler), qualifierRepositories...)
 }
 
-func newServeMuxWithReadiness(webhook http.Handler, sessions *sessionManager, forensics *forensics.ForensicsService, readiness http.Handler, qualifierRepositories ...eventsearch.EventSearchQualifierRepository) *http.ServeMux {
+func newServeMuxWithReadiness(webhook http.Handler, sessions *sessionManager, forensics *investigationsearch.ForensicsService, readiness http.Handler, qualifierRepositories ...investigationsearch.EventSearchQualifierRepository) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health/live", healthHandler)
 	mux.Handle("GET /health/ready", readiness)
-	journeyProfiles := journeyProfilesAPI{service: journeyprofiles.NewService()}
+	journeyProfiles := journeyProfilesAPI{service: compatibility.NewJourneyProfileQueries()}
 	if sessions == nil {
 		mux.HandleFunc("GET /api/v1/journey-profiles", journeyProfiles.list)
 	} else {
@@ -257,30 +242,30 @@ func newServeMuxWithReadiness(webhook http.Handler, sessions *sessionManager, fo
 	}
 	if webhook != nil {
 		mux.Handle("POST /api/v1/integrations/grafana/alerts", webhook)
-		var qualifiers eventsearch.EventSearchQualifierRepository
+		var qualifiers investigationsearch.EventSearchQualifierRepository
 		if len(qualifierRepositories) > 0 {
 			qualifiers = qualifierRepositories[0]
 		}
 		timeline := timelineAPI{
 			forensics: forensics,
-			searcher:  eventsearch.NewEventSearchService(forensics, qualifiers),
+			searcher:  investigationsearch.NewEventSearchService(forensics, qualifiers),
 			sessions:  sessions,
 		}
 		if sessions == nil {
 			mux.HandleFunc("GET /api/v1/timelines/{correlationID}", timeline.timeline)
 			mux.HandleFunc("GET /api/v1/events/search", timeline.search)
-			mux.HandleFunc("GET /api/v1/business-journeys/{correlationID}", businessJourneyAPI{service: businessjourney.NewService(forensics)}.get)
+			mux.HandleFunc("GET /api/v1/business-journeys/{correlationID}", businessJourneyAPI{service: compatibility.NewJourneyService(forensics)}.get)
 		} else {
 			mux.HandleFunc("GET /api/v1/timelines/{correlationID}", sessions.requireRead(timeline.timeline))
 			mux.HandleFunc("GET /api/v1/events/search", sessions.requireRead(timeline.search))
-			mux.HandleFunc("GET /api/v1/business-journeys/{correlationID}", sessions.requireRead(businessJourneyAPI{service: businessjourney.NewService(forensics)}.get))
+			mux.HandleFunc("GET /api/v1/business-journeys/{correlationID}", sessions.requireRead(businessJourneyAPI{service: compatibility.NewJourneyService(forensics)}.get))
 		}
 	}
 	return mux
 }
 
-func newForensicsService(cfg config.Config) *forensics.ForensicsService {
-	return forensics.NewForensicsService(newClickHouseReadModel(cfg))
+func newForensicsService(cfg config.Config) *investigationsearch.ForensicsService {
+	return investigationsearch.NewForensicsService(newClickHouseReadModel(cfg))
 }
 
 func newClickHouseReadModel(cfg config.Config) *platformclickhouse.HTTPReadModel {
@@ -296,8 +281,8 @@ func newClickHouseReadModel(cfg config.Config) *platformclickhouse.HTTPReadModel
 }
 
 type timelineAPI struct {
-	forensics *forensics.ForensicsService
-	searcher  *eventsearch.EventSearchService
+	forensics *investigationsearch.ForensicsService
+	searcher  *investigationsearch.EventSearchService
 	sessions  *sessionManager
 }
 
@@ -329,7 +314,7 @@ type timelineEvent struct {
 	ProcessingSummary map[string]any `json:"processing_summary,omitempty"`
 }
 
-func timelineEventsFromForensics(values []forensics.ForensicsEvent, includePayload bool) ([]timelineEvent, error) {
+func timelineEventsFromForensics(values []investigationsearch.ForensicsEvent, includePayload bool) ([]timelineEvent, error) {
 	events := make([]timelineEvent, 0, len(values))
 	for _, value := range values {
 		event := timelineEvent{timelineEventMetadata: timelineEventMetadata{
@@ -371,7 +356,7 @@ func (api timelineAPI) timeline(writer http.ResponseWriter, request *http.Reques
 	if !authorized {
 		return
 	}
-	values, err := api.forensics.Search(request.Context(), forensics.EventSearchFilter{
+	values, err := api.forensics.Search(request.Context(), investigationsearch.EventSearchFilter{
 		From: from.UTC(), To: to.UTC(), Limit: 1000, IncludePayload: includePayload, CorrelationID: correlationID,
 	})
 	if err != nil {
@@ -420,7 +405,7 @@ func (api timelineAPI) search(writer http.ResponseWriter, request *http.Request)
 			return
 		}
 	}
-	filter := forensics.EventSearchFilter{
+	filter := investigationsearch.EventSearchFilter{
 		From: from.UTC(), To: to.UTC(), Limit: limit,
 		CorrelationID: strings.TrimSpace(request.URL.Query().Get("correlation_id")), EventType: strings.TrimSpace(request.URL.Query().Get("event_type")),
 		AggregateID: strings.TrimSpace(request.URL.Query().Get("aggregate_id")), TraceID: strings.TrimSpace(request.URL.Query().Get("trace_id")),
@@ -458,22 +443,22 @@ func (api timelineAPI) search(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	filter.IncludePayload = includePayload
-	values, err := api.searcher.Search(request.Context(), eventsearch.AdvancedEventSearchFilter{
+	values, err := api.searcher.Search(request.Context(), investigationsearch.AdvancedEventSearchFilter{
 		EventSearchFilter: filter,
 		PatternID:         strings.TrimSpace(request.URL.Query().Get("pattern_id")),
 		AlertID:           strings.TrimSpace(request.URL.Query().Get("alert_id")),
 		MinimumSeverity:   strings.TrimSpace(request.URL.Query().Get("severity")),
 	})
 	if err != nil {
-		if errors.Is(err, eventsearch.ErrUnknownPattern) {
+		if errors.Is(err, investigationsearch.ErrUnknownPattern) {
 			writeTimelineError(writer, http.StatusUnprocessableEntity, "UNKNOWN_PATTERN")
 			return
 		}
-		if errors.Is(err, eventsearch.ErrInvalidSeverity) {
+		if errors.Is(err, investigationsearch.ErrInvalidSeverity) {
 			writeTimelineError(writer, http.StatusUnprocessableEntity, "INVALID_SEVERITY")
 			return
 		}
-		if errors.Is(err, eventsearch.ErrQualifierResultTooLarge) {
+		if errors.Is(err, investigationsearch.ErrQualifierResultTooLarge) {
 			writeTimelineError(writer, http.StatusUnprocessableEntity, "FILTER_RESULT_TOO_LARGE")
 			return
 		}
@@ -499,7 +484,7 @@ func (api timelineAPI) search(writer http.ResponseWriter, request *http.Request)
 	_ = json.NewEncoder(writer).Encode(map[string]any{"events": events, "count": len(events), "truncated": len(events) == limit})
 }
 
-func processingSummaries(ctx context.Context, service *forensics.ForensicsService, events []timelineEvent) (map[string]map[string]any, error) {
+func processingSummaries(ctx context.Context, service *investigationsearch.ForensicsService, events []timelineEvent) (map[string]map[string]any, error) {
 	if len(events) == 0 {
 		return map[string]map[string]any{}, nil
 	}

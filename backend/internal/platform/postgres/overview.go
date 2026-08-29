@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"event-hunter/backend/internal/contexts/investigation/application/overview"
+	overview "event-hunter/backend/internal/contexts/investigation/application/operations"
 )
 
 type OverviewReader struct {

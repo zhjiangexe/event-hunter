@@ -5,9 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	generateevidencemanifest "event-hunter/backend/internal/contexts/investigation/application/generate_evidence_manifest"
-	getinvestigationsummary "event-hunter/backend/internal/contexts/investigation/application/get_investigation_summary"
-	"event-hunter/backend/internal/contexts/investigation/application/investigationwindow"
+	cases "event-hunter/backend/internal/contexts/investigation/application/cases"
 	"event-hunter/backend/internal/contexts/investigation/domain"
 )
 
@@ -32,7 +30,7 @@ func (api investigationAPI) summary(writer http.ResponseWriter, request *http.Re
 		return
 	}
 	limit := queryLimit(request)
-	result, err := api.summaries.Get(request.Context(), getinvestigationsummary.Request{
+	result, err := api.summaries.Get(request.Context(), cases.SummaryRequest{
 		InvestigationID: request.PathValue("id"), From: from, To: to,
 		Limit: limit, IncludePayload: includePayload,
 	})
@@ -40,7 +38,7 @@ func (api investigationAPI) summary(writer http.ResponseWriter, request *http.Re
 		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
 		return
 	}
-	if errors.Is(err, investigationwindow.ErrInvalidWindow) {
+	if errors.Is(err, cases.ErrInvalidWindow) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
 		return
 	}
@@ -93,12 +91,12 @@ func (api investigationAPI) evidenceBundle(writer http.ResponseWriter, request *
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
 		return
 	}
-	result, err := api.manifests.Generate(request.Context(), generateevidencemanifest.Request{InvestigationID: request.PathValue("id"), From: from, To: to})
+	result, err := api.manifests.Generate(request.Context(), cases.EvidenceManifestRequest{InvestigationID: request.PathValue("id"), From: from, To: to})
 	if errors.Is(err, domain.ErrCaseNotFound) {
 		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
 		return
 	}
-	if errors.Is(err, investigationwindow.ErrInvalidWindow) {
+	if errors.Is(err, cases.ErrInvalidWindow) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
 		return
 	}
