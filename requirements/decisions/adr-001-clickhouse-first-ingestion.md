@@ -2,7 +2,7 @@
 document_id: EH-ADR-001
 status: adopted
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: clickhouse-first-ingestion
 supersedes: []
@@ -65,7 +65,7 @@ flowchart LR
     Projector --> Technical[(ingestion_technical_failures)]
 ```
 
-Kafka 是傳輸與重播來源；Timeline、Journey、Pattern 與 Investigation 的歷史查詢全部來自 ClickHouse
+Kafka 是傳輸與重播來源；Event Check、Investigation 及 legacy Timeline／Journey／Pattern compatibility queries 全部來自 ClickHouse
 canonical views，不會直接掃 Kafka。
 
 ## 3. Admission 語意

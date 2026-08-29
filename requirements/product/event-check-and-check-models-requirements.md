@@ -26,6 +26,10 @@ supersedes: []
 - 舊 API 已加 deprecation metadata；bounded legacy read paths 目前只作 compatibility adapter。實體 runtime／
   schema 移除必須另有 migration release、rollback window 與 release note，不與本次 cutover 混在一起。
 
+相鄰但責任獨立的 Phase 1.1 能力是 `REQ-EH-017` Ingestion Issues 與 `REQ-EH-018` Scenario Lab：前者只
+說明 record 為何未安全進入 canonical read model，後者只建立可重現測試資料與 actual run result；兩者都
+不代替 Check Model 的業務流程判定。
+
 正式工程 DAG 為 [Implementation Plan](../delivery/implementation-plan.yaml) 的 `EH-ECM-000`～
 `EH-ECM-006` 且已全數完成；`EH-ECM-007` 是不阻擋主功能、預設關閉的 Evidence Archive follow-on。
 任務狀態只以該文件為準。
@@ -254,14 +258,19 @@ Event Check 的結果操作明確分成三種，不以單一「保存並交接�
 顯示保存時間、Model、來源健康、事件／Finding／案件數量；不在列表回傳 raw payload。建立案件成功但掛接
 失敗時，UI 必須保留已建立的案件連結並提供重試，不能假裝整個操作回滾成功。
 
+由 Timeline／Event Check 建立案件時，Snapshot 的 evaluation window 維持完全不變；案件的 current-view
+incident window 則在 query end 後增加 1 秒安全邊界，避免秒級輸入漏掉同一秒尾端事件。這個安全邊界只影響
+案件後續查詢，不得回寫或改變 immutable Snapshot 的判斷。
+
 Check Models 提供：
 
 ```text
 Flow Models | Global Checks | Versions | Test Scenarios
 ```
 
-Registry 首頁只顯示可比較的 Model 列表；點擊列後才以 URL-addressable modal 顯示 Overview、Versions 與
-Test Scenarios，並支援 Escape、焦點還原與直接 deep link。
+Registry 首頁只顯示可比較的 Model 列表；點擊列後才以 URL-addressable modal 顯示 Overview、Versions、
+Test Scenarios 與 Source YAML。Source YAML 必須在使用者開啟該分頁時才由受控 API 載入 build-time
+嵌入的原始內容，不得接受 client filesystem path；modal 支援 Escape、焦點還原與直接 deep link。
 
 ## 現有功能遷移表
 
@@ -353,7 +362,7 @@ physical schema 的 removal 版本必須另行決定，不因 canonical UI cutov
 ## EH-ECM-006 封版證據
 
 - Backend Karate：19 features、126/126 scenarios。
-- Frontend Karate：26/26 browser scenarios；frontend component tests：105/105。
+- Frontend Karate：26/26 browser scenarios；frontend component tests：108/108。
 - Check Model contract fixtures：18/18，含跨 Correlation child flow 與 partial-source `INCONCLUSIVE`。
 - 完全無法讀取 ClickHouse 時回 `503 EVENT_CHECK_SOURCE_UNAVAILABLE`，不產生假的 `VIOLATED`；恢復後
   evaluation hash 與故障前一致。

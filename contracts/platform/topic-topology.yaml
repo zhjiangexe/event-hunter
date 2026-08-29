@@ -96,6 +96,7 @@ topics:
 
   - name: event-hunter.ingestion-failures.dlq
     owner: event-hunter-platform
+    lifecycle: legacy_contract_validation
     partitions: 3
     retention_ms: 604800000
     key:
@@ -104,6 +105,19 @@ topics:
       separator: ":"
       type: string
     accepted_event_types: [EventIngestionFailure]
+    classification: RESTRICTED
+
+  - name: event-hunter.poc-clickhouse-sink.dlq
+    owner: event-hunter-platform
+    lifecycle: active_technical_dlq
+    partitions: 3
+    retention_ms: 604800000
+    key:
+      source: kafka_connect
+      fields: [sourceTopic, sourcePartition, sourceOffset]
+      separator: ":"
+      type: string
+    accepted_event_types: [KafkaConnectTechnicalFailure]
     classification: RESTRICTED
 
 ordering:

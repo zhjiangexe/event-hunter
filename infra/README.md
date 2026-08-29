@@ -67,8 +67,8 @@ bash scripts/verify-grafana-provisioning.sh
 
 | 服務 | 本機位置 | 用途 |
 |---|---|---|
-| PostgreSQL 18 | `localhost:28313` | 案件、Finding、Evidence reference、Audit control plane |
-| ClickHouse | HTTP `28317`、native `28318` | 原始事件、處理 attempt、品質聚合 read model |
+| PostgreSQL 18 | `localhost:28313` | 案件、Check Snapshots／Findings、Evidence、Saved queries、Scenario runs、Audit |
+| ClickHouse | HTTP `28317`、native `28318` | restricted raw landing、canonical events／attempts、safe failures、品質 read models |
 | Redpanda Kafka API | `localhost:28319` | 本機 Domain Event broker |
 | Redpanda Schema Registry | `http://localhost:28320` | 事件 Schema tooling |
 | Redpanda HTTP Proxy／Admin | `28321`／`28322` | Broker HTTP 與管理 API |

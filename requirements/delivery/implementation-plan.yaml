@@ -43,6 +43,28 @@ current_product_delivery:
 
 tasks:
   # depends_on 形成任務 DAG；前置任務未完成時，不應直接開始相依工作。
+  - id: EH-P1.1-022
+    title: Canonical product documentation alignment after Event Check cutover
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-003, REQ-EH-004, REQ-EH-009, REQ-EH-012, REQ-EH-013, REQ-EH-015, REQ-EH-016, REQ-EH-017, REQ-EH-018]
+    depends_on: [EH-ECM-006, EH-POC-003]
+    outputs:
+      - canonical product vocabulary and route map across README Guide OpenAPI scope traceability architecture operations and testing documents
+      - explicit superseded status for Journey Pattern and Timeline-only behavior contracts
+      - ClickHouse Kafka Connect Materialized View and Ingestion Issues runtime documentation aligned with Compose and migrations
+      - Check Model Source YAML security and lazy-loading contract documented across API UI and architecture
+      - historical prototype delivery and UX evidence retained without treating it as current requirements
+    completed_progress:
+      - product scope now names Event Check Saved Results Check Models Cases Ingestion Issues and Scenario Lab as canonical capabilities
+      - added stable REQ-EH-017 Ingestion Issues and REQ-EH-018 Scenario Lab traceability
+      - active architecture data model runbook frontend infrastructure E2E and user Guide use the adopted ClickHouse-first and Check Model terminology
+      - legacy Journey Pattern Timeline and Saved Search routes remain documented only as deprecated or bounded compatibility surfaces
+      - document catalog and inventory distinguish current sources of truth from superseded and completed historical documents
+    acceptance:
+      - python3 scripts/validate-contracts.py passes document metadata catalog local-link operation mapping and executable contract checks
+      - PlantUML sources and committed renders describe the same canonical runtime
+      - legacy implementation history remains readable and is not rewritten as current product behavior
+
   - id: EH-ECM-000
     title: Event Check architecture API and logical data-model design baseline
     status: completed
@@ -173,6 +195,7 @@ tasks:
       - added server-owned Summary Timeline Flow Findings and Cases tabs without frontend conformance-state re-derivation
       - added explicit immutable Snapshot save Finding feedback and optimistic-lock-aware Investigation handoff interactions
       - added /check-models read-only Flow Models Global Checks Versions and contract fixture Test Scenarios views backed by the generated registry API
+      - added a lazy Source YAML panel backed by an authenticated build-time embedded source API with checksum verification and no runtime filesystem path access
       - replaced the flat primary navigation with five human-oriented groups while retaining legacy routes for EH-ECM-005 compatibility work
       - normalized required empty API collections to JSON arrays including legacy Snapshot reads and added frontend defensive rendering to prevent blank workspaces
       - frontend component coverage increased to 92 tests including bounded URL state server-owned outcomes legacy null collections Snapshot save custom scope Finding feedback modal focus restoration and Case lock versions
@@ -229,11 +252,12 @@ tasks:
       - complete Frontend Karate passed 26 of 26 browser scenarios across canonical Event Check Saved Results Check Models compatibility routes Cases Scenario Lab responsive navigation and trusted deep links
       - added the Saved Results read model API and workspace with identifier and check-status filters stable keyset pagination immutable Snapshot summaries and no raw payload exposure
       - split Event Check handoff into three explicit actions: save result only create a new Case and attach to an existing Case; both Case paths reuse or create the immutable Snapshot and browser acceptance verifies the resulting links
+      - corrected event Grafana Explore links to query canonical_forensics_events and added a one-second Case current-view end boundary while preserving the exact immutable Snapshot window
       - deterministic contract regression passed all 18 Check Model fixtures including expected failure compensation in-progress reminder violation late satisfied duplicate events cross-correlation child flow partial-source inconclusive and ambiguous outcomes
       - generated Check Model registry JSON Schema OpenAPI and frontend clients passed drift validation
       - source-failure acceptance distinguishes degraded evidence from total outage: PARTIAL evaluates as INCONCLUSIVE while an unreadable ClickHouse source returns explicit 503 without a false business result and recovers to the same evaluation hash
       - restart-persistence acceptance saved Snapshot 460c59ff-89e7-4aca-84c6-955d01c89b7d attached it to an Investigation and verified the immutable projection and link after PostgreSQL and API restarts
-      - full Go test and vet gofmt frontend 105-test typecheck lint format production build contract validation and operations static gates passed
+      - full Go test and vet gofmt frontend 108-test typecheck lint format production build contract validation and operations static gates passed
       - Event Check and Check Models are now the canonical product workspaces; bounded legacy bookmarks and broad read-only searches remain compatibility adapters until a separately released contract-removal migration
     acceptance:
       - the complete existing Phase 1 and Phase 1.1 contract and E2E suite does not regress

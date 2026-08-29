@@ -19,8 +19,9 @@ Event Hunter 保存 canonical events、可重現 Check Snapshot、Investigation 
 | 功能 | 用途 |
 |---|---|
 | Overview／Smart Search | 使用 Correlation、Trace、Event 或 Aggregate ID 快速定位業務資料 |
-| Event Check | 在同一工作區查看 Timeline、Flow、Expectations、Findings，並保存 immutable Snapshot |
-| Check Models | 查看版本化 Flow Models 與 Global Checks；這是唯一正式判定來源 |
+| Event Check | 在同一工作區查看 Summary、Timeline、Flow、Findings、Cases，並保存 immutable Snapshot |
+| Saved Results | 重新開啟已保存的 Check Snapshot，或建立／加入 Investigation Case |
+| Check Models | 查看版本化 Flow Models、Global Checks、測試情境與 checksum 驗證的原始 YAML；這是唯一正式判定來源 |
 | Ingestion Issues | 查看格式、admission 與 connector technical DLQ 問題的安全摘要 |
 | Investigation Cases | 引用 Snapshot／Evidence，完成指派、Notes、Root cause、Resolution 與 Audit |
 | Scenario Lab | 執行 S1～S14 情境，快速產生可供 Event Check 查詢的資料 |
@@ -77,16 +78,22 @@ bash scripts/dev-up.sh       # 再次啟動並補齊 migration、topics 與 conn
 `S1`、`S12`～`S14` 會呼叫真實的 Order／Payment／Shipping demo services；`S2`～`S11` 使用隔離的
 synthetic topic 模擬缺少事件、重複、亂序、DLQ、配送與退貨等情境。
 
+如果預期事件完全找不到，先確認 Event Check 的 ID 類型與時間範圍；若 producer 已送出但事件未通過
+契約、admission 或 connector 寫入，改到 **Ingestion Issues** 查 safe failure summary。服務在事件送出前
+就當機時，不一定會產生 ingestion issue，應改查 Loki／Tempo 與服務 readiness。
+
 ### 從事件深入調查
 
-在 Event Check 的 Timeline 展開事件後，可直接把目前事件的識別碼與時間範圍帶到 Grafana：
+在 Event Check 用 Correlation ID 查出事件後，切換到 **Timeline**；每一筆事件都會帶著自己的
+Event ID、Correlation ID、Producer 與 Trace ID，並提供紅框標示的觀測入口：
 
-![Event detail observability links](artifacts/screenshots/event-detail-grafana-links-annotated.png)
+![Event Check Timeline 的 Grafana、Loki、Tempo 與 Quality Dashboard 觀測入口](artifacts/screenshots/event-check-observability-links-annotated.png)
 
-- **Grafana Explore**：查詢 ClickHouse 保存的事件資料。
-- **Loki logs**：用 `Correlation ID` 查看相關服務執行過的動作與事件發布紀錄。
-- **Tempo trace**：用 `Trace ID` 查看同一次請求的跨服務呼叫路徑。
-- **Quality Dashboard**：查看該時段的事件品質、admission 與失敗統計。
+- **Grafana Explore**：用 `Event ID` 直接查看 ClickHouse 中保存的該筆 canonical event。
+- **Loki logs**：用 `Producer` 與 `Correlation ID` 查看服務在事件發布前後留下的執行紀錄。
+- **Tempo trace**：用 `Trace ID` 還原同一次請求經過各服務與 Kafka 的跨服務呼叫路徑。
+- **Quality Dashboard**：查看該時段的事件量、重複、延遲、legacy contract violation 與 processing DLQ
+  聚合；目前 admission quarantine 的逐筆安全摘要以 Ingestion Issues 為準。
 
 ## 外部系統如何接入
 
@@ -136,6 +143,7 @@ README 只保留產品入口與快速操作。詳細設計集中在以下文件�
 | [Requirements Index](requirements/README.md) | Phase 1／1.1 規劃、產品契約與 traceability |
 | [Application Architecture](requirements/architecture/application-screaming-architecture.md) | Investigation context 的 DDD 與 screaming architecture |
 | [Data Model](requirements/architecture/data-model.md) | PostgreSQL、ClickHouse 與資料所有權 |
+| [Event Check Product Requirements](requirements/product/event-check-and-check-models-requirements.md) | canonical 功能、Check Model、Snapshot、Case handoff 與 legacy migration |
 | [HTTP OpenAPI](openapi.yaml) | Event Hunter API 的唯一 HTTP 契約 |
 | [Event Contracts](contracts/asyncapi.yaml) | Kafka channels、事件格式與整合契約 |
 | [Frontend README](frontend/README.md) | React 開發、API client、測試與登入模式 |

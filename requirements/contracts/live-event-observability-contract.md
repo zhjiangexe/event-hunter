@@ -2,7 +2,7 @@
 document_id: EH-DOC-CON-006
 status: active
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: live-event-observability
 supersedes: []
@@ -12,13 +12,13 @@ supersedes: []
 
 - 狀態：`implemented`
 - 更新日期：2026-08-28
-- 對應需求：`REQ-EH-001` Business Timeline、`REQ-EH-009` Demonstrable Outbox-to-Timeline Event Pipeline
+- 對應需求：`REQ-EH-001` Event Check Workspace、`REQ-EH-009` Demonstrable Outbox-to-Event-Check Pipeline
 - 適用範圍：`order-service`、`payment-service`、`shipping-service` 的 live transactional-outbox 流程
 
 ## 1. 目的
 
-使用者從 Business Timeline 開啟 `Loki logs` 時，必須能直接讀懂一個 Domain Event 在服務內經歷的動作，
-而不是只看到沒有事件名稱的通用訊息。Logs 也必須能和 Timeline event、Tempo trace 及 Kafka consumer
+使用者從 Event Check Timeline 開啟 `Loki logs` 時，必須能直接讀懂一個 Domain Event 在服務內經歷的動作，
+而不是只看到沒有事件名稱的通用訊息。Logs 也必須能和 canonical event、Tempo trace 及 Kafka consumer
 位置交叉核對。
 
 本契約是 live SDK telemetry 的規格，不適用於 fixture loader 或 Scenario Lab 的 synthetic telemetry。
@@ -64,7 +64,7 @@ business state 與 outbox row；transaction commit 後，由 Debezium 讀取 out
 | `event.id` | 是 | Event envelope 的唯一 ID |
 | `event.type` | 是 | 例如 `OrderCreated` |
 | `event.producer` | 是 | 建立事件的服務 |
-| `correlation.id` | 是 | Business Timeline 的主要串接識別碼 |
+| `correlation.id` | 是 | Event Check 的主要業務串接識別碼 |
 | `aggregate.type`／`aggregate.id` | 是 | 事件所屬 Aggregate |
 | `event.sequence` | 是 | Aggregate 內的序號 |
 | `kafka.topic` | 是 | Outbox 預定路由 topic |

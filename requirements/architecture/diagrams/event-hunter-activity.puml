@@ -61,7 +61,7 @@ else (否)
     :Ingestion Issues 提供統一有界查詢;
     :不保存 raw payload、exception message
     或 stack trace 到一般 read model;
-    :不出現在正常 Business Timeline;
+    :不出現在正常 Event Check Timeline;
   }
   stop
 endif

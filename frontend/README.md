@@ -23,6 +23,8 @@ Event Hunter 的 React 前端，與 Go backend 分離部署，使用 TypeScript 
 ```text
 src/
 ├── main.tsx                       # application shell、routes 與目前頁面組裝
+├── event-check-workspace.tsx      # canonical Event Check、Saved Results 與 Check Models UI
+├── legacy-routes.ts               # deprecated route 的 bounded compatibility mapping
 ├── api.ts                         # Event Hunter openapi-fetch client
 ├── scenario-api.ts                # Scenario Lab client
 ├── feature-guide.ts               # Guide 內容與 feature metadata
@@ -36,14 +38,17 @@ src/
 └── test/setup.ts                  # Vitest DOM setup
 ```
 
-目前頁面仍集中於 `main.tsx`。這是現況，不是長期理想；當 feature 邊界持續成長時，應在不改變
-route／API 行為的前提下逐步抽成 route 與 feature modules。
+Cases、Ingestion Issues、Scenario Lab 與部分 compatibility pages 仍集中於 `main.tsx`；Event Check／Saved
+Results／Check Models 已抽到 `event-check-workspace.tsx`。後續抽模組時不得改變 route、URL state、API 或
+server-owned evaluation behavior。
 
 ## 狀態規則
 
 - 後端資料統一由 TanStack Query 管理。
 - `/api/v1/auth/me` 也是 server state；不要把角色或權限複製到另一個 global store。
-- Timeline 查詢條件放在 URL search params，讓頁面可分享與重新整理後恢復。
+- Event Check 的 identifier、秒級時間窗、Model、tab 與 custom scope 放在 URL search params；Saved Results
+  filters 與 Check Models detail panel 也必須可 deep link、reload 與 back／forward。
+- Check Model 原始 YAML 只在開啟 `Source YAML` panel 時載入，不加入 Registry list query payload。
 - Modal、active tab、sidebar 等短期狀態使用 React local state。
 - 不用 React Context 或 Redux 儲存 server state。
 - React Router loader 不與 TanStack Query 重複載入同一份 API 資料。
@@ -85,4 +90,5 @@ deep-link builder 使用 Vitest／React Testing Library，並以 stubbed `fetch`
 - 不把 access token 放入 `localStorage`。
 - Mutation request 使用 same-origin、`credentials: include` 與後端 CSRF／Origin 防護；不要只靠隱藏按鈕做授權。
 - 不使用 `dangerouslySetInnerHTML` 顯示事件 payload。
-- Timeline 查詢必須有界，並支援取消請求、partial result、empty state 與 retry。
+- Event Check 與 legacy Timeline 查詢都必須有界，並支援取消請求、partial result、empty state 與 retry。
+- 前端不得重算 Check status、Business outcome、Expectations 或 Findings；只呈現後端 deterministic response。

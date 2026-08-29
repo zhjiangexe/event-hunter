@@ -45,11 +45,11 @@ PostgreSQL、ClickHouse、Kafka 與外部 observability service 的可觀察結�
 |---|---|---|
 | Session、RBAC、payload | `auth.feature`、`payload-security.feature`、`investigation-boundaries.feature` | 簽署 session、Viewer mutation deny、ADMIN-only payload、遞迴遮罩 |
 | 案件 control plane | `investigation.feature`、`investigation-boundaries.feature`、`investigation-overview.feature` | ETag、audit、summary、evidence、複合篩選、stable keyset sort、cursor 綁定、狀態機、404、Overview delta |
-| Timeline 與搜尋 | `timeline.feature`、`smart-search.feature`、`saved-search.feature` | bounded query、identifier 判定、personal ownership、preset |
+| Event Check scope 與 legacy 搜尋 | `event-check.feature`、`timeline.feature`、`smart-search.feature`、`saved-search.feature` | 多 identifier bounded scope、Model selection、typed query ownership，以及 legacy adapter 不遺失條件 |
 | Ingestion 問題 | `ingestion-issues.feature` | 三種安全 failure read model、filter、keyset cursor、7 天上限、無 raw/message/stack 欄位 |
-| Journey 與 Pattern | `business-journey.feature`、`pattern.feature` | milestone state、anomaly、immutable registry、同步分析、feedback optimistic lock／RBAC／audit |
-| Canonical Event Check | `event-check.feature` | 五種 identifier、qualifier、Model selection、custom scope、no-data／invalid bounds、Snapshot idempotency、Saved Results 查詢／cursor、Finding feedback、Case handoff、Viewer boundaries |
-| 真實事件管線 | `event-pipeline.feature` | Order API → Outbox → Debezium → Kafka → ClickHouse → Timeline |
+| Legacy Journey／Pattern compatibility | `business-journey.feature`、`pattern.feature` | deprecated endpoint 的 milestone、registry、analysis、feedback 與 audit 不退化；不作 canonical authoring acceptance |
+| Canonical Event Check | `event-check.feature` | 五種 identifier、qualifier、Model selection、custom scope、no-data／invalid bounds、Snapshot idempotency、Saved Results 查詢／cursor、Finding feedback、Case handoff、Viewer boundaries、原始 Check Model YAML checksum |
+| 真實事件管線 | `event-pipeline.feature` | Order API → Outbox → Debezium → Kafka → raw landing／admission → Event Check |
 | 擴充事件情境 | `event-scenarios.feature`、`scenario-lab.feature` | S1～S14 actual result、causation、sequence、retry、failure；S12～S14 必須走 live outbox path |
 | Alert 與品質 | `grafana-alert-webhook.feature`、`grafana-auto-case.feature`、`quality-metrics.feature` | HMAC、dedup、resolved semantics、真實 Grafana 自動建案、quality aggregation |
 | Observability | `observability-deep-links.feature`、`event-scenarios.feature` | Grafana asset UID、Tempo trace、Loki synthetic logs 與 trusted link contract |
@@ -66,8 +66,9 @@ Live service observability 不在 Karate 內重複啟動另一筆完整訂單；
 失敗 phase 與訊息格式由 Go unit test 保護；完整語意見
 [Live Event Observability Contract](../contracts/live-event-observability-contract.md)。
 
-ClickHouse-first optional profile 另由 `e2e/poc/clickhouse-mv-ingestion.feature` 驗證 store-all admission
-classification 與真實 technical DLQ projector；它不加入預設 19-feature suite。故障／恢復與有界 purge 分別由
+正式 ClickHouse-first ingestion 的 infrastructure acceptance 由 `e2e/poc/clickhouse-mv-ingestion.feature`
+驗證 store-all admission classification 與真實 technical DLQ projector；它因會操作基礎設施而不加入預設
+19-feature HTTP suite。故障／恢復與有界 purge 分別由
 `scripts/test-clickhouse-mv-functional-recovery.sh`、`scripts/test-clickhouse-mv-raw-purge.sh` 驗證，避免把
 本機 Docker 中斷注入塞進純 HTTP feature。
 

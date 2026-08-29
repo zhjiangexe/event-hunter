@@ -20,10 +20,11 @@ Event Check 的 migration 已由 `EH-ECM-003` 實作；精確欄位、一致性�
 
 ```text
 PostgreSQL
-└── Control Plane：設定、案件、權限關聯、Workflow 關聯、稽核
+└── Control Plane：案件、Check Snapshots、Findings、Saved Queries、Scenario runs、稽核
 
 ClickHouse
-└── Event Plane：原始事件、品質指標、時間線與分析 Read Model
+├── Restricted raw landing：Kafka record，7 天、default-deny
+└── Event Plane：canonical events、processing attempts、safe failures、品質 Read Models
 
 Grafana OSS
 └── Observability／Query Plane：Dashboard、Explore、Correlations、Alerting 與技術資料 deep link
@@ -52,17 +53,18 @@ Evidence Archive。PostgreSQL 保存 archive catalog；DuckDB 是 typed bounded 
 | Context | PostgreSQL 表 | ClickHouse 表 | 寫入責任 | MVP 邊界 |
 |---|---|---|---|---|
 | `event_governance` | `event_definitions`、`event_schema_versions`、`topic_registrations`、`topic_subscriptions` | 無 | 既有 Schema Registry／Kafka tooling；未來才由治理 API 管理 | 暫先不做 Event Hunter 控制面 |
-| `runtime_quality` | 無 | `event_ingestion_failures`、`event_quality_metrics` | Redpanda Connect／品質聚合工作；Grafana Dashboard／Alerting 查詢 | MVP supporting capability；Event Hunter 不自建 Quality Console |
-| `investigation` | `investigation_cases`、`pattern_findings`、`case_evidence`、`grafana_alert_receipts`、`audit_logs` | 讀取 `forensics_events`、`event_processing_attempts` 與 `event_quality_metrics` | Event Hunter API／Pattern Engine／Grafana Alert Intake；選用 Temporal Activity | MVP |
-| `event_check` | `check_snapshots`、`check_snapshot_event_refs`、`check_snapshot_relations`、`check_findings`、`check_finding_feedback`、`investigation_check_snapshots` | 讀取 canonical `forensics_events`；一般 evaluation 不落庫 | Event Check API／deterministic evaluators | canonical；migration、workspace、compatibility、全量 E2E 與 restart persistence 已完成 |
+| `runtime_quality` | 無 | safe failure tables、`event_quality_metrics` | ClickHouse MVs／technical projector／品質聚合工作；Grafana 與 Ingestion Issues 查詢 | MVP supporting capability；Event Hunter 不自建通用 Quality Console |
+| `investigation` | `investigation_cases`、`case_notes`、`case_evidence`、`grafana_alert_receipts`、`saved_searches`、`scenario_runs`、`audit_logs`；legacy `pattern_*` | 讀取 canonical events／attempts／quality／safe failures | Event Hunter API／Grafana Alert Intake／Scenario Lab；選用 Temporal Activity | canonical Cases 與 Ingestion Issues；Pattern/Journey 僅 compatibility |
+| `event_check` | `check_snapshots`、`check_snapshot_event_refs`、`check_snapshot_relations`、`check_findings`、`check_finding_feedback`、`investigation_check_snapshots` | 讀取 `canonical_forensics_events` 與 `canonical_event_processing_attempts`；一般 evaluation 不落庫 | Event Check API／deterministic evaluators | canonical；migration、workspace、compatibility、全量 E2E 與 restart persistence 已完成 |
 | `replay_verification` | `replay_sessions` | 讀取事件與離線比較結果 | Temporal Activity／Sandbox Worker | Phase 2／3，暫先不做 |
 
 Context 不直接讀取其他 Context 的 ORM Model 或資料表。跨 Context 的資料交換使用
 integration contract、唯讀 Query Port 或 Domain Event；不使用跨 Context SQL JOIN。
 
-MVP migration 只建立 `investigation_cases`、`pattern_findings`、`case_evidence`、`grafana_alert_receipts`、`audit_logs`，以及由事件管線使用的
-ClickHouse `forensics_events`／`event_processing_attempts`／`event_ingestion_failures`／`event_quality_metrics`。Event Catalog、Topic Registry 與 Replay
-資料表保留作為未來設計，但標示為「暫先不做」或 Phase 2／3，不應在 MVP 建立 Event Hunter CRUD。
+目前 PostgreSQL migration 已建立 Cases、Notes、Evidence、Grafana receipts、Saved Searches、Scenario runs、
+Audit、legacy Pattern data，以及 Event Check Snapshot／Finding／Case link tables。ClickHouse migration 已建立
+legacy promoted tables、restricted raw landing、admission quarantine、technical failure、quality metrics 與兩個
+canonical views。Event Catalog、Topic Registry 與 Replay 資料表仍只是未來設計，不應在目前 runtime 建立 CRUD。
 
 Event Check 不改寫上述 Phase 1 歷史。`EH-ECM-006` 已完成 expand／compatibility 與 canonical product
 cutover；Journey／Pattern bounded legacy reads 仍保留。舊 direct Case／Pattern schema 的實體 contract
@@ -174,9 +176,10 @@ OPEN → INVESTIGATING → WAITING_APPROVAL → RESOLVED → CLOSED
 
 Indexes：`case_no` unique、`correlation_id`、`status`、`assignee`、`created_at`。
 
-### 3.6 `pattern_findings`（MVP）
+### 3.6 `pattern_findings`（legacy compatibility）
 
-每次確定性 Pattern 分析產生的不可變 finding。若相同案件、Pattern、版本與查詢視窗重試，
+改版前每次確定性 Pattern 分析產生的不可變 finding。新查詢使用 `check_findings`；本表只支援 deprecated
+Pattern／Case compatibility。若相同案件、Pattern、版本與查詢視窗重試，
 以 `idempotency_key` 避免重複寫入；新的分析視窗或 Pattern 版本建立新 row，不覆寫舊 finding。
 
 | 欄位 | 建議型別 | 說明 |
@@ -305,11 +308,14 @@ RBAC 與 legacy backfill 規則見 [Event Check Target Design](event-check-targe
 
 ## 4. ClickHouse Event Plane
 
-### 4.1 `forensics_events`（MVP data plane；由 Kafka pipeline 寫入）
+### 4.1 Canonical event read path（正式預設）
 
-由 Kafka Connect／Redpanda Connect 從 Domain Topic 寫入的 canonical event。此表 append-only。
+官方 ClickHouse Kafka Connect Sink 先將 Domain Topic record 寫入 restricted raw landing，ClickHouse
+Materialized View 再依 admission contract 分流到 promoted event 或 quarantine。Runtime API 與 Grafana
+一律查 `canonical_forensics_events` view；`forensics_events` 是舊 promoted table，只保留 migration／rollback
+證據，沒有正式 writer。Promoted event append-only。
 
-`forensics_events` 代表 Kafka 中的事件紀錄，不代表某個 Consumer 已成功處理，也不包含單一的
+Canonical promoted event 代表 Kafka 中通過 admission 的事件紀錄，不代表某個 Consumer 已成功處理，也不包含單一的
 重試次數。同一事件可以被多個 Consumer Group 各自重試，因此 Consumer 的處理嘗試必須以
 `consumer_group_id` 為範圍另行觀測；若來源沒有提供 attempt／錯誤資訊，Event Hunter 不應從
 重複的 `event_id` 自行推斷為重試。
@@ -339,8 +345,9 @@ payload, ingested_at
 
 ### 4.1.1 `event_processing_attempts`（MVP supporting read model）
 
-若 MVP 要在 Business Timeline 顯示 Consumer 重試，另由 Consumer 的 Log／Trace／Retry Topic
-遙測管線寫入此表；它不是 Event Hunter 的交易 Aggregate，也不取代 `forensics_events`。
+若 Event Check Timeline 要顯示 Consumer 重試，consumer 必須送出 processing-attempt event，經相同
+Kafka Connect raw landing + Materialized View admission 寫入 promoted table，runtime 由
+`canonical_event_processing_attempts` 查詢。它不是 Event Hunter 的交易 Aggregate，也不取代 domain event。
 
 ```text
 attempt_id, event_id, event_type, correlation_id, trace_id,
@@ -355,13 +362,14 @@ started_at, completed_at, observed_at
 - `attempt_id` 是來源產生的全域冪等識別碼；相同 `attempt_id` 的 sink redelivery 只計算一次。
 - 原始事件與 Retry Topic 可能有不同的 Kafka offset，必須保留來源參照。
 - `processing_status` 可使用 `STARTED`、`FAILED`、`RETRY_SCHEDULED`、`SUCCEEDED`、`DLQ`。
-- 若沒有這個 read model 或等價的 Grafana／OTel 來源，Timeline 只能顯示事件本身，不能宣稱已辨識重試。
+- 若沒有這個 read model 或等價的 Grafana／OTel 來源，Event Check 只能顯示事件本身，不能宣稱已辨識重試。
 
-### 4.1.2 `event_ingestion_failures`（MVP supporting read model）
+### 4.1.2 Ingestion failure read models
 
-Redpanda Connect 無法驗證或映射事件時，將錯誤 metadata 寫入此表，原始訊息則進入保存 7 天且
-權限受限的 Kafka DLQ。ClickHouse 只保存來源 topic／partition／offset、可解析的事件識別碼、錯誤
-類型、摘要與 `payload_sha256`，不保存 invalid raw payload。
+`/ingestion-issues` 將三種安全 failure metadata 合併查詢：歷史 `event_ingestion_failures` contract
+validation、event／attempt admission quarantine，以及 Kafka Connect technical DLQ projector 的
+`ingestion_technical_failures`。原始 record 只存在 restricted raw landing 或受控 DLQ；一般 API 與
+`grafana_reader` 都沒有 raw database 權限，也不回傳 exception message／stack trace。
 
 ```text
 failure_id, source_topic, source_partition, source_offset,
@@ -369,8 +377,8 @@ event_id, event_type, correlation_id, error_type, error_code,
 error_summary, payload_sha256, failed_at, observed_at
 ```
 
-此表提供 `schema_violation_count` 與 ingestion DLQ 的確定性來源。相同 transport delivery identity
-的重送只計算一次，不使用 row-level lock。
+這些 read models 提供 schema/admission/technical failure 的確定性來源。相同 transport delivery identity
+的重送只計算一次，不使用 row-level lock。業務上合法的失敗事件仍進 Event Check，不應出現在此處。
 
 ### 4.2 `event_quality_metrics`（MVP data plane；Grafana 查詢）
 
@@ -390,14 +398,14 @@ consumer_lag_messages, max_processing_latency_ms, source
 
 資料語意：
 
-- `event_count`、`duplicate_count`、`schema_violation_count`、`out_of_order_count`、`dlq_count`：只統計該窗口內的觀測值。
+- `event_count`、`duplicate_count`、`schema_violation_count`、`out_of_order_count`、`dlq_count`：只統計該窗口內的觀測值；目前 `schema_violation_count` 仍只聚合 legacy `event_ingestion_failures`，ClickHouse admission quarantine 先由 Ingestion Issues 呈現。
 - `max_event_delay_ms`：窗口內最大的 `ingested_at - occurred_at`，代表事件到達分析平台的延遲；不是 Consumer lag。
 - `consumer_lag_messages`：窗口結束時，Kafka 最新 offset 與該 Consumer Group committed offset 的差；沒有 broker 指標來源時為 `NULL`。
 - `max_processing_latency_ms`：窗口內最大的 Consumer `completed_at - started_at`；沒有 processing-attempt 遙測時為 `NULL`。
 - `source`：產生資料的確定性工作版本，例如 `quality-worker-v1`，供調查時追溯計算來源。
 
-第一版建議使用 1 分鐘 tumbling window。事件內生指標可從 `forensics_events` 與
-`event_processing_attempts` 計算；Consumer lag 必須另外讀取 Redpanda／Kafka group metrics，不能從
+目前使用 1 分鐘 tumbling window。事件內生指標從 canonical events 與 processing attempts 計算；
+Consumer lag 必須另外讀取 Redpanda／Kafka group metrics，不能從
 重複事件推測。聚合器以 append-only 寫入 ClickHouse，Grafana 再以 SQL 做 5 分鐘、1 小時等查詢，
 不要把每個品質指標寫成 PostgreSQL row update。
 
@@ -420,9 +428,9 @@ consumer_lag_messages, max_processing_latency_ms, source
 | `replay_sessions` | 更新 Replay 狀態與核准資訊 | `lock_version` |
 | `grafana_alert_receipts` | append-only；`dedup_key` 防止 webhook 重送副作用 | 不需要 |
 | `audit_logs` | append-only | 不需要 |
-| `forensics_events` | append-only | 不使用 row-level lock |
-| `event_processing_attempts` | append-only；查詢依 `attempt_id` 去除 sink redelivery | 不使用 row-level lock |
-| `event_ingestion_failures` | append-only；查詢依來源 topic／partition／offset 去重 | 不使用 row-level lock |
+| canonical promoted events | append-only；view 依 transport identity 去除 sink redelivery | 不使用 row-level lock |
+| canonical processing attempts | append-only；查詢依 `attempt_id` 去除 sink redelivery | 不使用 row-level lock |
+| ingestion failure read models | append-only；查詢依來源 topic／partition／offset 去重 | 不使用 row-level lock |
 | `event_quality_metrics` | 追加事件或聚合結果 | 不使用 row-level lock |
 
 標準欄位：
@@ -460,7 +468,8 @@ Go Repository 使用 `pgx`／`sqlc` 將 `WHERE id = $1 AND lock_version = $2` �
 
 1. 依檔名執行 [`backend/migrations/postgres`](../../backend/migrations/postgres)：control plane baseline 與 Grafana receipt idempotency。
 2. 執行 [`backend/migrations/clickhouse`](../../backend/migrations/clickhouse) 內的 DDL：`MergeTree`、partition、排序鍵與 TTL；唯讀查詢帳號由部署設定建立。
-3. 建立 canonical event fixture，驗證 Kafka Sink 寫入 `forensics_events` 的欄位映射。
+3. 建立 canonical event fixture，驗證 Kafka Sink → restricted raw landing → Materialized View admission →
+   `canonical_forensics_events` 的欄位映射與 failure routing。
 4. 為每個 Repository 補 Integration Test：交易提交、版本衝突、查詢時間範圍與 PII 遮罩。
 5. migration 只能透過 CI／部署流程執行，不在應用程式啟動時偷偷修改 Schema。
 

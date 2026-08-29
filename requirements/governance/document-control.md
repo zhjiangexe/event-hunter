@@ -2,7 +2,7 @@
 document_id: EH-DOC-GOV-003
 status: active
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: documentation-governance
 supersedes: []
@@ -73,6 +73,10 @@ PlantUML、PNG 與 HTML 等 review assets 不重複嵌入 metadata，改由
 3. 計畫完成後移入 `delivery/archive/`，狀態改成 `completed`，但不刪除需求 ID 與驗收證據。
 4. 架構決策改變時新增 ADR；舊 ADR 改成 `superseded` 並填入 `supersedes`／replacement 關係。
 5. 完成前執行 `python3 scripts/validate-contracts.py`，檢查 catalog、metadata、本地連結與契約一致性。
+
+Canonical product cutover 後，舊 route／API 尚未物理移除不代表其產品文件仍是 active source of truth。
+Legacy behavior 文件應標為 `superseded`，現行文件只在 migration、compatibility 或 rollback 段落引用；
+implementation history 可以保留舊名稱，但必須有歷史／取代說明。
 
 ## README、Guide 與 Runbook 的邊界
 

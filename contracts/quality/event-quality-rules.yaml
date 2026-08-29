@@ -26,29 +26,30 @@ delivery_identity:
 
 metrics:
   - column: event_count
-    source: forensics_events
+    source: canonical_forensics_events
     definition: count distinct delivery identities in the window
 
   - column: duplicate_count
-    source: forensics_events
+    source: canonical_forensics_events
     definition: count event_ids that occur at more than one distinct delivery identity in the window
     excludes: repeated ClickHouse rows with the same delivery identity
 
   - column: schema_violation_count
     source: event_ingestion_failures
-    definition: count distinct delivery identities whose error_type is SCHEMA_VIOLATION
+    definition: count distinct legacy contract-validation delivery identities whose error_type is SCHEMA_VIOLATION
+    known_gap: current ClickHouse admission quarantine is visible in Ingestion Issues but is not yet folded into this aggregate metric
 
   - column: out_of_order_count
-    source: forensics_events
+    source: canonical_forensics_events
     definition: count new event_ids whose sequence is less than or equal to the prior maximum sequence for the same aggregate_type and aggregate_id in Kafka offset order
     note: a sequence gap is a missing-sequence candidate and is not counted as out-of-order
 
   - column: dlq_count
-    sources: [event_ingestion_failures, event_processing_attempts]
+    sources: [event_ingestion_failures, canonical_event_processing_attempts]
     definition: ingestion DLQ deliveries plus distinct event_id and consumer_group_id pairs whose terminal processing_status is DLQ
 
   - column: max_event_delay_ms
-    source: forensics_events
+    source: canonical_forensics_events
     definition: maximum of non-negative ingested_at minus occurred_at in milliseconds
 
   - column: consumer_lag_messages
@@ -57,7 +58,7 @@ metrics:
     unavailable_value: null
 
   - column: max_processing_latency_ms
-    source: event_processing_attempts
+    source: canonical_event_processing_attempts
     definition: maximum completed_at minus started_at in milliseconds for completed attempts
     unavailable_value: null
 
@@ -95,7 +96,7 @@ grafana_alert_intake_eligibility:
   aggregate_alert_without_correlation_id: remain_in_grafana_only
   business_alert_rules:
     - id: dlq-business-investigation
-      source: event_processing_attempts
+      source: canonical_event_processing_attempts
       dimension: [event_id, consumer_group_id]
       terminal_condition: latest_processing_status_is_DLQ
       correlation_id_source: latest_attempt_correlation_id

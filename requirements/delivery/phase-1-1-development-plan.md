@@ -2,7 +2,7 @@
 document_id: EH-DOC-DEL-002
 status: in_progress
 owner: product
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: phase-1-1-delivery
 supersedes: []
@@ -25,27 +25,38 @@ supersedes: []
   `requirements/governance/traceability.yaml`、`requirements/delivery/implementation-plan.yaml`、OpenAPI、資料契約與
   Karate acceptance feature。
 
+### 2026-08-29 canonical 改版附錄
+
+`EH-ECM-000`～`EH-ECM-006` 完成後，產品入口已收斂為 Event Check、Saved Results、Check Models、
+Investigation Cases、Ingestion Issues、Scenario Lab 與 Guide。下文 Wave A／B／C 中的 Business Timeline、
+Business Journey、Journey Profile、Pattern Library 名稱是當時的交付歷史；只有標示 compatibility 的舊
+route／API 仍可使用，不得再由這些段落建立新的 authoring source 或主要 UI。
+
+目前剩餘產品化工作只有目標環境 production hardening、正式身分、HA／DR 與資料治理決策；canonical
+功能完成狀態以 `implementation-plan.yaml`、產品範圍以 `project-scope.yaml` 為準。
+
 ## 2. 產品定位
 
 Event Hunter 的資料與鑑識核心是 **event-centric**：事件是跨服務、可排序、可追蹤且可保存 checksum
-的事實來源；Timeline、Pattern、Evidence 與 OpenTelemetry trace/log 都以事件識別碼及關聯識別碼串接。
+的事實來源；Event Check、Check Model、Snapshot／Evidence 與 OpenTelemetry trace/log 都以事件識別碼及
+關聯識別碼串接。
 
 但是，**底層以事件為證據，不代表使用者只能從事件角度操作**。同一批 canonical events 可以提供多種
 不互相衝突的入口：
 
 | 視角 | 使用者最先提出的問題 | 適合對象 | Event Hunter 的呈現方式 |
 |---|---|---|---|
-| Event-centric | 這個 event 發生了什麼？前後有哪些 event？ | 平台／後端工程師 | Timeline、event detail、Kafka coordinates、trace/log deep links |
-| Order／Aggregate-centric | 這張訂單目前走到哪裡？缺了哪個業務里程碑？ | 客服、營運、領域工程師 | 依 aggregate/correlation 分組的 Business Journey |
-| Transaction／Journey-centric | 從下單到付款、出貨，整段流程在哪裡中斷？ | 營運、SRE | 跨服務 milestone、duration、expected/actual |
+| Event-centric | 這個 event 發生了什麼？前後有哪些 event？ | 平台／後端工程師 | Event Check Timeline、event detail、Kafka coordinates、trace/log deep links |
+| Order／Aggregate-centric | 這張訂單目前走到哪裡？缺了哪個合理步驟？ | 客服、營運、領域工程師 | Event Check + 適用的 Flow Model |
+| Transaction／Flow-centric | 從下單到付款、出貨，整段流程在哪裡中斷？ | 營運、SRE | Flow result、Expectations、Findings |
 | Investigation-centric | 哪些問題要先處理？誰負責？目前結論是什麼？ | Incident commander、支援團隊 | Case queue、owner、notes、severity、SLA、Evidence |
-| Service-centric | 哪個 producer、consumer 或版本最常出錯？ | 服務 owner、SRE | 依 service/event type/pattern 聚合，並 deep link 到 Grafana |
+| Service-centric | 哪個 producer、consumer 或版本最常出錯？ | 服務 owner、SRE | Ingestion Issues、quality aggregates 與 Grafana deep links |
 | Outcome-centric | 有多少付款成功卻未出貨？影響多少訂單？ | 產品、營運主管 | Overview KPI、異常分布與趨勢 |
 | Quality／SLO-centric | 資料完整嗎？延遲、重複、DLQ 是否惡化？ | 平台團隊 | Data freshness、quality aggregates、Grafana dashboard |
 
 建議產品策略是：
 
-> 事件作為可信證據層；Order／Journey 作為主要探索入口；Investigation 作為協作入口；
+> 事件作為可信證據層；Event Check／Flow Model 作為主要探索入口；Investigation 作為協作入口；
 > Service 與 Quality 視角交由聚合摘要和既有 Grafana 完成。
 
 這樣不需要建立另一套非事件系統，也不會把 Event Hunter 變成通用 APM、Incident Management 或
@@ -54,11 +65,11 @@ Workflow 平台。
 ## 3. Phase 1.1 目標
 
 1. 使用者不必先知道 Correlation ID，也能發現目前值得調查的問題。
-2. 從任意已知 ID、訂單或告警快速進入完整 Business Journey。
+2. 從任意已知 ID、訂單或告警快速進入有界 Event Check 與適用 Flow Model。
 3. 讓案件具備最低限度的分工、紀錄、篩選與交接能力。
-4. 讓 Pattern 的命中價值、誤報與測試覆蓋可衡量。
+4. 讓 Check Finding 的判定來源、人工回饋與 fixture 覆蓋可重現。
 5. 任何空結果都能區分「真的沒有事件」與「資料來源延遲或不可用」。
-6. Grafana 告警、Pattern 分析、案件與 Evidence 形成可追蹤的調查閉環。
+6. Grafana 告警、Event Check Snapshot、案件與 Evidence 形成可追蹤的調查閉環。
 7. 增加真實服務失敗情境，持續驗證 Kafka、ClickHouse 與 OpenTelemetry vertical slice。
 8. 完成正式 CI、安全、備份、保留與維運準備。
 

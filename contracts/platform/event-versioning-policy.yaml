@@ -19,20 +19,35 @@ rules:
 ingestion_behavior:
   invalid_json:
     error_type: INVALID_JSON
-    destination_topic: event-hunter.ingestion-failures.dlq
-    clickhouse_table: event_ingestion_failures
+    disposition: ADMISSION_QUARANTINE
+    raw_table: event_hunter_poc.poc_event_landing_raw
+    safe_summary_table: poc_event_admission_failures
   unknown_event_type:
     error_type: UNKNOWN_EVENT_TYPE
-    destination_topic: event-hunter.ingestion-failures.dlq
-    clickhouse_table: event_ingestion_failures
+    disposition: SEARCHABLE_WITH_WARNINGS
+    canonical_view: canonical_forensics_events
+    quality_flag: UNKNOWN_EVENT_TYPE
   unknown_event_version:
     error_type: UNKNOWN_EVENT_VERSION
-    destination_topic: event-hunter.ingestion-failures.dlq
-    clickhouse_table: event_ingestion_failures
+    disposition: SEARCHABLE_WITH_WARNINGS
+    canonical_view: canonical_forensics_events
+    quality_flag: UNKNOWN_EVENT_VERSION
   schema_violation:
     error_type: SCHEMA_VIOLATION
-    destination_topic: event-hunter.ingestion-failures.dlq
-    clickhouse_table: event_ingestion_failures
+    disposition: ADMISSION_QUARANTINE
+    raw_table: event_hunter_poc.poc_event_landing_raw
+    safe_summary_table: poc_event_admission_failures
+
+technical_sink_failure:
+  error_type: CONNECTOR_TASK_FAILURE
+  destination_topic: event-hunter.poc-clickhouse-sink.dlq
+  safe_summary_table: ingestion_technical_failures
+  raw_payload_exposed_to_api_or_grafana: false
+
+legacy_contract_validation:
+  status: compatibility_only
+  destination_topic: event-hunter.ingestion-failures.dlq
+  clickhouse_table: event_ingestion_failures
 
 dlq_policy:
   retention: P7D
@@ -41,3 +56,5 @@ dlq_policy:
   production_redrive: forbidden
   clickhouse_stores_raw_payload: false
   clickhouse_stores_payload_sha256: true
+  normal_api_reads_raw_payload: false
+  grafana_reader_reads_raw_payload: false

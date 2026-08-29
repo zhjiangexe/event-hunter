@@ -10,15 +10,17 @@ document_control:
   supersedes: []
 decision_status: accepted
 decision_date: 2026-08-20
-phase: mvp
+phase: phase-1.1-canonical
 
 sources_of_truth:
   scope: requirements/product/project-scope.yaml
   http_api: openapi.yaml
   event_api: contracts/asyncapi.yaml
   event_schemas: contracts/events
-  pattern_contracts: contracts/patterns
-  journey_profile_contracts: contracts/journeys
+  check_model_contracts: contracts/check-models
+  event_check_contracts: contracts/event-check
+  legacy_pattern_contracts: contracts/patterns
+  legacy_journey_profile_contracts: contracts/journeys
   platform_contracts: contracts/platform
   quality_contracts: contracts/quality
   integration_contracts: contracts/integrations
@@ -35,16 +37,16 @@ sources_of_truth:
 
 mvp_capabilities:
   - id: REQ-EH-001
-    name: Business Timeline
+    name: Event Check Workspace and Canonical Timeline
     required: true
   - id: REQ-EH-002
     name: Investigation Case
     required: true
   - id: REQ-EH-003
-    name: Deterministic Domain Pattern
+    name: Versioned Check Models and Deterministic Evaluation
     required: true
   - id: REQ-EH-004
-    name: Evidence Bundle JSON Manifest
+    name: Immutable Check Snapshot and Evidence References
     required: true
   - id: REQ-EH-005
     name: Investigation Summary Read Model
@@ -60,7 +62,7 @@ mvp_capabilities:
     required: true
     event_hunter_custom_ui: false
   - id: REQ-EH-009
-    name: Demonstrable Outbox-to-Timeline Event Pipeline
+    name: Demonstrable Outbox-to-Event-Check Pipeline
     required: true
   - id: REQ-EH-010
     name: Investigation Overview and Source Health
@@ -69,19 +71,25 @@ mvp_capabilities:
     name: Deterministic Smart Search Identification
     required: true
   - id: REQ-EH-012
-    name: Read-only Business Journey
+    name: Check Model Flow Evaluation
     required: true
   - id: REQ-EH-013
-    name: Personal Saved Searches and Built-in Presets
+    name: Event Check Query Shortcuts and Saved Results
     required: true
   - id: REQ-EH-014
     name: Investigation Case Collaboration
     required: true
   - id: REQ-EH-015
-    name: Timeline Event Evidence Attachment
+    name: Event Check Snapshot-to-Case Handoff
     required: true
   - id: REQ-EH-016
     name: Event Hunter Guide and External System Integration Onboarding
+    required: true
+  - id: REQ-EH-017
+    name: Safe Ingestion Issues Read Model
+    required: true
+  - id: REQ-EH-018
+    name: Deterministic Scenario Lab and Run History
     required: true
 
 accepted_product_evolution:
@@ -139,6 +147,10 @@ authentication:
   roles:
     VIEWER:
       permissions:
+        - event_check:read
+        - check_model:read
+        - check_snapshot:read
+        - ingestion_issue:read
         - timeline:read
         - investigation:read
         - pattern:read
@@ -146,6 +158,8 @@ authentication:
     INVESTIGATOR:
       inherits: VIEWER
       permissions:
+        - check_snapshot:create
+        - check_finding:classify
         - investigation:create
         - investigation:update
         - investigation:analyze
@@ -199,7 +213,9 @@ event_pipeline:
   service_topology: contracts/demo-services/service-topology.yaml
   outbox_cdc: debezium
   broker: redpanda
-  clickhouse_sink: redpanda-connect
+  clickhouse_sink: clickhouse-kafka-connect
+  admission: clickhouse-materialized-views
+  safe_failure_projection: technical-dlq-projector
   kafka_key: correlationId
   sequence_scope: [aggregateType, aggregateId]
   contracts:
@@ -222,29 +238,36 @@ event_contract:
   schema: json_schema_2020_12
   asyncapi_version: 3.0.0
   canonical_correlation_field: correlationId
-  required_event_types:
+  known_event_types:
     - OrderCreated
-    - PaymentCompleted
-    - ShipmentCreated
-  pattern_exclusion_event_types:
     - OrderCancelled
+    - PaymentCompleted
+    - PaymentFailed
     - PaymentRefunded
     - PaymentVoided
+    - ReturnRequested
+    - ReturnReceived
+    - ShipmentCreated
+    - ShipmentDispatched
+    - ShipmentInTransit
+    - ShipmentDelivered
+    - ShipmentDispatchFailed
   versioning_policy: contracts/platform/event-versioning-policy.yaml
   identity_time_policy: contracts/platform/identity-time-policy.yaml
 
-pattern_registry:
-  runtime_source: go_code
+check_model_registry:
+  authoring_source: contracts/check-models
+  runtime_source: generated_go_registry
   mutable_at_runtime: false
   list_api: read_only
   llm_enabled: false
-  first_pattern:
-    id: payment-completed-without-shipment
-    version: 1
-    window: PT5M
-    severity: HIGH
+  model_kinds: [FLOW, GLOBAL]
+  source_yaml_api: lazy_build_time_embedded_checksum_verified
+  legacy_sources: [contracts/journeys, contracts/patterns]
 
 evidence_bundle:
+  canonical_saved_result: check_snapshot
+  persistence_tables: [check_snapshots, check_snapshot_event_refs, check_snapshot_relations, check_findings]
   format: json_manifest
   canonicalization: rfc8785_jcs
   checksum: sha256
@@ -254,22 +277,30 @@ evidence_bundle:
   zip_export: deferred
   pdf_export: deferred
 
-phase_1_frontend:
+canonical_frontend:
   delivery_plan: requirements/delivery/archive/phase-1-delivery-plan.md
   required_routes:
     - /login
-    - /timeline
+    - /dashboard
+    - /event-check
+    - /event-check/saved-results
+    - /check-models
     - /investigations
-    - /patterns
+    - /ingestion-issues
+    - /scenario-lab
+    - /guide
   required_capabilities:
-    - bounded_basic_and_advanced_timeline_search
+    - bounded_multi_identifier_event_check
+    - deterministic_flow_and_global_check_evaluation
+    - immutable_check_snapshot_and_saved_results
+    - check_model_registry_with_lazy_source_yaml
     - investigation_list_cursor_pagination
-    - investigation_detail_summary_timeline_patterns_and_evidence
-    - deterministic_pattern_analysis
-    - read_only_pattern_library
+    - investigation_detail_summary_timeline_snapshots_and_evidence
+    - safe_ingestion_issue_search
     - grafana_explore_dashboard_and_alerting_deep_links
     - tempo_trace_and_loki_log_deep_links
     - trusted_external_origin_allowlist
+  compatibility_routes: [/timeline, /journey, /journey-profiles, /patterns, /saved-searches]
   prototype_parity_non_blocking: []
   hidden_until_later_phase:
     - temporal_workflow_tab
@@ -281,7 +312,13 @@ phase_1_1:
   development_plan: requirements/delivery/phase-1-1-development-plan.md
   required_routes:
     - /dashboard
+    - /event-check
+    - /event-check/saved-results
+    - /check-models
     - /investigations
+    - /ingestion-issues
+    - /scenario-lab
+    - /guide
   required_capabilities:
     - server_side_investigation_overview
     - canonical_source_health_states
@@ -294,15 +331,19 @@ phase_1_1:
     - optimistic_case_collaboration_updates
     - bounded_timeline_event_evidence_attachment
     - idempotent_event_reference_persistence
+    - canonical_event_check_and_check_models
+    - immutable_saved_results_and_case_handoff
+    - safe_ingestion_failure_read_model
+    - scenario_lab_run_history
 
 non_functional_requirements:
   event_volume_per_day: 1000000
   clickhouse_retention_days: 90
-  timeline_default_window: PT24H
-  timeline_max_window: P7D
-  timeline_default_limit: 1000
-  timeline_max_limit: 10000
-  timeline_p95_ms: 2000
+  event_check_default_window: PT72H
+  event_check_max_window: P7D
+  event_check_default_limit: 1000
+  event_check_max_limit: 10000
+  event_check_p95_ms: 2000
   investigation_summary_p95_ms: 5000
   concurrent_investigators: 20
 
@@ -328,10 +369,11 @@ local_development:
     - demo-payment-service
     - demo-shipping-service
     - kafka-connect
-    - redpanda-connect
-    - redpanda-connect-attempts
+    - kafka-connect-clickhouse-poc
+    - technical-dlq-projector
+    - quality-worker
+    - event-lab
   intentionally_not_yet_in_compose:
-    - event-quality-worker-scheduler
     - temporal-worker
 
 deferred:

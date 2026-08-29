@@ -15,7 +15,7 @@ documents:
   - {document_id: EH-DOC-IDX-001, path: requirements/README.md, status: active, owner: product, source_of_truth: true, canonical_topic: requirements-index}
   - {document_id: EH-DOC-PROD-001, path: requirements/product/project-scope.yaml, status: active, owner: product, source_of_truth: true, canonical_topic: product-scope}
   - {document_id: EH-DOC-PROD-002, path: requirements/product/event-check-and-check-models-requirements.md, status: active, owner: product, source_of_truth: true, canonical_topic: event-check-and-check-models-product-requirements}
-  - {document_id: EH-DOC-PROT-001, path: requirements/product/prototypes/prototype-phase-matrix.yaml, status: reference, owner: product, source_of_truth: true, canonical_topic: prototype-phase-mapping}
+  - {document_id: EH-DOC-PROT-001, path: requirements/product/prototypes/prototype-phase-matrix.yaml, status: reference, owner: product, source_of_truth: false, canonical_topic: prototype-phase-mapping}
   - {document_id: EH-ASSET-PROT-001, path: requirements/product/prototypes/ui-prototype.html, status: reference, owner: product, source_of_truth: false, canonical_topic: historical-ui-prototype}
 
   - {document_id: EH-DOC-ARCH-001, path: requirements/architecture/current-architecture.md, status: active, owner: platform, source_of_truth: true, canonical_topic: current-runtime-architecture}
@@ -28,14 +28,14 @@ documents:
   - {document_id: EH-ASSET-ARCH-003, path: requirements/architecture/diagrams/event-hunter-activity.puml, status: reference, owner: platform, source_of_truth: false, canonical_topic: activity-diagram-source}
   - {document_id: EH-ASSET-ARCH-004, path: requirements/architecture/diagrams/event-hunter-activity.png, status: reference, owner: platform, source_of_truth: false, canonical_topic: activity-diagram-render}
 
-  - {document_id: EH-DOC-CON-001, path: requirements/contracts/business-journey-profile-contract.md, status: active, owner: product, source_of_truth: true, canonical_topic: business-journey-profile}
+  - {document_id: EH-DOC-CON-001, path: requirements/contracts/business-journey-profile-contract.md, status: superseded, owner: product, source_of_truth: false, canonical_topic: business-journey-profile}
   - {document_id: EH-DOC-CON-002, path: requirements/contracts/case-collaboration-contract.md, status: active, owner: product, source_of_truth: true, canonical_topic: investigation-case-collaboration}
-  - {document_id: EH-DOC-CON-003, path: requirements/contracts/historical-pattern-analysis-contract.md, status: active, owner: backend, source_of_truth: true, canonical_topic: historical-pattern-analysis}
+  - {document_id: EH-DOC-CON-003, path: requirements/contracts/historical-pattern-analysis-contract.md, status: superseded, owner: backend, source_of_truth: false, canonical_topic: historical-pattern-analysis}
   - {document_id: EH-DOC-CON-004, path: requirements/contracts/investigation-incident-window-contract.md, status: active, owner: backend, source_of_truth: true, canonical_topic: investigation-incident-window}
   - {document_id: EH-DOC-CON-005, path: requirements/contracts/investigation-list-query-contract.md, status: active, owner: backend, source_of_truth: true, canonical_topic: investigation-list-query}
   - {document_id: EH-DOC-CON-006, path: requirements/contracts/live-event-observability-contract.md, status: active, owner: platform, source_of_truth: true, canonical_topic: live-event-observability}
-  - {document_id: EH-DOC-CON-007, path: requirements/contracts/pattern-governance-contract.md, status: active, owner: product, source_of_truth: true, canonical_topic: pattern-governance}
-  - {document_id: EH-DOC-CON-008, path: requirements/contracts/timeline-evidence-attachment-contract.md, status: active, owner: product, source_of_truth: true, canonical_topic: timeline-evidence-attachment}
+  - {document_id: EH-DOC-CON-007, path: requirements/contracts/pattern-governance-contract.md, status: superseded, owner: product, source_of_truth: false, canonical_topic: pattern-governance}
+  - {document_id: EH-DOC-CON-008, path: requirements/contracts/timeline-evidence-attachment-contract.md, status: superseded, owner: product, source_of_truth: false, canonical_topic: timeline-evidence-attachment}
 
   - {document_id: EH-ADR-001, path: requirements/decisions/adr-001-clickhouse-first-ingestion.md, status: adopted, owner: platform, source_of_truth: true, canonical_topic: clickhouse-first-ingestion}
   - {document_id: EH-ADR-002, path: requirements/decisions/adr-002-identifiers-and-correlation.md, status: adopted, owner: platform, source_of_truth: true, canonical_topic: identifier-and-correlation-model}
@@ -47,7 +47,7 @@ documents:
 
   - {document_id: EH-DOC-DEL-001, path: requirements/delivery/implementation-plan.yaml, status: active, owner: engineering, source_of_truth: true, canonical_topic: implementation-task-dag}
   - {document_id: EH-DOC-DEL-002, path: requirements/delivery/phase-1-1-development-plan.md, status: in_progress, owner: product, source_of_truth: true, canonical_topic: phase-1-1-delivery}
-  - {document_id: EH-DOC-DEL-003, path: requirements/delivery/phase-1-1-product-ux-remediation-plan.md, status: active, owner: frontend, source_of_truth: true, canonical_topic: phase-1-1-ux-remediation}
+  - {document_id: EH-DOC-DEL-003, path: requirements/delivery/phase-1-1-product-ux-remediation-plan.md, status: completed, owner: frontend, source_of_truth: false, canonical_topic: phase-1-1-ux-remediation}
   - {document_id: EH-DOC-HIST-001, path: requirements/delivery/archive/phase-1-delivery-plan.md, status: completed, owner: product, source_of_truth: false, canonical_topic: phase-1-delivery-history}
   - {document_id: EH-DOC-HIST-002, path: requirements/delivery/archive/phase-1-1-sign-off.md, status: completed, owner: quality, source_of_truth: false, canonical_topic: phase-1-1-local-sign-off}
 
@@ -59,5 +59,5 @@ documents:
   - {document_id: EH-DOC-GOV-001, path: requirements/governance/repository-layout-and-maintenance.md, status: active, owner: platform, source_of_truth: true, canonical_topic: repository-layout}
   - {document_id: EH-DOC-GOV-002, path: requirements/governance/traceability.yaml, status: active, owner: engineering, source_of_truth: true, canonical_topic: requirement-traceability}
   - {document_id: EH-DOC-GOV-003, path: requirements/governance/document-control.md, status: active, owner: platform, source_of_truth: true, canonical_topic: documentation-governance}
-  - {document_id: EH-DOC-GOV-004, path: requirements/governance/document-inventory.md, status: verified, owner: platform, source_of_truth: false, canonical_topic: documentation-inventory-2026-08-28}
+  - {document_id: EH-DOC-GOV-004, path: requirements/governance/document-inventory.md, status: verified, owner: platform, source_of_truth: false, canonical_topic: documentation-inventory-2026-08-29}
   - {document_id: EH-DOC-GOV-005, path: requirements/governance/document-catalog.yaml, status: active, owner: platform, source_of_truth: true, canonical_topic: document-catalog}

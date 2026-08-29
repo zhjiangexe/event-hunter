@@ -27,7 +27,7 @@ left to right direction
 actor "Viewer / Investigator / Admin" as User
 
 package "Event Hunter Product" {
-  component "React Console" as UI
+  component "React Console\nEvent Check / Saved Results / Cases\nIngestion Issues / Check Models" as UI
   component "Go API\nnet/http" as API
   component "Event Check\nScope + Deterministic Evaluators" as EventCheck
   component "Immutable Check Model\nGenerated Registry" as CheckModels
@@ -114,7 +114,7 @@ UI ..> Grafana : trusted deep links
 
 note bottom of Kafka
   Kafka is the delivery plane.
-  Timeline queries ClickHouse,
+  Event Check Timeline queries ClickHouse,
   not live Kafka messages.
 end note
 

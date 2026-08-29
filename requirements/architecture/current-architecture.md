@@ -102,9 +102,10 @@ flowchart LR
 
 關鍵邊界：
 
-- Kafka 負責事件傳遞與緩衝，不是 Business Timeline 的歷史查詢來源。
+- Kafka 負責事件傳遞與緩衝，不是 Event Check Timeline 的歷史查詢來源。
 - ClickHouse 保存合法 canonical events、processing attempts、ingestion failures 與品質 read models。
-- PostgreSQL 保存案件、Notes、Evidence references、Pattern findings／feedback、Event Check Snapshots／Findings、Audit、Saved Searches 與 Scenario runs。
+- PostgreSQL 保存案件、Notes、Evidence references、Event Check Snapshots／Findings、Audit、Saved Searches
+  與 Scenario runs；legacy Pattern findings／feedback 只供 compatibility API。
 - Tempo／Loki／Prometheus 保存 trace／log／metric；Event Hunter 只保存識別碼與可信 deep-link context。
 - Event Hunter API 不是正式事件 ingestion endpoint；正式事件經 Kafka ingestion pipeline 進入 ClickHouse。
 
@@ -222,7 +223,7 @@ flowchart TD
     Sink -- 是 --> Raw[(隔離 raw landing / 7 days)]
     Raw --> Minimum{minimum-envelope-v1<br/>+ known required keys}
     Minimum -- 結構不可用 --> Quarantine[(safe failure summary)]
-    Quarantine --> NoTimeline[不進正常 Business Timeline]
+    Quarantine --> NoTimeline[不進正常 Event Check Timeline]
     Minimum -- 可搜尋且有 warning --> Warning[SEARCHABLE_WITH_WARNINGS]
     Minimum -- 可搜尋且無 warning --> SearchableEvent[SEARCHABLE]
     Warning --> Events[(promoted events)]
@@ -299,7 +300,7 @@ flowchart TB
 
     subgraph Investigation[contexts/investigation]
         App[application capabilities]
-        Domain[domain: InvestigationCase / SavedSearch / Pattern / Journey]
+        Domain[domain: InvestigationCase / SavedSearch / Check Snapshot<br/>legacy Pattern / Journey adapters]
         Ports[ports]
         App --> Domain
         App --> Ports
@@ -373,9 +374,11 @@ Finding feedback 或 Case handoff 才寫 PostgreSQL。Snapshot 不複製 raw pay
 目前 React 入口 `/event-check` 以 URL 保存 identifier type／value、秒級 bounded time window、Model pin、tab 與
 custom scope reason。Summary／Timeline／Flow／Findings／Cases 只呈現 API 回傳的 deterministic state；不在
 前端重算 conformance。Timeline 每筆 event reference 使用既有 allowlisted builder 產生 Grafana／Loki／Tempo／
-Dashboard links。`/event-check/saved-results` 使用安全 summary read model、identifier／status 篩選與 keyset
+Dashboard links；ClickHouse event deep link 查詢 `canonical_forensics_events`，不再讀 legacy table。
+`/event-check/saved-results` 使用安全 summary read model、identifier／status 篩選與 keyset
 pagination，提供查看結果、建立案件與加入案件；不回傳 raw payload。`/check-models` 首頁是 Flow／Global Check 列表，點擊後以 URL-addressable modal 顯示 version、
-checksum、source path 與 fixture scenarios，且沒有 runtime CRUD。`EH-ECM-005` 已讓舊 `/journey`、
+checksum、source path、按需載入的原始 YAML 與 fixture scenarios，且沒有 runtime CRUD；source endpoint
+只讀取 build-time generated artifact，不接受任意 filesystem path。`EH-ECM-005` 已讓舊 `/journey`、
 `/journey-profiles`、Saved Searches、Case Evidence 與可無損映射的 `/timeline`／`/patterns` 轉入 canonical
 workspace；無法無損映射的廣泛 Timeline 查詢與未知 Pattern reference 保留清楚標示的唯讀相容畫面。舊
 runtime 的實體移除需要另行發布 migration 與 rollback release note；`EH-ECM-006` 已完成全量、source-failure
@@ -392,7 +395,7 @@ adapter。Domain 不依賴 HTTP、PostgreSQL、ClickHouse、Grafana 或 OTel 套
 | Demo PostgreSQL ×3 | Order／Payment／Shipment 狀態與 transactional outbox | Demo services | Debezium、各 demo service |
 | Redpanda | Domain events、Scenario events、processing attempts、restricted technical DLQ | Debezium、demo services、Scenario Lab、ClickHouse Sink failure route | Demo consumers、ClickHouse Kafka Connect Sink、technical projector |
 | ClickHouse | 隔離 raw、promoted events／attempts、canonical views、failure／quality models | ClickHouse Sink／Materialized Views、technical projector、Quality Worker | Event Hunter API、Grafana、Scenario Lab observer |
-| Event Hunter PostgreSQL | Cases、Notes、Evidence references、Pattern 與 Check Findings／feedback、Check Snapshots／relations／Case links、Audit、Saved Searches、Scenario runs | Event Hunter API、Scenario Lab | Event Hunter API、Scenario Lab |
+| Event Hunter PostgreSQL | Cases、Notes、Evidence references、Check Findings／feedback、Check Snapshots／relations／Case links、Audit、Saved Searches、Scenario runs；legacy Pattern data | Event Hunter API、Scenario Lab | Event Hunter API、Scenario Lab |
 | Tempo／Loki／Prometheus | Live 與明確標記的 synthetic telemetry | OTel Collector | Grafana、health／E2E probes |
 
 ## 8. 目前與未來邊界

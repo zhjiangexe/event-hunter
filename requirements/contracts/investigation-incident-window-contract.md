@@ -2,7 +2,7 @@
 document_id: EH-DOC-CON-004
 status: active
 owner: backend
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: investigation-incident-window
 supersedes: []
@@ -33,7 +33,7 @@ supersedes: []
 
 | 來源 | 建立方式 | Window 決策 |
 |---|---|---|
-| `TIMELINE_SEARCH` | Timeline 建案或手動 API 明確提供一對 `incident_from`／`incident_to` | 原樣保存已驗證的 bounded window |
+| `TIMELINE_SEARCH` | Event Check 建案或 legacy Timeline API 明確提供一對 `incident_from`／`incident_to`；enum 名稱為資料相容性保留 | 原樣保存已驗證的 bounded window；canonical Case current-view 可在 Snapshot `to` 後加 1 秒查詢邊界，但不得改寫 Snapshot |
 | `MANUAL_DEFAULT` | 手動 API 未提供時間 | 只在建立瞬間計算 `created_at - 72h` 到 `created_at` |
 | `GRAFANA_ALERT` | Grafana firing alert 自動建案 | `startsAt - incident_window_seconds` 到 `startsAt`；規則未設定時為 600 秒 |
 | `LEGACY_CREATED_AT` | migration 回填舊案件 | `created_at - 24h` 到 `created_at` |
@@ -47,14 +47,14 @@ supersedes: []
 - `GET /investigations/{id}/evidence` 未帶 query window 時使用案件 Incident Window。
 - 明確傳入成對 `from`／`to` 可建立 current-view override；response 的 `query_window` 回報實際窗口，
   但案件內的 baseline 不變。
-- 案件 UI 必須同時標示 baseline 與 current view，並可用 baseline deep link 回 Business Timeline。
-- Pattern Analysis 保留 `EH-P1.1-011` 的 `EARLIEST_CORRELATION_EVENT` deterministic window；
+- 案件 UI 必須同時標示 baseline 與 current view，並可用 baseline deep link 回 Event Check Timeline。
+- Legacy Pattern Analysis 保留 `EH-P1.1-011` 的 `EARLIEST_CORRELATION_EVENT` deterministic window；
   `P1.1-UX-03` 已在案件 workspace 揭露該窗口與執行結果。它是 Pattern 的證據安全邊界，不等同也不會
   改寫案件 Incident Window。
 - Evidence 是 append-only durable reference。由 Pattern Analysis 保存的 Event／Trace／Finding 可能來自
   analysis effective window，而不在案件 Incident Window 內；Evidence 數量因此不能解讀為案件 Timeline
   的 event count。當最近 analysis effective window 與 baseline 不同且 Timeline 為空時，UI 必須說明差異，
-  並提供帶 correlation ID 與 analysis window 的 Business Timeline deep link。
+  並提供帶 correlation ID 與 analysis window 的 Event Check deep link。
 
 ## Partial Summary semantics
 

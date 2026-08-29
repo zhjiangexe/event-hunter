@@ -1,14 +1,18 @@
 ---
 document_id: EH-DOC-DEL-003
-status: active
+status: completed
 owner: frontend
-last_reviewed: 2026-08-28
-source_of_truth: true
+last_reviewed: 2026-08-29
+source_of_truth: false
 canonical_topic: phase-1-1-ux-remediation
 supersedes: []
 ---
 
 # Event Hunter Phase 1.1 產品 UX 與資訊可信度修正計畫
+
+> **Completed historical plan.** 本文件保留改版前 Timeline／Journey／Pattern Library 的問題、修復順序與
+> 驗收證據。改版後 canonical 資訊架構為 Event Check／Saved Results／Check Models／Investigation Cases／
+> Ingestion Issues／Scenario Lab；現況需求與 UI 不應從本計畫的舊頁名反推。
 
 ## 1. 文件狀態
 

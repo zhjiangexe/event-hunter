@@ -2,7 +2,7 @@
 document_id: EH-DOC-OPS-001
 status: active
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: local-operations-runbook
 supersedes: []
@@ -116,7 +116,7 @@ Event Hunter API，再逐欄比對 immutable Snapshot 與關聯，最後透過�
 | API live=200、ready=503 | `verify-event-pipeline-readiness.sh` 與 API logs | 先恢復 PostgreSQL／ClickHouse／Redpanda，再恢復 Connect；不要先重建 API 掩蓋根因 |
 | Debezium task FAILED／不存在 | `GET :28324/connectors?expand=status` | `bash scripts/register-debezium-connectors.sh`，再跑 readiness checker |
 | Sink task FAILED／offset 不前進 | `GET :28345/connectors?expand=status`、broker 與 ClickHouse | 先修 ClickHouse／converter，再執行 `bash scripts/register-clickhouse-mv-poc.sh` 並重驗 readiness |
-| Timeline 有 event、Tempo／Loki no data | event 的 `trace_id`、live/synthetic namespace、查詢時間窗 | 先確認 OTel Collector、Tempo、Loki；用 `bash scripts/test-live-observability.sh --skip-restart` 產生 live probe |
+| Event Check 有 event、Tempo／Loki no data | event 的 `trace_id`、live/synthetic namespace、查詢時間窗 | 先確認 OTel Collector、Tempo、Loki；用 `bash scripts/test-live-observability.sh --skip-restart` 產生 live probe |
 | Quality Dashboard 無新窗口 | Quality Worker `/health/ready` 與 logs | 恢復 ClickHouse 後重啟 worker；需要補算時使用 `quality-worker backfill`，不可寫假 metrics |
 | Grafana link 開啟但資產不存在 | provisioning files 與 Grafana API | `bash scripts/verify-grafana-provisioning.sh`；修 repo provisioning 後再重建 Grafana |
 | Scenario Lab `TIMED_OUT` | run checks、event pipeline readiness、ClickHouse failures | 先修 ingestion，再重跑；不可直接把 run status 改成 PASSED |
@@ -126,7 +126,7 @@ Event Hunter API，再逐欄比對 immutable Snapshot 與關聯，最後透過�
 
 ### 用事件 lifecycle logs 判斷卡點
 
-從 Timeline event detail 開啟 `Loki logs`，或在 Grafana Explore 使用：
+從 Event Check Timeline 的 event detail 開啟 `Loki logs`，或在 Grafana Explore 使用：
 
 ```logql
 {service_name=~"order-service|payment-service|shipping-service"}
@@ -138,8 +138,8 @@ Event Hunter API，再逐欄比對 immutable Snapshot 與關聯，最後透過�
 |---|---|
 | 只有 `domain event emission starting` | 查同一 `event_id` 是否有 `FAILED` 與 `event_emission_failure_stage`；優先檢查 request cancellation、outbox DB 與 transaction commit |
 | 有 `committed to outbox`，沒有下游 `processed domain event` | Local transaction 已成功；檢查 Debezium connector、Kafka topic、consumer group lag，不要誤判為服務沒有產生事件 |
-| 有下游 `processed domain event`，Timeline 仍無事件 | Kafka delivery 已成立；檢查 ClickHouse Sink、raw admission、quarantine 與 canonical views |
-| Timeline 與 Loki 都有資料，Tempo 無 trace | 核對同一 `trace_id` 後檢查 OTel Collector trace exporter 與 Tempo；不要改用新的 correlation ID 掩蓋 context propagation 問題 |
+| 有下游 `processed domain event`，Event Check 仍無事件 | Kafka delivery 已成立；檢查 ClickHouse Sink、raw admission、quarantine 與 canonical views |
+| Event Check 與 Loki 都有資料，Tempo 無 trace | 核對同一 `trace_id` 後檢查 OTel Collector trace exporter 與 Tempo；不要改用新的 correlation ID 掩蓋 context propagation 問題 |
 
 Producer-side `kafka_partition=-1`／`kafka_offset=-1` 且 `kafka_position_known=false` 是正確狀態，因為
 Debezium 尚未為 committed outbox row 配置 Kafka 位置。完整語意見
@@ -156,6 +156,20 @@ bash scripts/test-ingestion-acknowledgement.sh --yes
 
 `dev-up.sh` 會在載入 fixtures 前要求兩個正式 Sink connectors、所有 tasks 與 technical projector 都 ready，
 並確認 domain／attempt canonical views 均指向 `clickhouse-mv`。HTTP process 存活但 task `FAILED` 不算 ready。
+
+### Ingestion Issues 判讀
+
+`/ingestion-issues` 只回答「事件為什麼沒有安全進入 canonical read model」，不代表所有服務錯誤：
+
+| Kind | 代表問題 | 第一處理對象 |
+|---|---|---|
+| `CONTRACT_VALIDATION` | 歷史完整契約驗證拒絕 | producer／Normalization Adapter／event contract owner |
+| `ADMISSION_QUARANTINE` | event 或 processing attempt 未通過目前 ClickHouse admission | producer envelope／已知 payload keys／ingestion mapping |
+| `TECHNICAL_DLQ` | Kafka Connect converter、Sink task 或 ClickHouse transport failure | connector／ClickHouse 維運者 |
+
+格式正確的 `PaymentFailed` 等業務失敗仍應出現在 Event Check；服務在發布前就當機則可能完全沒有 ingestion
+record，需查 Loki／Tempo。Issue detail 只提供 allowlisted metadata、Kafka coordinates 與 SHA-256；原始
+record 必須經 restricted workflow 取得，不得把 raw payload 複製進 Case、Grafana 或一般操作紀錄。
 
 ### ClickHouse-first ingestion 的受控操作
 
@@ -178,7 +192,7 @@ backlog 均可恢復。兩者只可在允許中斷的本機／CI 執行；不會
 
 完整 Backend E2E 會在保留每 window 300 requests 的前提下，暫時把本機 fixed window 縮短成 10 秒，
 結束後自動還原原設定。`load-domain-fixtures.py` 只載入固定 synthetic fixtures 到 promoted tables；
-正式 live 驗收仍須新建訂單並觀察 Kafka → raw → promoted → canonical Timeline。
+正式 live 驗收仍須新建訂單並觀察 Kafka → raw → promoted → canonical Event Check Timeline。
 
 raw landing 不提供一般查詢。人工清除先 dry-run：
 
@@ -226,7 +240,7 @@ Restore 會覆寫現有本機資料，必須在隔離環境或已確認可丟棄
    使用 wildcard 或遞迴刪除。
 4. 將對應 `*.tar.gz` 解到空 volume 根目錄；不可疊加到仍有資料的 volume。
 5. 執行 `bash scripts/dev-up.sh`，再跑 `verify-operations-runbook.sh --restart --yes`。
-6. 核對案件、Timeline、Scenario Lab、Grafana assets，以及至少一條既有 trace/log deep link。
+6. 核對案件、Saved Results、Event Check、Scenario Lab、Grafana assets，以及至少一條既有 trace/log deep link。
 
 本 repo 暫不提供一鍵 destructive restore script，避免誤把工作中的 volume 清空。若只是建立全新 demo
 環境，優先讓 migration + topic bootstrap + fixture loader 重建，不需要還原舊 runtime telemetry。
@@ -245,8 +259,8 @@ Restore 會覆寫現有本機資料，必須在隔離環境或已確認可丟棄
 | PostgreSQL cases／audit／Scenario runs | 尚未設自動 TTL | PostgreSQL migrations |
 
 Loki 與 PostgreSQL 的 production retention 是已知產品化決策點，不得默認永久保存。變更 retention 前先核定
-法遵、調查時窗、Evidence 可重現性與容量；ClickHouse 資料超過 TTL 後，Pattern 無法重建原始證據，會回
-`NO_EVENTS`。
+法遵、調查時窗、Evidence 可重現性與容量；ClickHouse 資料超過 TTL 後，即時 Event Check 無法重建完整
+事件集合。已保存 Snapshot 仍保留最少 metadata 與 checksum，但不代表 raw payload 永久保存。
 
 ## 9. Secret rotation
 

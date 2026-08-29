@@ -1,14 +1,18 @@
 ---
 document_id: EH-DOC-CON-003
-status: active
+status: superseded
 owner: backend
-last_reviewed: 2026-08-28
-source_of_truth: true
+last_reviewed: 2026-08-29
+source_of_truth: false
 canonical_topic: historical-pattern-analysis
 supersedes: []
 ---
 
 # Historical Pattern Analysis Contract
+
+> **Superseded compatibility contract.** 新的 deterministic analysis 由 Event Check + immutable Check Model
+> 執行並以 Check Snapshot 保存。本文件只保留 legacy case `analyze`／Pattern migration 的既有語意；
+> 新需求以 [Event Check Target Design](../architecture/event-check-target-design.md) 為準。
 
 更新日期：2026-08-24  
 狀態：EH-P1.1-011 completed

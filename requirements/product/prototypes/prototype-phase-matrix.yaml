@@ -4,13 +4,15 @@ document_control:
   document_id: EH-DOC-PROT-001
   status: reference
   owner: product
-  last_reviewed: 2026-08-28
-  source_of_truth: true
+  last_reviewed: 2026-08-29
+  source_of_truth: false
   canonical_topic: prototype-phase-mapping
   supersedes: []
 source: requirements/product/prototypes/ui-prototype.html
 policy:
   prototype_is_ux_reference_not_contract: true
+  superseded_by_canonical_information_architecture: requirements/product/event-check-and-check-models-requirements.md
+  legacy_routes_are_compatibility_only: true
   phase_1_blocking_requires_requirement_mapping: true
   mock_values_must_not_enter_production_ui: true
   temporal_default_enabled: false

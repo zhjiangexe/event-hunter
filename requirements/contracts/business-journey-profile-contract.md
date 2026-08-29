@@ -1,14 +1,19 @@
 ---
 document_id: EH-DOC-CON-001
-status: active
+status: superseded
 owner: product
-last_reviewed: 2026-08-28
-source_of_truth: true
+last_reviewed: 2026-08-29
+source_of_truth: false
 canonical_topic: business-journey-profile
 supersedes: []
 ---
 
 # Business Journey Profile Contract
+
+> **Superseded compatibility contract.** Canonical flow authoring and evaluation 已移至
+> [Event Check 與 Check Models 產品需求](../product/event-check-and-check-models-requirements.md)及
+> [Event Check Target Design](../architecture/event-check-target-design.md)。本文件只用來解釋 deprecated
+> `/journey`、`/journey-profiles` API／route 與 migration evidence，不得用來新增 Journey Profile。
 
 更新日期：2026-08-26
 

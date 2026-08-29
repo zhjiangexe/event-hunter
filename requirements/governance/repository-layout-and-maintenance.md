@@ -2,7 +2,7 @@
 document_id: EH-DOC-GOV-001
 status: active
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: repository-layout
 supersedes: []
@@ -23,7 +23,7 @@ supersedes: []
 | `backend/migrations/` | PostgreSQL、ClickHouse 與 demo outbox schema | 依序編號 migration |
 | `frontend/src/` | React UI、UI-side query/state helpers 與單元測試 | TypeScript、CSS、測試 |
 | `frontend/src/generated/` | 由 OpenAPI 產生的 client/types | 生成後可提交，但不得手改 |
-| `contracts/` | HTTP、Kafka、event、journey、pattern、fixture 與 platform policy 的可執行契約 | YAML、JSON Schema、fixture JSON |
+| `contracts/` | HTTP、Kafka、event、canonical Check Models／Event Check、fixture 與 platform policy；journey／pattern 僅 legacy migration input | YAML、JSON Schema、fixture JSON |
 | `config/` | 跨服務的非秘密操作模式與受控 cutover 預設；不得存放密碼 | 可 source 的 `.env` profile、模式說明 |
 | `infra/` | Collector、Loki、Tempo、Prometheus、Debezium、ClickHouse Kafka Connect Sink 等服務專屬設定 | 可重建 runtime 的設定檔 |
 | `e2e/backend/` | 從外部 API／broker／database 驗證完整後端行為的 Karate features | `.feature` |
@@ -57,9 +57,12 @@ cmd (composition / transport)
 - Repository interface 屬於 context port；PostgreSQL／ClickHouse 實作放在 `platform` adapter。
 - `cmd` 只保留 transport mapping、dependency wiring、readiness 與 graceful shutdown。大型 handler 應按 use case 逐步拆出，不再增加單檔責任。
 - `demo` 是受測的外部示範拓撲。Scenario Lab 會驅動它，但不能取代三個服務的 live outbox、Kafka 與 OpenTelemetry 路徑。
-- Frontend 的 URL parsing、observability deep link 與 API mapping 應放在獨立 module；`main.tsx` 只負責頁面 composition，後續新增功能不得繼續堆疊可獨立測試的純邏輯。
+- Frontend 的 URL parsing、observability deep link 與 API mapping 應放在獨立 module；Event Check／Saved
+  Results／Check Models 已位於 `event-check-workspace.tsx`，`main.tsx` 只保留 shell 與尚未拆出的頁面 composition。
 
-目前仍應持續拆分的 hotspot 是 `frontend/src/main.tsx` 與 `backend/cmd/api/investigations.go`。本次先抽出案件列表 query parser；更大範圍拆分應以不改 API／UI 行為的獨立重構切片進行。
+目前仍應持續拆分的 hotspot 是 `frontend/src/main.tsx` 與 `backend/cmd/api/investigations.go`。既有
+`event-check-workspace.tsx`、案件列表 query parser、observability link builder 與 incident-window helper
+是後續切片方式的基準；更大範圍拆分不得改 API／UI 行為。
 
 ## 測試與報告
 

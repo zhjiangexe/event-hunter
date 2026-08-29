@@ -20,22 +20,23 @@ supersedes: []
 Investigation Context
 ├── domain/
 │   ├── InvestigationCase aggregate root
-│   ├── patterns deterministic domain evaluator / registry
-│   └── journeys versioned Journey Profile registry
+│   ├── cases rich InvestigationCase aggregate
+│   └── legacy patterns / journeys compatibility domain
 ├── ports/
 │   └── persistence-owned audit / evidence / finding contracts
 └── application/
     ├── case_lifecycle/       list · create · get · update · close · collaborate · audit · evidence
     ├── evidence_attachment/  bounded event verification · case evidence attachment · idempotency
-    ├── forensics/            bounded timeline/event read model queries
-    ├── event_search/         Pattern / Grafana fingerprint / severity qualification
+    ├── forensics/            bounded canonical event read model queries
+    ├── ingestion_issues/     contract / admission / technical DLQ safe summaries
+    ├── event_search/         legacy Pattern / Grafana fingerprint qualification
     ├── overview/             operational snapshot · smart-search identifier resolution
-    ├── business_journey/     canonical events → logistics milestones / anomalies
-    ├── journey_profiles/     immutable runtime profile catalog / provenance
+    ├── business_journey/     deprecated Journey compatibility read
+    ├── journey_profiles/     deprecated profile compatibility catalog
     ├── saved_search/         personal bounded query lifecycle and read-only presets
-    ├── pattern_analysis/     deterministic pattern evaluation and finding persistence
-    ├── pattern_effectiveness/ finding outcome rollup · quality signals
-    ├── pattern_feedback/     valid / false-positive classification · note · audit
+    ├── pattern_analysis/     deprecated Pattern compatibility evaluation
+    ├── pattern_effectiveness/ legacy finding outcome rollup
+    ├── pattern_feedback/     legacy finding classification · note · audit
     └── alert_intake/         signed Grafana business-alert disposition and evidence
 ```
 
@@ -61,7 +62,7 @@ Event Check Context
 HTTP / Grafana inbound adapters
         │
         ├── Investigation application capabilities
-        │       └── case · evidence · forensics · journey · saved search · pattern · alert
+        │       └── case · evidence · ingestion issue · saved query · alert · legacy adapters
         └── Event Check application capabilities
                 └── evaluate · model registry · snapshot · feedback · case handoff
                         │
@@ -79,18 +80,20 @@ HTTP / Grafana inbound adapters
 - `forensics` 只負責 bounded read-model access，不知道 HTTP、ClickHouse SQL 或 Grafana。
 - `event_search` 負責跨 Pattern Registry、案件資料與 Forensics read model 的查詢條件組合；不接受任意 SQL。
 - `overview` 組合控制面與事件面 health／count read models，並以明確識別碼優先順序解析 Smart Search；不自行推測不存在的關聯。
-- `business_journey` 只依 versioned Journey Profile 將 canonical events 組織成 milestone，不建立或修復
+- `business_journey` 是 deprecated compatibility use case，只依 versioned Journey Profile 將 canonical events 組織成 milestone，不建立或修復
   production projection；`contracts/journeys/*.yaml` 經 generator 產生 domain registry，application service
   不在 runtime 解析設定檔。
-- `journey_profiles` 提供目前 API build 已編譯 profile 的唯讀 catalog；不解析 workspace YAML、不修改
+- `journey_profiles` 提供 deprecated API 所需的唯讀 catalog；不解析 workspace YAML、不修改
   registry，也不假裝具備版本選擇或發布能力。
 - `saved_search` 透過 rich domain aggregate 驗證 target、typed query 與七天時間窗；application service 只編排 owner-scoped repository 與版本化 preset。
-- `pattern_analysis` 負責 deterministic registry evaluation、server-owned historical event window、
+- `pattern_analysis` 保留 legacy Case analysis 的 deterministic registry evaluation、server-owned historical event window、
   trigger-relative pattern window、finding／evidence persistence 與 audit；時間視窗與 no-data 語意遵循
   `historical-pattern-analysis-contract.md`。
 - `pattern_effectiveness` 只彙總已保存 finding 與回饋結果，不重新執行 Pattern 或修改案件。
 - `pattern_feedback` 透過 finding identity 寫入 valid／false-positive 分類、note 與 audit，並保留重複提交語意。
 - `alert_intake` 負責 Grafana receipt 去重、eligible disposition、建案／連案與證據寫入；raw-body HMAC 驗證留在 Grafana inbound adapter。
+- `ingestion_issues` 只組合 contract validation、ClickHouse admission quarantine 與 Kafka Connect technical
+  DLQ 的 allowlisted metadata；不取得 raw landing payload，也不把 ingestion failure 當成業務流程偏離。
 - Application package 不建立 database connection；所有外部存取均透過 constructor-injected port。
 - `application/` 根目錄不放 service 或 facade；正式 composition root 與 platform adapters 必須依賴上述 capability package。架構回歸測試會阻止重新引用 flat application package。
 - `demo/`、`platform/`、`scenario_lab/` 不是 Investigation application service 的替代品：它們分別代表示範 domain、跨 context 基礎設施與獨立 Scenario Lab context。
@@ -105,16 +108,17 @@ HTTP / Grafana inbound adapters
 | 能力 | Application package | 主要 outbound port |
 |---|---|---|
 | 案件生命週期 | `case_lifecycle` | `domain.CaseRepository`、`ports.InvestigationDetailsRepository` |
-| Timeline Event 加入案件 | `evidence_attachment` | `domain.CaseEvidenceRepository`、`EventLookup`、`AuditWriter` |
-| Timeline / Forensics | `forensics` | `ForensicsReadModel` |
-| 進階事件搜尋 | `event_search` | `forensics.ReadModel`、`EventSearchQualifierRepository` |
+| Legacy 單事件 Evidence 加入案件 | `evidence_attachment` | `domain.CaseEvidenceRepository`、`EventLookup`、`AuditWriter` |
+| Canonical event / Forensics read | `forensics` | `ForensicsReadModel` |
+| Ingestion Issues | `ingestion_issues` | safe ClickHouse failure read model |
+| Legacy 進階事件搜尋 | `event_search` | `forensics.ReadModel`、`EventSearchQualifierRepository` |
 | Overview／Smart Search | `overview` | control-plane snapshot、Forensics identifier resolver |
-| Business Journey | `business_journey` | `forensics.ReadModel` |
-| Journey Profile Registry | `journey_profiles` | immutable domain registry（無外部 store） |
+| Legacy Business Journey | `business_journey` | `forensics.ReadModel` |
+| Legacy Journey Profile Registry | `journey_profiles` | immutable compatibility registry（無外部 store） |
 | 個人 Saved Search | `saved_search` | `domain.SavedSearchRepository` |
-| Pattern 分析 | `pattern_analysis` | Case repository、details repository、Forensics service |
-| Pattern 成效 | `pattern_effectiveness` | finding／feedback read model |
-| Pattern 回饋 | `pattern_feedback` | finding feedback repository、Audit writer |
+| Legacy Pattern 分析 | `pattern_analysis` | Case repository、details repository、Forensics service |
+| Legacy Pattern 成效 | `pattern_effectiveness` | finding／feedback read model |
+| Legacy Pattern 回饋 | `pattern_feedback` | finding feedback repository、Audit writer |
 | Grafana 告警 | `alert_intake` | `GrafanaAlertRepository` |
 | Event Check 即時評估 | `evaluate_event_check` | canonical event read port、immutable Model Registry |
 | Check Model 查詢 | `list_check_models` | immutable Model Registry |

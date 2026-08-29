@@ -1,14 +1,19 @@
 ---
 document_id: EH-DOC-CON-007
-status: active
+status: superseded
 owner: product
-last_reviewed: 2026-08-28
-source_of_truth: true
+last_reviewed: 2026-08-29
+source_of_truth: false
 canonical_topic: pattern-governance
 supersedes: []
 ---
 
 # Pattern Governance 與 Finding Feedback Contract
+
+> **Superseded compatibility contract.** Pattern Library 已整合進 Check Models；新的 Flow Expectation、
+> Model Rule、Global Check 與 Finding feedback 以
+> [Event Check 與 Check Models 產品需求](../product/event-check-and-check-models-requirements.md)及 ADR-005／006
+> 為準。本文件只治理尚未移除的 legacy Pattern API 與資料。
 
 更新日期：2026-08-24  
 對應：`REQ-EH-003`、`P1.1-04-02`

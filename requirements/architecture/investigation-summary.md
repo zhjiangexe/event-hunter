@@ -2,7 +2,7 @@
 document_id: EH-DOC-ARCH-004
 status: active
 owner: backend
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: true
 canonical_topic: investigation-summary-read-model
 supersedes: []
@@ -10,9 +10,10 @@ supersedes: []
 
 # Investigation Summary Read Model
 
-Investigation Summary 是把案件、事件時間線、品質指標、技術觀測與固定 Pattern 結果組合成一個
-可供營運與工程師閱讀的 Read Model。它不是新的 Domain Aggregate，也不直接修改訂單、付款、
-庫存或事件資料。
+Investigation Case detail 由兩種 read model 組成：目前 canonical 的 Case + Check Snapshot links，以及
+為既有案件保留的 legacy Summary／Timeline／Pattern projection。它們都不是新的 Domain Aggregate，也
+不直接修改訂單、付款、庫存或事件資料。新的檢查結果必須由 Event Check 保存 immutable Snapshot 後
+掛入 Case；不得再以 legacy Pattern analysis 當成唯一判定來源。
 
 本專案採 Grafana OSS 優先的邊界：Logs／Metrics／Traces、Dashboard、Explore、Correlations、
 技術告警與通知由 Grafana OSS 及其資料來源負責；Event Hunter 不複製這些原始資料，也不建立
@@ -20,9 +21,10 @@ Investigation Summary 是把案件、事件時間線、品質指標、技術觀�
 Loki deep link、告警來源與案件結論。Grafana Alerting 只有在告警需要業務語意調查時，才透過
 Webhook 交給 Event Hunter 建立或補充案件。
 
-因此 UI 只提供調查總覽、案件、Business Timeline、固定 Pattern 與 Evidence Bundle。品質指標在
-摘要中以來源狀態、告警參照或必要的調查線索呈現；不提供獨立 Runtime Quality Console。Schema／
-Topic 管理與 Replay／Production Redrive 不屬於本 UI 或 MVP API。
+因此主要 UI 提供 Overview、Event Check／Saved Results、Check Models、Investigation Cases、Ingestion
+Issues 與 Scenario Lab。案件可以讀取已連結的 Check Snapshots、Evidence references、Notes 與 Audit；
+品質指標仍由 Grafana 呈現，不提供第二套 Runtime Quality Console。Schema／Topic 管理與
+Replay／Production Redrive 不屬於目前 UI 或 Phase 1.1 API。
 
 正式 endpoint、request／response schema 以 [openapi.yaml](../../openapi.yaml) 為準；本文件補充 Query
 Service、來源失敗與組合行為。
@@ -33,10 +35,10 @@ Service、來源失敗與組合行為。
 
 ```text
 這個案件目前是什麼狀態？
-業務事件實際經過哪些步驟？
+已連結的 Check Snapshot 當時看到了哪些事件與結果？
 是否有 duplicate、missing sequence 或 lag？
 哪些 Trace／Log 可以證明問題？
-哪一個固定 Pattern 被觸發？
+哪一個 Check Model／Finding 支持這個判斷？
 結果是否完整，還有哪些資料查不到？
 ```
 
@@ -48,13 +50,14 @@ Service、來源失敗與組合行為。
 `investigation` Context 擁有摘要的查詢用例與輸出 DTO，但不擁有所有資料來源：
 
 ```text
-InvestigationSummaryQueryService
+InvestigationCaseReadServices
     ├── CaseQuery                  → PostgreSQL
-    ├── TimelineQuery              → ClickHouse forensics_events
+    ├── CheckSnapshotQuery         → PostgreSQL immutable snapshots / findings / links
+    ├── TimelineQuery              → ClickHouse canonical_forensics_events
     ├── QualityQuery               → ClickHouse event_quality_metrics
     ├── TechnicalObservationQuery  → Grafana OSS data sources（Tempo／Loki／Prometheus／ClickHouse）
     ├── AlertReferenceQuery        → Grafana Alerting annotations／Webhook reference
-    └── PatternEngine              → 固定規則與 Evidence references
+    └── LegacyPatternQuery         → compatibility findings / evidence references
 ```
 
 每個 Query Port 由對應的 Outbound Adapter 實作；不做跨 PostgreSQL／ClickHouse 的 SQL JOIN，
@@ -62,13 +65,14 @@ InvestigationSummaryQueryService
 
 ## 3. 建議 API
 
-### 3.1 即時摘要
+### 3.1 Legacy 即時摘要（compatibility）
 
 ```http
 GET /api/v1/investigations/{investigationId}/summary?from=2026-08-20T00:00:00Z&to=2026-08-20T01:00:00Z
 ```
 
-用途：查詢已存在案件的目前摘要。API 只做有界、唯讀查詢，不啟動 Replay，也不修改案件狀態。
+用途：查詢已存在案件的既有 summary projection。API 只做有界、唯讀查詢，不啟動 Replay，也不修改
+案件狀態。新的 deterministic result 另由 `GET /api/v1/investigations/{id}/check-snapshots` 取得。
 
 初步參數：
 
@@ -124,6 +128,9 @@ MVP 先實作即時摘要與固定 query budget；非同步報告先保留方向
 }
 ```
 
+以上是 legacy Summary response；`pattern_findings` 不代表新的 Check Model 結果。Canonical Check Snapshot
+以 `check_status`、`business_outcome`、Expectations、`check_findings`、event refs 與 relations 表達。
+
 欄位規則：
 
 | 欄位 | 說明 |
@@ -136,7 +143,7 @@ MVP 先實作即時摘要與固定 query budget；非同步報告先保留方向
 | `case` | PostgreSQL 案件基本資料與目前狀態 |
 | `timeline` | ClickHouse 事件時間線與 `truncated` 資訊 |
 | `quality` | duplicate、lag、schema violation 等品質摘要 |
-| `pattern_findings` | 固定 Pattern 的比對結果 |
+| `pattern_findings` | Deprecated Pattern compatibility 結果；新結果讀 Check Snapshot |
 | `technical_observations` | Trace／Log 摘要與 deep link，不內嵌全部內容 |
 | `evidence_references` | 指向事件、Trace、Log、品質違規或報告的參照 |
 
@@ -145,9 +152,9 @@ MVP 先實作即時摘要與固定 query budget；非同步報告先保留方向
 | 摘要區塊 | 來源 | MVP 是否必要 | 查詢失敗時的行為 |
 |---|---|---|---|
 | `case` | PostgreSQL `investigation_cases` | 是 | `503` 或 `404`，不能產生沒有案件的摘要 |
-| `timeline` | ClickHouse `forensics_events` | 是 | `503`／`504`，不能產生空白假摘要 |
+| `timeline` | ClickHouse `canonical_forensics_events` | 是 | `503`／`504`，不能產生空白假摘要 |
 | `quality` | ClickHouse `event_quality_metrics` | 否 | `partial=true`，加入 warning |
-| `pattern_findings` | Pattern Engine | 是（若啟用分析） | `partial=true`，標記 Pattern 未完成 |
+| `pattern_findings` | Legacy Pattern Engine | 否（compatibility） | `partial=true`，標記 legacy analysis 未完成 |
 | `technical_observations` | Grafana OSS data sources（Tempo／Loki／Prometheus／ClickHouse） | 否 | `partial=true`，保留 unavailable warning |
 | `evidence_references` | `case_evidence` + 本次收集結果 | 是 | 不能靜默遺失；回傳警告並寫入稽核 |
 
@@ -162,7 +169,7 @@ MVP 先實作即時摘要與固定 query budget；非同步報告先保留方向
 3. 並行查詢案件、事件、品質與技術觀測資料
 4. 對事件依 occurred_at、sequence、event_id 排序
 5. 將事件與 Trace／品質資料轉為 Evidence DTO
-6. 執行固定 Pattern Engine，產生 PatternFinding
+6. 讀取已連結 Check Snapshots；legacy endpoint 需要時再讀 Pattern findings
 7. 彙整 warnings、source_status、truncated 與 partial
 8. 回傳 InvestigationSummary DTO
 ```
@@ -186,9 +193,10 @@ snapshot。回應必須保留：
 所查詢的 Tempo／Loki／Prometheus 結果為準。不同來源的最新時間可能不同，不能用單一 `updated_at`
 假裝全域一致。
 
-## 8. Pattern Engine 整合
+## 8. Check Snapshot 與 legacy Pattern 整合
 
-Pattern Engine 不直接向外部資料庫任意查詢，而是使用預先定義的 Query Port 與模板：
+Canonical flow 是 Event Check evaluation → explicit save → Check Snapshot → Case link。Legacy Pattern
+Engine 仍不得直接向外部資料庫任意查詢，只能使用預先定義的 Query Port 與模板：
 
 ```text
 EvidenceSnapshot
@@ -208,7 +216,7 @@ recommended_next_query
 query_template_id
 ```
 
-Pattern 執行只產生結果，不修改案件、正式業務資料或環境設定。Application Service 以
+Legacy Pattern 執行只產生 compatibility 結果，不修改案件、正式業務資料或環境設定。Application Service 以
 `idempotency_key` 寫入 PostgreSQL `pattern_findings`；需要案件證據索引時再寫入 `case_evidence`，
 並將操作追加到 `audit_logs`。
 
@@ -242,8 +250,8 @@ pii_masking_policy
 
 ## 11. MVP 儲存策略
 
-MVP 不新增 `investigation_summaries` 表。摘要每次由 Query Service 即時組合，案件只保存
-Pattern Finding、Evidence reference 與人工調查筆記。
+目前不新增 `investigation_summaries` 表。Legacy Summary 每次由 Query Service 即時組合；canonical
+可重現結果已由 `check_snapshots`、event refs、relations、`check_findings` 與 Case link tables 保存。
 
 只有在確認查詢成本或歷史報告需求後，才評估新增 immutable snapshot：
 

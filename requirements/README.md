@@ -28,6 +28,11 @@ supersedes: []
 Phase 1.1 已具備 single-host internal staging／pilot hardening profile；這不代表 internet-facing production
 ready。正式身分、HA、目標環境演練、容量與資料治理仍須由部署環境決策。
 
+目前文件與 UI 一律使用下列 canonical 名稱：`Event Check`、`Saved Results`、`Check Models`、
+`Investigation Cases`、`Ingestion Issues`、`Scenario Lab`。Business Timeline／Journey／Journey Profiles／
+Pattern Library 只在 migration、deprecated API、legacy route 或歷史驗收證據中出現；遇到未標示用途的
+舊名稱時，視為文件缺陷而不是新的產品入口。
+
 ## 依角色開始
 
 ### 第一次了解產品
@@ -37,6 +42,10 @@ ready。正式身分、HA、目標環境演練、容量與資料治理仍須由�
 3. [Event Check／Check Models 需求](product/event-check-and-check-models-requirements.md)：目前 canonical 產品模型；後端、persistence、workspace UI、legacy compatibility 與最終 cutover acceptance 均已完成。
 4. [Event Check Target Design](architecture/event-check-target-design.md)：API、資料與安全設計；並標示目前已實作與後續邊界。
 5. [Current Architecture](architecture/current-architecture.md)：目前實際執行的元件與資料流。
+
+日常產品導覽固定為：Overview → Event Check／Saved Results → Investigation Cases／Ingestion Issues →
+Check Models → Scenario Lab／Guide。`/timeline`、`/journey`、`/journey-profiles`、`/patterns` 與
+`/saved-searches` 僅是 compatibility routes。
 
 ### 接入新的事件來源
 

@@ -156,6 +156,7 @@ API 回 `422 SCOPE_LIMIT_EXCEEDED`；若查詢在執行中才發現被截斷，�
 | `POST /api/v1/event-checks/evaluations` | `evaluateEventCheck` | `VIEWER` | 解析 scope、選擇或套用 Model、即時計算；不保存 |
 | `GET /api/v1/check-models` | `listCheckModels` | `VIEWER` | 列出 Flow Models、Global Checks、版本與 applicability |
 | `GET /api/v1/check-models/{modelId}/versions/{version}` | `getCheckModelVersion` | `VIEWER` | 讀取 immutable Model detail、checksum 與 source path |
+| `GET /api/v1/check-models/{modelId}/versions/{version}/source` | `getCheckModelSource` | `VIEWER` | 按需讀取 build-time 嵌入且 checksum 驗證的原始 YAML；不接受 client path |
 | `POST /api/v1/check-snapshots` | `createCheckSnapshot` | `INVESTIGATOR` | 重新計算並以 hashes 驗證後保存 Snapshot |
 | `GET /api/v1/check-snapshots` | `listCheckSnapshots` | `VIEWER` | 依 identifier／status 列出安全 Snapshot summary 與 stable keyset cursor |
 | `GET /api/v1/check-snapshots/{snapshotId}` | `getCheckSnapshot` | `VIEWER` | 讀取 Snapshot、event metadata、relations 與 Findings |

@@ -2,13 +2,13 @@
 document_id: EH-DOC-GOV-004
 status: verified
 owner: platform
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 source_of_truth: false
-canonical_topic: documentation-inventory-2026-08-28
+canonical_topic: documentation-inventory-2026-08-29
 supersedes: []
 ---
 
-# 文件盤點與整理紀錄（2026-08-28）
+# 文件盤點與整理紀錄（2026-08-28～2026-08-29）
 
 ## 盤點結論
 
@@ -47,3 +47,24 @@ supersedes: []
 
 本輪沒有刪除 Phase 1／1.1 歷史計畫、原型或稽核資料。它們仍能解釋需求如何演進，但不再出現在現行
 開發入口的第一層，也不得被 Agent 當成新的待辦來源。
+
+## 2026-08-29 canonical 改版校正
+
+本輪依已完成的 Event Check／Check Models cutover 再次比對 runtime、OpenAPI、migrations、React routes、
+Karate 與文件，處理以下漂移：
+
+- `project-scope.yaml` 改以 Event Check、Saved Results、Check Models、Cases、Ingestion Issues、Scenario Lab
+  為 canonical 能力，正式 ingestion 改列 ClickHouse Kafka Connect + Materialized Views；Redpanda Connect
+  只留在歷史紀錄。
+- 新增 `REQ-EH-017` Safe Ingestion Issues 與 `REQ-EH-018` Scenario Lab 的正式 traceability，不再只把兩者
+  隱含在 implementation notes。
+- Journey Profile、historical Pattern、Pattern governance 與 Timeline single-event attachment 文件改為
+  `superseded` compatibility contract；原始 Prototype 與 UX remediation plan 明確標為歷史 reference。
+- Current Architecture、Data Model、Screaming Architecture、Runbook、E2E、Frontend／Infra README、Guide、
+  OpenAPI 摘要與 PlantUML 全部改用 canonical 名稱；舊名稱僅保留在 deprecated route／API、migration
+  evidence、compatibility test 或歷史完成證據。
+- Check Models 文件補上按需 `Source YAML` API：內容在 build time 嵌入、啟動時驗 checksum，不接受任意
+  filesystem path，也不增加 Registry list payload。
+
+本輪仍不刪除 deprecated API、legacy tables、Journey／Pattern contracts 或歷史 feature；物理移除需要獨立
+migration release、rollback window 與 release note。

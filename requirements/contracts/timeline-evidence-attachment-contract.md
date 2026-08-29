@@ -1,14 +1,18 @@
 ---
 document_id: EH-DOC-CON-008
-status: active
+status: superseded
 owner: product
-last_reviewed: 2026-08-28
-source_of_truth: true
+last_reviewed: 2026-08-29
+source_of_truth: false
 canonical_topic: timeline-evidence-attachment
 supersedes: []
 ---
 
 # Timeline Event Evidence Attachment Contract
+
+> **Superseded compatibility contract.** Canonical handoff 是 Event Check 明確保存 immutable Check Snapshot，
+> 再建立或加入 Investigation Case。本文件僅保留 legacy Timeline 單事件 attachment endpoint 的既有契約；
+> 新流程以 [Event Check Target Design](../architecture/event-check-target-design.md) 為準。
 
 更新日期：2026-08-23  
 需求：`REQ-EH-015`  

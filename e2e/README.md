@@ -26,7 +26,6 @@ Runtime properties:
 -Dorder.baseUrl=http://localhost:28335
 -DeventLab.baseUrl=http://localhost:28343
 -DkafkaConnect.baseUrl=http://localhost:28324
--DredpandaConnect.baseUrl=http://localhost:28325
 -Dclickhouse.httpUrl=http://localhost:28317
 -Dclickhouse.user=event_hunter
 -Dclickhouse.password=event_hunter_local_only
@@ -76,7 +75,7 @@ readiness gate。
 
 Infrastructure scenarios：
 
-- `event-pipeline.feature` 從真實 Demo Order API 經 Outbox、Debezium、Redpanda、ClickHouse Sink／Materialized Views 到 Timeline。
+- `event-pipeline.feature` 從真實 Demo Order API 經 Outbox、Debezium、Redpanda、ClickHouse Sink／Materialized Views 到 canonical Event Check read model。
 - `quality-metrics.feature` 執行前先載入 `quality-window.json`，再執行 production `quality-worker aggregate --from ... --to ...`。
 - `grafana-alert-webhook.feature` 從 JSON fixture 產生每次唯一 payload，並對實際送出的完整字串計算與 Grafana 相同的 timestamped HMAC-SHA256。
 - `grafana-auto-case.feature` 不直接呼叫 webhook：它寫入唯一 terminal DLQ attempt，等待 provisioned Grafana rule → policy → HMAC Contact Point 自動建案，再寫入 success attempt 驗證 resolved Evidence 與不自動結案。
@@ -162,9 +161,9 @@ java -jar /tmp/event-hunter-karate-2.1.2.jar run --no-pom --configdir=e2e \
 ```
 
 此標籤覆蓋 list → detail URL、direct URL、reload、back／forward、drawer close、404，以及
-空白結案欄位的 cancel／confirm；目前標籤基準為 4/4 passed。`@eh-p1-1-013` 另覆蓋 Timeline／Journey
-空白頁最近 72 小時預設，以及 Timeline search → URL → reload → back／forward；`@eh-p1-1-014` 覆蓋案件 baseline/current-view window 與
-Grafana window source；`@eh-p1-1-015` 覆蓋案件內 all-active Pattern、Evidence/Audit refresh 與 reload
+空白結案欄位的 cancel／confirm；目前標籤基準為 4/4 passed。`@eh-p1-1-013` 另保留 legacy Timeline／Journey
+空白頁最近 72 小時與 route migration regression；`@eh-p1-1-014` 覆蓋案件 baseline/current-view window 與
+Grafana window source；`@eh-p1-1-015` 覆蓋 legacy 案件 Pattern、Evidence/Audit refresh 與 reload
 還原；`@eh-p1-1-016` 覆蓋 API `allowed_transitions`、WAITING_APPROVAL 進出、Resolve／Close 必填表單、
 重新開啟與 terminal CLOSED。可用以下命令獨立回歸：
 
@@ -184,7 +183,8 @@ immutable Snapshot，進入 Saved Results 後分別驗證「建立案件」與�
 目前 Backend 標籤基準為 7/7、Frontend 標籤基準為 1/1。
 
 `@eh-p1-1-012` 另覆蓋 dialog 的 role／aria-modal、初始焦點、Escape 與 focus restore，以及 390px 下
-Timeline、Overview、Investigations、Pattern Library、Scenario Lab 的 document-level overflow。
+Event Check、Saved Results、Check Models、Overview、Investigations、Ingestion Issues、Scenario Lab，以及
+legacy compatibility routes 的 document-level overflow。
 
 ## E2E 資料清理
 

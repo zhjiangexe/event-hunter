@@ -289,15 +289,15 @@ export const featureGuides: FeatureGuideDefinition[] = [
         },
         {
           term: "Schema／allowlist／mapping",
-          plainMeaning: "可接受的形狀／種類／落庫欄位",
+          plainMeaning: "最低可搜尋形狀／已知事件規則／落庫欄位",
           reason:
-            "三者共同決定事件是否被接受，以及欄位如何安全寫進 ClickHouse。",
+            "目前 admission 先檢查 minimum envelope 與 13 種已知事件的必要 payload keys；完整條件式 JSON Schema validation 尚未由新路線全面執行。",
         },
       ],
       noDataChecks: [
         "先確認 Event Check 的時間範圍涵蓋事件 occurredAt，而且輸入的是正確 ID 類型。",
         "確認 producer 真的把訊息送到已訂閱 topic，而不是名稱相近的其他 topic。",
-        "確認 event type／version 已登錄；若未通過契約，改查 Ingestion Issues，而不是正常 Event Check。",
+        "確認 admission status：未知 event type／version 仍可帶 warning 搜尋；缺少 minimum envelope 或已知必要 payload key 才到 Ingestion Issues。",
         "確認 ingestion consumer group 有 member、lag 可下降，而且 ClickHouse insert 沒有失敗。",
         "最後直接用 eventId 或 correlationId 查 ClickHouse，區分『未落庫』與『UI 查詢條件不符』。",
       ],
@@ -400,15 +400,16 @@ export const featureGuides: FeatureGuideDefinition[] = [
         {
           label: "Canonical envelope",
           requirement:
-            "JSON 必須具備完整 envelope keys，欄位型別與格式符合 schema。",
+            "JSON 必須具備 minimum envelope；已知 event type 另檢查必要 payload keys。",
           failure:
-            "Invalid JSON／schema violation 進 restricted DLQ 與 event_ingestion_failures。",
+            "Invalid JSON／schema violation 保留在 restricted raw landing，safe summary 進 admission quarantine；一般 API 不讀 raw payload。",
         },
         {
           label: "Type and version allowlist",
           requirement:
             "eventType、eventVersion 必須已登錄在 AsyncAPI 與對應 event schema。",
-          failure: "未知 type／version 會被拒絕，不進正常 forensics_events。",
+          failure:
+            "未知 type／version 目前仍提升為 SEARCHABLE_WITH_WARNINGS，Event Check 會顯示 quality flag；這不等於完整業務契約已驗證。",
         },
         {
           label: "Sink acknowledgement",
@@ -418,7 +419,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
             "ClickHouse 不可用時保留未提交 offset，恢復後重送；不能把 HTTP ready 當成已落庫。",
         },
         {
-          label: "Timeline query scope",
+          label: "Event Check query scope",
           requirement:
             "查詢識別碼、occurredAt 時間窗、retention 與結果上限必須涵蓋該事件。",
           failure:
@@ -499,9 +500,9 @@ export const featureGuides: FeatureGuideDefinition[] = [
           goal: "只讓已知事件進入查詢庫，並確保敏感資料不因接入而外洩。",
           actions: [
             "為每個 eventType／version 建立 JSON Schema，並在 AsyncAPI 與 topic allowlist 登錄。",
-            "確認 generic envelope mapping 能寫入 forensics_events；新增 envelope 欄位時才修改欄位 mapping／migration。",
+            "確認 generic envelope mapping 能經 raw landing／admission 寫入 canonical_forensics_events；新增 envelope 欄位時才修改 mapping／migration。",
             "設定 payload classification、masking、prohibited fields 與 evidence policy。",
-            "定義未知 type／version、schema violation 的 restricted DLQ 與 checksum-only ClickHouse metadata。",
+            "定義未知 type／version 的 warning policy、schema violation admission quarantine，以及 technical DLQ 的 checksum-only metadata。",
           ],
           sourceFiles: [
             "contracts/asyncapi.yaml",
@@ -510,8 +511,9 @@ export const featureGuides: FeatureGuideDefinition[] = [
             "contracts/platform/event-versioning-policy.yaml",
           ],
           verification: [
-            "合法 fixture 通過 schema 並出現在 forensics_events。",
-            "錯誤 fixture 只出現在 restricted DLQ／event_ingestion_failures，不進正常 Timeline。",
+            "合法 fixture 通過 admission 並出現在 canonical_forensics_events。",
+            "minimum envelope／known payload key 錯誤只出現在 raw landing + admission failure summary，不進正常 Event Check。",
+            "未知 type／version 出現在 Event Check，但必須明確標示 SEARCHABLE_WITH_WARNINGS。",
             "Viewer／Investigator 看不到 payload；允許的 Admin 查詢仍套用 masking 與 audit。",
           ],
           doneWhen:
@@ -569,7 +571,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
           goal: "證明接入不是只在 producer 端成功，而是能查、能診斷、能重啟後保存。",
           actions: [
             "先跑 contract validation，再確認 Debezium、兩個 ClickHouse Sink connectors 與 ClickHouse readiness。",
-            "以新的 Correlation ID 發布代表性事件，驗證 Timeline、failure route 與 processing attempts。",
+            "以新的 Correlation ID 發布代表性事件，驗證 Event Check、failure route 與 processing attempts。",
             "Recommended／Full 再驗證 Tempo、Loki、Check Models、Snapshot 與 Case deep links。",
             "更新 owner、故障處理、retention、known gaps 與 rollback／停用方式。",
           ],
@@ -581,7 +583,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
           ],
           verification: [
             "重啟後同一 event／case／trace reference 仍可查詢。",
-            "無效事件不汙染正常 Timeline，且 failure metadata 可定位來源 topic／partition／offset。",
+            "被 quarantine 的事件不汙染正常 Event Check；warning-only 事件可搜尋且有標示；failure metadata 可定位來源 topic／partition／offset。",
             "交接者能只靠 repo source of truth 重建設定，不需進 container 手改。",
           ],
           doneWhen:
@@ -591,11 +593,12 @@ export const featureGuides: FeatureGuideDefinition[] = [
       failureModes: [
         {
           label: "Ingestion／契約錯誤",
-          signal: "INVALID_JSON、SCHEMA_VIOLATION、UNKNOWN_EVENT_TYPE／VERSION",
+          signal:
+            "INVALID_JSON、SCHEMA_VIOLATION，或 UNKNOWN_EVENT_TYPE／VERSION warning",
           lookAt:
             "Ingestion Issues、admission failure table、technical DLQ projector 與 Kafka Connect logs",
           interpretation:
-            "事件無法被安全理解；可能是 producer／Adapter bug，也可能是 schema rollout 未同步。",
+            "Invalid/schema violation 代表無法安全提升；unknown type/version 目前仍可搜尋但契約完整度未知。兩者都可能是 producer／Adapter bug 或 rollout 未同步。",
         },
         {
           label: "Consumer 技術處理失敗",
@@ -641,7 +644,7 @@ export const featureGuides: FeatureGuideDefinition[] = [
           label: "驗證合法／非法 ingestion 與 DLQ",
           command: "bash scripts/test-ingestion-pipeline.sh",
           expected:
-            "合法資料可落庫，非法資料只留下 restricted DLQ 與 checksum metadata。",
+            "合法資料可落庫；admission failure 留在 restricted raw + safe summary；technical poison 進 technical DLQ。",
         },
         {
           risk: "CONTROLLED",
@@ -813,12 +816,13 @@ export const featureGuides: FeatureGuideDefinition[] = [
     steps: [
       "選擇 Flow Models 或 Global Checks。",
       "確認 model ID、版本、狀態與適用範圍。",
-      "查看 paths／expectations／rules 與 fixture scenarios。",
+      "查看 paths／expectations／rules、fixture scenarios；需要逐欄核對時再開啟 Source YAML。",
       "回到 Event Check 選用該版本執行判讀。",
     ],
     capabilities: [
       "Journey 定義與 Pattern 規則已收斂為同一版本化 model registry",
       "Runtime 唯讀且由 CI 驗證 schema、fixtures 與 generator drift",
+      "Source YAML 按需載入 build-time 嵌入內容，並與 Registry checksum 核對",
       "舊 Pattern reference 可導向對應的 canonical expectation",
     ],
     gaps: [
@@ -882,12 +886,14 @@ export const featureGuides: FeatureGuideDefinition[] = [
     steps: [
       "先用時間、問題類型或來源 topic 縮小範圍。",
       "開啟明細確認 error code、failure stage 與 Kafka position。",
+      "若事件格式正確但內容代表業務失敗，回 Event Check；若服務在發布前當機，改查 Loki／Tempo。",
       "依 Runbook 修正來源契約或管線，再重送測試資料驗證。",
     ],
     capabilities: [
       "明確區分 contract、admission 與 technical DLQ",
       "正常 Event Check 不混入不可安全理解的事件",
       "UI 僅提供 checksum 與 allowlisted metadata",
+      "不把業務失敗事件或未產生任何 Kafka record 的服務故障誤列為 ingestion issue",
     ],
     gaps: [
       "不提供 production redrive 按鈕",
