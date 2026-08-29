@@ -2,21 +2,26 @@ openapi: 3.1.0
 info:
   title: Event Hunter API
   version: 0.1.0
-  summary: 事件驅動架構治理與業務事故鑑識 API 草案
+  summary: 業務事件鑑識、流程符合性檢查與案件協作 API
   description: |
     Event Hunter 是建立在 Kafka、ClickHouse 與 OpenTelemetry 資料之上的
-    業務級事件鑑識平台。本文件保留完整的未來 API 草案；MVP 的 Event Hunter
-    使用者介面聚焦 Business Timeline、Investigation、固定 Domain Pattern 與
-    Evidence Bundle，另包含 Grafana 業務告警接入、事件品質聚合與可展示的
-    Outbox-to-Timeline 管線等 supporting capabilities。
-    Event Catalog、Topic Registry、Event Hunter 自建 Runtime Quality UI 與 Replay
-    是延後功能，先由 Schema Registry／Kafka tooling／Grafana OSS 等既有元件處理。
+    業務級事件鑑識平台。Phase 1.1 的 canonical 產品入口是 Event Check、Saved Results、
+    Check Models、Investigation Cases、Ingestion Issues 與 Scenario Lab。Event Check 以有界
+    canonical events 和 immutable Check Model 產生 deterministic result；只有明確保存或案件交接
+    才建立 Check Snapshot。
+
+    舊 Business Timeline、Business Journey、Journey Profile 與 Pattern endpoints 目前只作 bounded
+    compatibility adapter，已標記 deprecated；它們不是新的 authoring 或產品決策來源。個人 Saved Search
+    API 則保留，作為 Event Check 的 typed Query Shortcuts。
+
+    本文件也保留完整的未來 API 草案。Event Catalog、Topic Registry、Event Hunter 自建 Runtime
+    Quality UI 與 Replay 是延後功能，先由 Schema Registry／Kafka tooling／Grafana OSS 等既有元件處理。
     Grafana OSS 負責 Logs／Metrics／Traces、Dashboard、Explore、Correlations 與
     Alerting；Event Hunter 只接收需要業務調查的 Grafana Alert Webhook，並保存參照。
 
     ### 重要邊界
 
-    - 第一版 Pattern Engine 只做固定規則的唯讀調查，不直接修改正式業務資料。
+    - Check Models 與 legacy Pattern Engine 只做確定性唯讀調查，不直接修改正式業務資料。
     - `forensics_events` 等事件資料位於 ClickHouse；案件、權限與設定位於 PostgreSQL。
     - Temporal 是預設關閉的選用能力，只負責低頻、可重試、可能等待人工核准的案件流程；MVP 核心功能不依賴 Temporal。
     - Kafka Consumer 的事件重試由 Consumer Framework／Retry Topic／DLQ 處理；Event Hunter 只有在來源提供 attempt 與錯誤資訊時才呈現重試摘要。
@@ -52,26 +57,26 @@ tags:
     description: 接收經 HMAC 驗證、具 correlationId 的選定 Grafana 業務告警；不取代 Grafana Alerting。
     x-mvp-status: mvp
   - name: Business Timeline
-    description: 依 correlationId 或事件條件重建唯讀的業務時間線。
-    x-mvp-status: mvp
+    description: Deprecated compatibility API；canonical Timeline 位於 Event Check workspace。
+    x-mvp-status: deprecated-compatibility
   - name: Ingestion Issues
     description: 統一查詢 Schema 驗證、Admission quarantine 與 technical DLQ 的安全摘要；不回傳 raw payload 或 exception 細節。
     x-mvp-status: phase-1.1
   - name: Event Check
-    description: 由任一受支援 ID 建立有界 scope 並執行唯讀流程符合性檢查；一般 evaluation 不保存。後端 API 已實作，workspace UI 由 EH-ECM-004 交付。
-    x-mvp-status: implemented-event-check-api
+    description: 由任一受支援 ID 建立有界 scope 並執行唯讀流程符合性檢查；一般 evaluation 不保存。
+    x-mvp-status: canonical-phase-1.1
   - name: Check Models
-    description: 列出 YAML／Git 發布並編譯進 immutable Registry 的 Flow Models 與 Global Checks；後端 API 已實作，registry UI 由 EH-ECM-004 交付。
-    x-mvp-status: implemented-event-check-api
+    description: 列出 YAML／Git 發布並編譯進 immutable Registry 的 Flow Models 與 Global Checks，並可按需讀取 checksum 驗證的原始 YAML。
+    x-mvp-status: canonical-phase-1.1
   - name: Journey Profile Registry
-    description: 列出由 YAML contract 編譯進 API 的唯讀 Journey Profiles；執行期不提供編輯或發布。
-    x-mvp-status: phase-1.1
+    description: Deprecated compatibility API；canonical authoring source 已移至 Check Models。
+    x-mvp-status: deprecated-compatibility
   - name: Investigation
     description: 建立、分析、指派、更新與結案的業務調查案件。
     x-mvp-status: mvp
   - name: Pattern Registry
-    description: 列出由 Go 程式碼註冊的確定性 Domain Pattern；MVP 不允許執行期修改。
-    x-mvp-status: mvp
+    description: Deprecated compatibility API；canonical deterministic rules 已移至 Check Models。
+    x-mvp-status: deprecated-compatibility
   - name: Replay
     description: 【Phase 2／3】Projection Rebuild 與 Sandbox Behavioral Replay 的受控流程，MVP 不提供。
     x-mvp-status: phase-2-3
@@ -141,7 +146,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/event-checks/evaluations:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: event-check
     post:
       tags: [Event Check]
@@ -184,7 +189,7 @@ paths:
           $ref: '#/components/responses/DependencyTimeout'
 
   /api/v1/check-models:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: event-check
     get:
       tags: [Check Models]
@@ -210,7 +215,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/check-models/{modelId}/versions/{version}:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: event-check
     get:
       tags: [Check Models]
@@ -237,8 +242,41 @@ paths:
         '429':
           $ref: '#/components/responses/RateLimited'
 
+  /api/v1/check-models/{modelId}/versions/{version}/source:
+    x-mvp-status: canonical-phase-1.1
+    x-owner: event-check
+    get:
+      tags: [Check Models]
+      operationId: getCheckModelSource
+      summary: 取得指定 Check Model version 的原始 YAML
+      description: >-
+        回傳 build-time 嵌入且通過 SHA-256 驗證的原始 YAML；不接受任意檔案路徑，亦不在 runtime
+        讀取 workspace filesystem。
+      parameters:
+        - $ref: '#/components/parameters/CheckModelId'
+        - $ref: '#/components/parameters/CheckModelVersion'
+      responses:
+        '200':
+          description: 原始 YAML、repository-relative source path 與 checksum。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckModelSourceDocument'
+        '401':
+          description: 尚未建立有效 Session。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /api/v1/check-snapshots:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: event-check
     get:
       tags: [Event Check]
@@ -343,7 +381,7 @@ paths:
           $ref: '#/components/responses/DependencyTimeout'
 
   /api/v1/check-snapshots/{snapshotId}:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: event-check
     get:
       tags: [Event Check]
@@ -374,7 +412,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/check-findings/{findingId}/feedback:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: investigation
     parameters:
       - $ref: '#/components/parameters/CheckFindingId'
@@ -421,7 +459,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/investigations/{investigationId}/check-snapshots:
-    x-mvp-status: implemented-event-check-api
+    x-mvp-status: canonical-phase-1.1
     x-owner: investigation
     parameters:
       - $ref: '#/components/parameters/InvestigationId'
@@ -499,7 +537,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/patterns:
-    x-mvp-status: mvp
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     get:
       tags: [Pattern Registry]
@@ -520,7 +558,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/patterns/effectiveness:
-    x-mvp-status: mvp
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     get:
       tags: [Pattern Registry]
@@ -925,7 +963,7 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/timelines/{correlationId}:
-    x-mvp-status: mvp
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
@@ -983,7 +1021,7 @@ paths:
           $ref: '#/components/responses/DependencyTimeout'
 
   /api/v1/business-journeys/{correlationId}:
-    x-mvp-status: phase-1.1
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
@@ -1017,7 +1055,7 @@ paths:
           $ref: '#/components/responses/DependencyTimeout'
 
   /api/v1/journey-profiles:
-    x-mvp-status: phase-1.1
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     get:
       tags: [Journey Profile Registry]
@@ -1042,13 +1080,14 @@ paths:
           $ref: '#/components/responses/RateLimited'
 
   /api/v1/events/search:
-    x-mvp-status: mvp
+    x-mvp-status: deprecated-compatibility
     x-owner: event-hunter
     get:
       tags: [Business Timeline]
       operationId: searchForensicsEvents
-      summary: 搜尋已接入的事件
-      description: 使用 allowlist 條件查詢事件。Pattern 由固定 Registry 解析，Alert 與案件 Severity 由 PostgreSQL 控制面解析為 correlation ID，再以有界條件查詢 ClickHouse；API 不接受任意 SQL。
+      deprecated: true
+      summary: 使用 legacy allowlist 搜尋已接入事件
+      description: 使用 allowlist 條件查詢事件。此 endpoint 保留無法無損映射到單一 Event Check scope 的廣泛查詢；新調查應使用 evaluateEventCheck。Legacy Pattern、Alert 與案件條件會先解析為 correlation ID，再以有界條件查詢 ClickHouse；API 不接受任意 SQL。
       parameters:
         - name: correlation_id
           in: query
@@ -1278,7 +1317,7 @@ paths:
     x-mvp-status: phase-1.1
     x-owner: event-hunter
     post:
-      tags: [Timeline]
+      tags: [Event Check]
       operationId: identifySmartSearchInput
       summary: 辨識 Smart Search 輸入
       description: |
@@ -1307,7 +1346,7 @@ paths:
     x-mvp-status: phase-1.1
     x-owner: event-hunter
     get:
-      tags: [Timeline]
+      tags: [Event Check]
       operationId: listSavedSearches
       summary: 列出目前 principal 的個人 Saved Searches
       description: 只回傳 session subject 自己保存的查詢；不提供角色共享或全域搜尋。
@@ -1323,13 +1362,14 @@ paths:
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
     post:
-      tags: [Timeline]
+      tags: [Event Check]
       operationId: createSavedSearch
       summary: 保存目前 bounded query state
       description: |
-        保存 allowlisted Timeline 或 Journey query state。ABSOLUTE 固定事件鑑識時間窗；
+        保存 allowlisted Event Check query shortcut。ABSOLUTE 固定事件鑑識時間窗；
         RELATIVE 在每次列出時依目前時間重建最近 1 小時／24 小時／72 小時／7 天等窗口。
-        窗口最多七天，且不接受 include_payload、任意 SQL、任意 path 或外部 URL。
+        窗口最多七天，且不接受 include_payload、任意 SQL、任意 path 或外部 URL。資料庫內既有
+        Timeline／Journey target 由 compatibility mapper 轉成 bounded Event Check state。
       requestBody:
         required: true
         content:
@@ -1367,7 +1407,7 @@ paths:
           type: string
           format: uuid
     delete:
-      tags: [Timeline]
+      tags: [Event Check]
       operationId: deleteSavedSearch
       summary: 刪除目前 principal 自己的 Saved Search
       responses:
@@ -1386,7 +1426,7 @@ paths:
     x-mvp-status: phase-1.1
     x-owner: event-hunter
     get:
-      tags: [Timeline]
+      tags: [Event Check]
       operationId: listSearchPresets
       summary: 列出版本化唯讀常用情境
       description: 回傳由程式碼管理、以伺服器目前時間建立最近 72 小時 bounded URL 的唯讀 presets。
@@ -2227,6 +2267,27 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
   schemas:
+    CheckModelSourceDocument:
+      type: object
+      additionalProperties: false
+      required: [model_id, version, source_path, checksum, yaml]
+      properties:
+        model_id:
+          type: string
+          pattern: '^[a-z][a-z0-9-]{2,63}$'
+        version:
+          type: integer
+          minimum: 1
+        source_path:
+          type: string
+          pattern: '^contracts/check-models/[a-z0-9._/-]+\.yaml$'
+        checksum:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        yaml:
+          type: string
+          minLength: 1
+          description: 與 checksum 對應的原始 UTF-8 YAML 內容。
     DemoRole:
       type: string
       enum: [VIEWER, INVESTIGATOR, ADMIN]

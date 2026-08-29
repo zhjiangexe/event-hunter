@@ -99,6 +99,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/check-models/{modelId}/versions/{version}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 取得指定 Check Model version 的原始 YAML
+         * @description 回傳 build-time 嵌入且通過 SHA-256 驗證的原始 YAML；不接受任意檔案路徑，亦不在 runtime 讀取 workspace filesystem。
+         */
+        get: operations["getCheckModelSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/check-snapshots": {
         parameters: {
             query?: never;
@@ -529,8 +549,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * 搜尋已接入的事件
-         * @description 使用 allowlist 條件查詢事件。Pattern 由固定 Registry 解析，Alert 與案件 Severity 由 PostgreSQL 控制面解析為 correlation ID，再以有界條件查詢 ClickHouse；API 不接受任意 SQL。
+         * 使用 legacy allowlist 搜尋已接入事件
+         * @deprecated
+         * @description 使用 allowlist 條件查詢事件。此 endpoint 保留無法無損映射到單一 Event Check scope 的廣泛查詢；新調查應使用 evaluateEventCheck。Legacy Pattern、Alert 與案件條件會先解析為 correlation ID，再以有界條件查詢 ClickHouse；API 不接受任意 SQL。
          */
         get: operations["searchForensicsEvents"];
         put?: never;
@@ -643,9 +664,10 @@ export interface paths {
         put?: never;
         /**
          * 保存目前 bounded query state
-         * @description 保存 allowlisted Timeline 或 Journey query state。ABSOLUTE 固定事件鑑識時間窗；
+         * @description 保存 allowlisted Event Check query shortcut。ABSOLUTE 固定事件鑑識時間窗；
          *     RELATIVE 在每次列出時依目前時間重建最近 1 小時／24 小時／72 小時／7 天等窗口。
-         *     窗口最多七天，且不接受 include_payload、任意 SQL、任意 path 或外部 URL。
+         *     窗口最多七天，且不接受 include_payload、任意 SQL、任意 path 或外部 URL。資料庫內既有
+         *     Timeline／Journey target 由 compatibility mapper 轉成 bounded Event Check state。
          */
         post: operations["createSavedSearch"];
         delete?: never;
@@ -1008,6 +1030,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CheckModelSourceDocument: {
+            model_id: string;
+            version: number;
+            source_path: string;
+            checksum: string;
+            /** @description 與 checksum 對應的原始 UTF-8 YAML 內容。 */
+            yaml: string;
+        };
         /** @enum {string} */
         DemoRole: "VIEWER" | "INVESTIGATOR" | "ADMIN";
         DemoSessionRequest: {
@@ -3158,6 +3188,43 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getCheckModelSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Git-managed Check Model 穩定識別碼。 */
+                modelId: components["parameters"]["CheckModelId"];
+                /** @description Immutable Check Model version；不接受 latest。 */
+                version: components["parameters"]["CheckModelVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原始 YAML、repository-relative source path 與 checksum。 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckModelSourceDocument"];
+                };
+            };
+            /** @description 尚未建立有效 Session。 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
             429: components["responses"]["RateLimited"];
         };
     };

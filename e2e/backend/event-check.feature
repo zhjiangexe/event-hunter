@@ -28,7 +28,21 @@ Feature: Event Check bounded evaluation Snapshot and Case handoff
     And match response.checksum == '#regex [0-9a-f]{64}'
     And match response.source_path == 'contracts/check-models/order-fulfillment.yaml'
 
+    Given path 'api', 'v1', 'check-models', 'order-fulfillment', 'versions', 2, 'source'
+    When method get
+    Then status 200
+    And match response.model_id == 'order-fulfillment'
+    And match response.version == 2
+    And match response.source_path == 'contracts/check-models/order-fulfillment.yaml'
+    And match response.checksum == '#regex [0-9a-f]{64}'
+    And match response.yaml contains 'model_id: order-fulfillment'
+    And match response.yaml contains 'MISSING_SHIPMENT_AFTER_PAYMENT'
+
     Given path 'api', 'v1', 'check-models', 'order-fulfillment', 'versions', 999
+    When method get
+    Then status 404
+
+    Given path 'api', 'v1', 'check-models', 'order-fulfillment', 'versions', 999, 'source'
     When method get
     Then status 404
 

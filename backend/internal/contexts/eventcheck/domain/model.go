@@ -35,6 +35,14 @@ type RegistryEntry struct {
 	Model      CheckModel `json:"model"`
 }
 
+type ModelSourceDocument struct {
+	ModelID    string `json:"model_id"`
+	Version    int    `json:"version"`
+	SourcePath string `json:"source_path"`
+	Checksum   string `json:"checksum"`
+	YAML       string `json:"yaml"`
+}
+
 type CheckModel struct {
 	ContractVersion     int                 `json:"contract_version"`
 	ID                  string              `json:"model_id"`

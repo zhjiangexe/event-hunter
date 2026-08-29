@@ -36,3 +36,11 @@ func (service *Service) Get(id string, version int) (domain.RegistryEntry, error
 	}
 	return domain.RegistryEntry{}, ErrNotFound
 }
+
+func (service *Service) GetSource(id string, version int) (domain.ModelSourceDocument, error) {
+	source, ok := domain.LookupModelSource(id, version)
+	if !ok {
+		return domain.ModelSourceDocument{}, ErrNotFound
+	}
+	return source, nil
+}

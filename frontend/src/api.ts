@@ -51,6 +51,7 @@ export type EventCheckFinding = Schemas["Finding"];
 export type EventCheckEventReference = Schemas["EventReference"];
 export type EventCheckRelationship = Schemas["Relationship"];
 export type CheckModelRegistryEntry = Schemas["RegistryEntry"];
+export type CheckModelSourceDocument = Schemas["CheckModelSourceDocument"];
 export type CreateCheckSnapshotRequest = Schemas["CreateCheckSnapshotRequest"];
 export type CheckSnapshot = Schemas["CheckSnapshot"];
 export type CheckSnapshotSummary = Schemas["CheckSnapshotSummary"];
@@ -245,6 +246,13 @@ export const api = {
       await client.GET("/api/v1/check-models/{modelId}/versions/{version}", {
         params: { path: { modelId, version } },
       }),
+    ),
+  checkModelSource: async (modelId: string, version: number) =>
+    unwrap(
+      await client.GET(
+        "/api/v1/check-models/{modelId}/versions/{version}/source",
+        { params: { path: { modelId, version } } },
+      ),
     ),
   createCheckSnapshot: async (
     body: CreateCheckSnapshotRequest,

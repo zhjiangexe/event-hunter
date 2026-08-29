@@ -300,6 +300,13 @@ const globalModel = {
   },
 } as unknown as CheckModelRegistryEntry;
 
+const flowModelSource = `$schema: ./check-model.schema.json
+contract_version: 1
+model_id: order-fulfillment
+version: 2
+kind: FLOW
+`;
+
 const cases: InvestigationPage = {
   items: [
     {
@@ -416,6 +423,13 @@ function renderSavedResultsPage() {
 
 beforeEach(() => {
   vi.spyOn(api, "checkModels").mockResolvedValue([flowModel, globalModel]);
+  vi.spyOn(api, "checkModelSource").mockResolvedValue({
+    model_id: "order-fulfillment",
+    version: 2,
+    source_path: "contracts/check-models/order-fulfillment.yaml",
+    checksum: "a".repeat(64),
+    yaml: flowModelSource,
+  });
   vi.spyOn(api, "evaluateEventCheck").mockResolvedValue(evaluation);
   vi.spyOn(api, "checkSnapshot").mockResolvedValue(snapshot);
   vi.spyOn(api, "createCheckSnapshot").mockResolvedValue(snapshot);
@@ -687,7 +701,7 @@ describe("Event Check workspace", () => {
         expect.objectContaining({
           correlation_id: "ORDER-1001",
           incident_from: "2026-08-28T00:00:00Z",
-          incident_to: "2026-08-28T01:00:00Z",
+          incident_to: "2026-08-28T01:00:01.000Z",
         }),
       ),
     );
@@ -801,5 +815,23 @@ describe("Check Models registry", () => {
     const expectation = await screen.findByText("Payment requires shipment");
     expect(expectation.closest("article")).toHaveClass("focused");
     expect(screen.getByText(/唯一正式判定來源/)).toBeInTheDocument();
+  });
+
+  it("loads the exact source YAML only after the source panel is opened", async () => {
+    renderModels(
+      "/check-models?kind=FLOW&model_id=order-fulfillment&version=2&panel=overview",
+    );
+    await screen.findByRole("dialog", { name: "Order Fulfillment" });
+    expect(api.checkModelSource).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Source YAML" }));
+
+    expect(
+      (await screen.findByTestId("check-model-source-yaml")).textContent,
+    ).toBe(flowModelSource);
+    expect(api.checkModelSource).toHaveBeenCalledWith("order-fulfillment", 2);
+    expect(
+      screen.queryByText(flowModel.model.description),
+    ).not.toBeInTheDocument();
   });
 });

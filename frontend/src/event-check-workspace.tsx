@@ -27,10 +27,11 @@ import {
   type Severity,
 } from "./api";
 import { eventObservabilityLinks } from "./observability-links";
+import { investigationWindowWithEndBoundary } from "./investigation-window";
 
 type WorkspaceTab = "summary" | "timeline" | "flow" | "findings" | "cases";
 type ModelKind = "FLOW" | "GLOBAL_CHECK";
-type ModelPanel = "overview" | "versions" | "scenarios";
+type ModelPanel = "overview" | "versions" | "scenarios" | "source";
 type ScopeAdjustment = { event_id: string; reason: string };
 
 const identifierTypes: Array<{
@@ -1051,8 +1052,7 @@ function CreateCaseDialogContent({
         title: title.trim(),
         severity,
         correlation_id: correlationID,
-        incident_from: incidentFrom,
-        incident_to: incidentTo,
+        ...investigationWindowWithEndBoundary(incidentFrom, incidentTo),
       }),
     onSuccess: (item) => {
       setCreatedCase(item);
@@ -2319,9 +2319,12 @@ export function CheckModelsRegistry() {
   const requestedFocus = query.get("focus");
   const legacyPatternID = query.get("legacy_pattern_id");
   const requestedPanel = query.get("panel") as ModelPanel | null;
-  const panel: ModelPanel = ["overview", "versions", "scenarios"].includes(
-    requestedPanel ?? "",
-  )
+  const panel: ModelPanel = [
+    "overview",
+    "versions",
+    "scenarios",
+    "source",
+  ].includes(requestedPanel ?? "")
     ? requestedPanel!
     : "overview";
   const registry = useQuery({
@@ -2347,6 +2350,16 @@ export function CheckModelsRegistry() {
         .filter((entry) => entry.model.model_id === selected.model.model_id)
         .sort((left, right) => right.model.version - left.model.version)
     : [];
+  const source = useQuery({
+    queryKey: [
+      "check-model-source",
+      selected?.model.model_id ?? "",
+      selected?.model.version ?? 0,
+    ],
+    queryFn: () =>
+      api.checkModelSource(selected!.model.model_id, selected!.model.version),
+    enabled: Boolean(selected && panel === "source"),
+  });
   const setKind = (nextKind: ModelKind) =>
     navigate(`/check-models?kind=${nextKind}`);
   const select = (
@@ -2536,8 +2549,8 @@ export function CheckModelsRegistry() {
                     </button>
                   </div>
                 </header>
-                <p>{selected.model.description}</p>
-                {legacyPatternID && (
+                {panel !== "source" && <p>{selected.model.description}</p>}
+                {panel !== "source" && legacyPatternID && (
                   <p className="compatibility-notice" role="status">
                     Legacy Pattern <code>{legacyPatternID}</code> 已對應至此
                     Check Model；醒目項目是唯一正式判定來源。
@@ -2548,25 +2561,27 @@ export function CheckModelsRegistry() {
                   aria-label="Model 詳細分頁"
                   role="tablist"
                 >
-                  {(["overview", "versions", "scenarios"] as const).map(
-                    (id) => (
-                      <button
-                        type="button"
-                        role="tab"
-                        data-testid={`check-model-panel-${id}`}
-                        aria-selected={panel === id}
-                        className={panel === id ? "active" : ""}
-                        onClick={() => setPanel(id)}
-                        key={id}
-                      >
-                        {id === "overview"
-                          ? "Overview"
-                          : id === "versions"
-                            ? "Versions"
-                            : "Test Scenarios"}
-                      </button>
-                    ),
-                  )}
+                  {(
+                    ["overview", "versions", "scenarios", "source"] as const
+                  ).map((id) => (
+                    <button
+                      type="button"
+                      role="tab"
+                      data-testid={`check-model-panel-${id}`}
+                      aria-selected={panel === id}
+                      className={panel === id ? "active" : ""}
+                      onClick={() => setPanel(id)}
+                      key={id}
+                    >
+                      {id === "overview"
+                        ? "Overview"
+                        : id === "versions"
+                          ? "Versions"
+                          : id === "scenarios"
+                            ? "Test Scenarios"
+                            : "Source YAML"}
+                    </button>
+                  ))}
                 </nav>
                 {panel === "overview" && (
                   <div className="model-overview">
@@ -2726,13 +2741,30 @@ export function CheckModelsRegistry() {
                     )}
                   </div>
                 )}
-                <footer>
-                  <span>Authoring: {selected.model.source.authoring}</span>
-                  <span>
-                    Runtime mutable:{" "}
-                    {String(selected.model.source.mutable_at_runtime)}
-                  </span>
-                </footer>
+                {panel === "source" && (
+                  <div className="model-source-yaml">
+                    {source.isLoading && (
+                      <p className="muted">載入原始 YAML…</p>
+                    )}
+                    {source.isError && (
+                      <p className="field-error">無法載入原始 YAML。</p>
+                    )}
+                    {source.data && (
+                      <pre data-testid="check-model-source-yaml">
+                        <code>{source.data.yaml}</code>
+                      </pre>
+                    )}
+                  </div>
+                )}
+                {panel !== "source" && (
+                  <footer>
+                    <span>Authoring: {selected.model.source.authoring}</span>
+                    <span>
+                      Runtime mutable:{" "}
+                      {String(selected.model.source.mutable_at_runtime)}
+                    </span>
+                  </footer>
+                )}
               </article>
             </div>
           )}

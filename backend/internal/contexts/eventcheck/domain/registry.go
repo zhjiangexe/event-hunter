@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -8,14 +9,28 @@ import (
 )
 
 var (
-	registryOnce sync.Once
-	registryData RegistryDocument
+	registryOnce    sync.Once
+	registryData    RegistryDocument
+	registrySources map[string]string
 )
 
 func Registry() []RegistryEntry {
 	registryOnce.Do(func() {
 		if err := json.Unmarshal([]byte(generatedCheckModelRegistryJSON), &registryData); err != nil {
 			panic(fmt.Sprintf("decode generated Check Model registry: %v", err))
+		}
+		if err := json.Unmarshal([]byte(generatedCheckModelSourcesJSON), &registrySources); err != nil {
+			panic(fmt.Sprintf("decode generated Check Model sources: %v", err))
+		}
+		for _, entry := range registryData.Models {
+			source, ok := registrySources[modelSourceKey(entry.Model.ID, entry.Model.Version)]
+			if !ok {
+				panic(fmt.Sprintf("generated Check Model source missing: %s@%d", entry.Model.ID, entry.Model.Version))
+			}
+			checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(source)))
+			if checksum != entry.Checksum {
+				panic(fmt.Sprintf("generated Check Model source checksum mismatch: %s@%d", entry.Model.ID, entry.Model.Version))
+			}
 		}
 	})
 	return cloneRegistryEntries(registryData.Models)
@@ -39,6 +54,25 @@ func LookupModel(id string, version int) (RegistryEntry, bool) {
 		}
 	}
 	return RegistryEntry{}, false
+}
+
+func LookupModelSource(id string, version int) (ModelSourceDocument, bool) {
+	entry, ok := LookupModel(id, version)
+	if !ok {
+		return ModelSourceDocument{}, false
+	}
+	source, ok := registrySources[modelSourceKey(id, version)]
+	if !ok {
+		return ModelSourceDocument{}, false
+	}
+	return ModelSourceDocument{
+		ModelID: id, Version: version, SourcePath: entry.SourcePath,
+		Checksum: entry.Checksum, YAML: source,
+	}, true
+}
+
+func modelSourceKey(id string, version int) string {
+	return fmt.Sprintf("%s@%d", id, version)
 }
 
 func ActiveGlobalChecks() []RegistryEntry {

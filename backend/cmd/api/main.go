@@ -197,6 +197,7 @@ func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, gra
 	mux.HandleFunc("POST /api/v1/event-checks/evaluations", eventChecks.evaluate)
 	mux.HandleFunc("GET /api/v1/check-models", eventChecks.listModels)
 	mux.HandleFunc("GET /api/v1/check-models/{modelId}/versions/{version}", eventChecks.getModel)
+	mux.HandleFunc("GET /api/v1/check-models/{modelId}/versions/{version}/source", eventChecks.getModelSource)
 	mux.HandleFunc("POST /api/v1/check-snapshots", eventChecks.createSnapshot)
 	mux.HandleFunc("GET /api/v1/check-snapshots", eventChecks.listSnapshots)
 	mux.HandleFunc("GET /api/v1/check-snapshots/{snapshotId}", eventChecks.getSnapshot)

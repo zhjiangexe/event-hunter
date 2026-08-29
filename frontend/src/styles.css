@@ -4267,6 +4267,24 @@ time {
 .model-scenarios li {
   padding: 6px;
 }
+.model-source-yaml {
+  min-height: 320px;
+  margin-top: 18px;
+}
+.model-source-yaml pre {
+  max-height: min(62dvh, 680px);
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid #d8e4e1;
+  border-radius: 9px;
+  color: #d8eee9;
+  background: #19332f;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+}
 .check-model-detail > footer {
   display: flex;
   flex-wrap: wrap;

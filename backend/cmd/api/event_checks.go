@@ -131,6 +131,28 @@ func (api eventCheckAPI) getModel(writer http.ResponseWriter, request *http.Requ
 	_ = json.NewEncoder(writer).Encode(result)
 }
 
+func (api eventCheckAPI) getModelSource(writer http.ResponseWriter, request *http.Request) {
+	if _, ok := api.sessions.read(request); !ok {
+		writeAPIError(writer, http.StatusUnauthorized, "UNAUTHENTICATED")
+		return
+	}
+	version, err := strconv.Atoi(request.PathValue("version"))
+	if err != nil || version < 1 {
+		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_MODEL_VERSION")
+		return
+	}
+	result, err := api.models.GetSource(request.PathValue("modelId"), version)
+	if errors.Is(err, listcheckmodels.ErrNotFound) {
+		writeAPIError(writer, http.StatusNotFound, "CHECK_MODEL_NOT_FOUND")
+		return
+	}
+	if err != nil {
+		writeAPIError(writer, http.StatusServiceUnavailable, "CHECK_MODEL_REGISTRY_UNAVAILABLE")
+		return
+	}
+	_ = json.NewEncoder(writer).Encode(result)
+}
+
 func (api eventCheckAPI) createSnapshot(writer http.ResponseWriter, request *http.Request) {
 	principal, ok := api.sessions.read(request)
 	if !ok {
