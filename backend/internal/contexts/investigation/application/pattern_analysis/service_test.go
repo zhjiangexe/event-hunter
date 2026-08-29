@@ -23,6 +23,7 @@ func TestPatternServicePersistsTriggerRelativeFindingAndEvidence(t *testing.T) {
 		details,
 		forensics.NewForensicsService(readModel),
 		readModel,
+		directUnitOfWork{},
 	)
 	service.now = func() time.Time { return triggeredAt.Add(6 * time.Minute) }
 
@@ -62,6 +63,7 @@ func TestPatternServiceDoesNotMatchShipmentInsideFiveMinutes(t *testing.T) {
 		&patternDetailsFake{},
 		forensics.NewForensicsService(readModel),
 		readModel,
+		directUnitOfWork{},
 	)
 	service.now = func() time.Time { return triggeredAt.Add(6 * time.Minute) }
 
@@ -73,7 +75,7 @@ func TestPatternServiceDoesNotMatchShipmentInsideFiveMinutes(t *testing.T) {
 
 func TestPatternServiceRejectsUnknownPattern(t *testing.T) {
 	readModel := &forensicsReadModelFake{}
-	service := NewPatternService(&caseRepositoryFake{}, &patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel)
+	service := NewPatternService(&caseRepositoryFake{}, &patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel, directUnitOfWork{})
 	_, err := service.Analyze(t.Context(), "case-1", []string{"unknown-pattern"}, Actor{}, "")
 	if !errors.Is(err, ErrUnknownPattern) {
 		t.Fatalf("Analyze() error = %v", err)
@@ -84,7 +86,7 @@ func TestPatternServiceRejectsClosedInvestigationBeforeReadingEvents(t *testing.
 	readModel := &forensicsReadModelFake{}
 	service := NewPatternService(
 		&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusClosed, CorrelationID: "ORDER-CLOSED"}},
-		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel,
+		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel, directUnitOfWork{},
 	)
 
 	_, err := service.Analyze(t.Context(), "case-1", nil, Actor{}, "")
@@ -128,7 +130,7 @@ func TestPatternServiceUsesTheSameHistoricalWindowAcrossDelayedReruns(t *testing
 	}
 	service := NewPatternService(
 		&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", CorrelationID: "ORDER-HISTORICAL"}},
-		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel,
+		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel, directUnitOfWork{},
 	)
 	currentTime := first.Add(30 * 24 * time.Hour)
 	service.now = func() time.Time { return currentTime }
@@ -155,7 +157,7 @@ func TestPatternServiceReturnsExplicitNoEventsStatus(t *testing.T) {
 	details := &patternDetailsFake{}
 	service := NewPatternService(
 		&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", CorrelationID: "ORDER-EMPTY"}},
-		details, forensics.NewForensicsService(readModel), readModel,
+		details, forensics.NewForensicsService(readModel), readModel, directUnitOfWork{},
 	)
 	result, err := service.Analyze(t.Context(), "case-1", nil, Actor{}, "empty-run")
 	if err != nil {
@@ -177,7 +179,7 @@ func TestPatternServiceRejectsCorrelationSpanningBeyondSevenDays(t *testing.T) {
 	readModel := &forensicsReadModelFake{firstOccurredAt: first, lastOccurredAt: first.Add(maxAnalysisWindow), eventCount: 2}
 	service := NewPatternService(
 		&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", CorrelationID: "ORDER-LONG"}},
-		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel,
+		&patternDetailsFake{}, forensics.NewForensicsService(readModel), readModel, directUnitOfWork{},
 	)
 	_, err := service.Analyze(t.Context(), "case-1", nil, Actor{}, "")
 	var windowErr AnalysisWindowError
@@ -231,6 +233,12 @@ func (model *forensicsReadModelFake) CorrelationEventWindow(context.Context, str
 }
 func (*forensicsReadModelFake) ProcessingSummaries(context.Context, []string) (map[string]ProcessingSummary, error) {
 	return nil, nil
+}
+
+type directUnitOfWork struct{}
+
+func (directUnitOfWork) WithinTransaction(ctx context.Context, operation func(context.Context) error) error {
+	return operation(ctx)
 }
 
 type savedEvidence struct {

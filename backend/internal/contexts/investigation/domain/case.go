@@ -21,6 +21,10 @@ var (
 	ErrInvalidCaseNote       = errors.New("invalid investigation case note")
 	ErrInvalidEvidence       = errors.New("invalid investigation evidence")
 	ErrInvalidIncidentWindow = errors.New("invalid investigation incident window")
+	ErrInvalidCase           = errors.New("invalid investigation case")
+	ErrInvalidCaseTitle      = errors.New("invalid investigation case title")
+	ErrInvalidCaseSeverity   = errors.New("invalid investigation case severity")
+	ErrInvalidCaseStatus     = errors.New("invalid investigation case status")
 )
 
 const MaximumIncidentWindow = 7 * 24 * time.Hour
@@ -133,26 +137,117 @@ func NewInvestigationCase(title string, severity Severity, correlationID string,
 	title = strings.TrimSpace(title)
 	correlationID = strings.TrimSpace(correlationID)
 	actor = strings.TrimSpace(actor)
-	if title == "" || len(title) > 300 || correlationID == "" || len(correlationID) > 200 || actor == "" ||
-		(severity != SeverityLow && severity != SeverityMedium && severity != SeverityHigh && severity != SeverityCritical) {
-		return InvestigationCase{}, fmt.Errorf("invalid investigation case")
+	if err := validateCaseTitle(title); err != nil {
+		return InvestigationCase{}, err
+	}
+	if !severity.Valid() {
+		return InvestigationCase{}, ErrInvalidCaseSeverity
+	}
+	if correlationID == "" || len(correlationID) > 200 || actor == "" {
+		return InvestigationCase{}, ErrInvalidCase
 	}
 	validatedWindow, err := NewIncidentWindow(incidentWindow.From, incidentWindow.To, incidentWindow.Source)
 	if err != nil {
 		return InvestigationCase{}, err
 	}
 	now = now.UTC()
-	return InvestigationCase{
+	result := InvestigationCase{
 		Title: title, Severity: severity, Status: StatusOpen, CorrelationID: correlationID,
 		IncidentWindow: validatedWindow, Priority: DefaultPriority(severity), Tags: []string{},
 		RelatedCorrelationIDs: []string{}, LastUpdatedBy: actor, CreatedAt: now, UpdatedAt: now,
-	}, nil
+	}
+	if err := result.Validate(); err != nil {
+		return InvestigationCase{}, err
+	}
+	return result, nil
+}
+
+// RehydrateInvestigationCase is the only persistence entry point for a fully
+// materialized aggregate. It normalizes owned strings and slices, then rejects
+// persisted state that violates the same invariants used by commands.
+func RehydrateInvestigationCase(candidate InvestigationCase) (InvestigationCase, error) {
+	candidate.ID = strings.TrimSpace(candidate.ID)
+	candidate.CaseNo = strings.TrimSpace(candidate.CaseNo)
+	candidate.Title = strings.TrimSpace(candidate.Title)
+	candidate.CorrelationID = strings.TrimSpace(candidate.CorrelationID)
+	candidate.LastUpdatedBy = strings.TrimSpace(candidate.LastUpdatedBy)
+	candidate.Assignee = normalizedOptional(candidate.Assignee)
+	candidate.RootCause = normalizedOptional(candidate.RootCause)
+	candidate.ResolutionSummary = normalizedOptional(candidate.ResolutionSummary)
+	candidate.FixedVersion = normalizedOptional(candidate.FixedVersion)
+	candidate.Notes = cloneOptional(candidate.Notes)
+	candidate.WorkflowID = cloneOptional(candidate.WorkflowID)
+	candidate.Tags = slices.Clone(candidate.Tags)
+	candidate.RelatedCorrelationIDs = slices.Clone(candidate.RelatedCorrelationIDs)
+	if candidate.ID == "" || candidate.CaseNo == "" {
+		return InvestigationCase{}, fmt.Errorf("%w: persisted identity is missing", ErrInvalidCase)
+	}
+	if err := candidate.Validate(); err != nil {
+		return InvestigationCase{}, err
+	}
+	return candidate, nil
+}
+
+// Validate protects the aggregate boundary before persistence. IDs and CaseNo
+// are database-assigned during Create, so persisted identity is enforced by
+// RehydrateInvestigationCase rather than here.
+func (investigationCase InvestigationCase) Validate() error {
+	if err := validateCaseTitle(investigationCase.Title); err != nil {
+		return err
+	}
+	if investigationCase.Title != strings.TrimSpace(investigationCase.Title) {
+		return ErrInvalidCaseTitle
+	}
+	if !investigationCase.Severity.Valid() {
+		return ErrInvalidCaseSeverity
+	}
+	if !investigationCase.Status.Valid() {
+		return ErrInvalidCaseStatus
+	}
+	if investigationCase.CorrelationID == "" || investigationCase.CorrelationID != strings.TrimSpace(investigationCase.CorrelationID) || len(investigationCase.CorrelationID) > 200 {
+		return fmt.Errorf("%w: invalid correlation id", ErrInvalidCase)
+	}
+	if _, err := NewIncidentWindow(investigationCase.IncidentWindow.From, investigationCase.IncidentWindow.To, investigationCase.IncidentWindow.Source); err != nil {
+		return err
+	}
+	if !investigationCase.Priority.Valid() {
+		return ErrInvalidPriority
+	}
+	if investigationCase.LastUpdatedBy == "" || investigationCase.LastUpdatedBy != strings.TrimSpace(investigationCase.LastUpdatedBy) || len(investigationCase.LastUpdatedBy) > 200 {
+		return fmt.Errorf("%w: invalid last-updated actor", ErrInvalidCase)
+	}
+	if investigationCase.CreatedAt.IsZero() || investigationCase.UpdatedAt.IsZero() || investigationCase.UpdatedAt.Before(investigationCase.CreatedAt) || investigationCase.LockVersion < 0 {
+		return fmt.Errorf("%w: invalid version or timestamps", ErrInvalidCase)
+	}
+	if investigationCase.Assignee != nil && (strings.TrimSpace(*investigationCase.Assignee) == "" || len(strings.TrimSpace(*investigationCase.Assignee)) > 200) {
+		return ErrInvalidOwner
+	}
+	normalizedTags, err := normalizeUniqueValues(investigationCase.Tags, 10, 50, true)
+	if err != nil || !slices.Equal(normalizedTags, investigationCase.Tags) {
+		return ErrInvalidTags
+	}
+	normalizedRelated, err := normalizeUniqueValues(investigationCase.RelatedCorrelationIDs, 20, 200, false)
+	if err != nil || !slices.Equal(normalizedRelated, investigationCase.RelatedCorrelationIDs) || slices.Contains(normalizedRelated, investigationCase.CorrelationID) {
+		return ErrInvalidRelatedIDs
+	}
+	if investigationCase.Status == StatusResolved || investigationCase.Status == StatusClosed {
+		if !optionalHasText(investigationCase.RootCause) || !optionalHasText(investigationCase.ResolutionSummary) {
+			return ErrResolutionFields
+		}
+	}
+	if (investigationCase.Status == StatusClosed) != (investigationCase.ClosedAt != nil) {
+		return fmt.Errorf("%w: closed status and timestamp disagree", ErrInvalidCase)
+	}
+	return nil
 }
 
 // TransitionTo is the aggregate's state transition entry point. Callers must
 // not mutate Status directly because resolution has mandatory business data
 // and CLOSED has a dedicated operation.
 func (investigationCase *InvestigationCase) TransitionTo(to CaseStatus, rootCause, resolutionSummary *string) error {
+	if !to.Valid() {
+		return ErrInvalidCaseStatus
+	}
 	if to == StatusClosed {
 		return ErrCloseRequired
 	}
@@ -164,10 +259,10 @@ func (investigationCase *InvestigationCase) TransitionTo(to CaseStatus, rootCaus
 	}
 	investigationCase.Status = to
 	if rootCause != nil {
-		investigationCase.RootCause = rootCause
+		investigationCase.RootCause = normalizedOptional(rootCause)
 	}
 	if resolutionSummary != nil {
-		investigationCase.ResolutionSummary = resolutionSummary
+		investigationCase.ResolutionSummary = normalizedOptional(resolutionSummary)
 	}
 	return nil
 }
@@ -182,10 +277,12 @@ func (investigationCase *InvestigationCase) Close(now time.Time, rootCause, reso
 		return ErrResolutionFields
 	}
 	now = now.UTC()
+	rootCause = strings.TrimSpace(rootCause)
+	resolutionSummary = strings.TrimSpace(resolutionSummary)
 	investigationCase.Status = StatusClosed
 	investigationCase.RootCause = &rootCause
 	investigationCase.ResolutionSummary = &resolutionSummary
-	investigationCase.FixedVersion = fixedVersion
+	investigationCase.FixedVersion = normalizedOptional(fixedVersion)
 	investigationCase.ClosedAt = &now
 	investigationCase.UpdatedAt = now
 	return nil
@@ -195,6 +292,10 @@ func (investigationCase *InvestigationCase) ChangeTitle(title string) error {
 	if err := investigationCase.ensureMutable(); err != nil {
 		return err
 	}
+	title = strings.TrimSpace(title)
+	if err := validateCaseTitle(title); err != nil {
+		return err
+	}
 	investigationCase.Title = title
 	return nil
 }
@@ -202,6 +303,9 @@ func (investigationCase *InvestigationCase) ChangeTitle(title string) error {
 func (investigationCase *InvestigationCase) ChangeSeverity(severity Severity) error {
 	if err := investigationCase.ensureMutable(); err != nil {
 		return err
+	}
+	if !severity.Valid() {
+		return ErrInvalidCaseSeverity
 	}
 	investigationCase.Severity = severity
 	return nil
@@ -337,6 +441,14 @@ func DefaultPriority(severity Severity) CasePriority {
 	}
 }
 
+func (severity Severity) Valid() bool {
+	return severity == SeverityLow || severity == SeverityMedium || severity == SeverityHigh || severity == SeverityCritical
+}
+
+func (status CaseStatus) Valid() bool {
+	return status == StatusOpen || status == StatusInvestigating || status == StatusWaitingApproval || status == StatusResolved || status == StatusClosed
+}
+
 func (priority CasePriority) Valid() bool {
 	return priority == PriorityP0 || priority == PriorityP1 || priority == PriorityP2 || priority == PriorityP3
 }
@@ -381,7 +493,11 @@ func (investigationCase *InvestigationCase) SetRootCause(rootCause *string) erro
 	if err := investigationCase.ensureMutable(); err != nil {
 		return err
 	}
-	investigationCase.RootCause = rootCause
+	normalized := normalizedOptional(rootCause)
+	if (investigationCase.Status == StatusResolved || investigationCase.Status == StatusClosed) && !optionalHasText(normalized) {
+		return ErrResolutionFields
+	}
+	investigationCase.RootCause = normalized
 	return nil
 }
 
@@ -389,7 +505,11 @@ func (investigationCase *InvestigationCase) SetResolutionSummary(summary *string
 	if err := investigationCase.ensureMutable(); err != nil {
 		return err
 	}
-	investigationCase.ResolutionSummary = summary
+	normalized := normalizedOptional(summary)
+	if (investigationCase.Status == StatusResolved || investigationCase.Status == StatusClosed) && !optionalHasText(normalized) {
+		return ErrResolutionFields
+	}
+	investigationCase.ResolutionSummary = normalized
 	return nil
 }
 
@@ -397,7 +517,7 @@ func (investigationCase *InvestigationCase) SetFixedVersion(version *string) err
 	if err := investigationCase.ensureMutable(); err != nil {
 		return err
 	}
-	investigationCase.FixedVersion = version
+	investigationCase.FixedVersion = normalizedOptional(version)
 	return nil
 }
 
@@ -437,4 +557,34 @@ func (investigationCase *InvestigationCase) ensureMutable() error {
 		return ErrInvalidTransition
 	}
 	return nil
+}
+
+func validateCaseTitle(title string) error {
+	if strings.TrimSpace(title) == "" || len(strings.TrimSpace(title)) > 300 {
+		return ErrInvalidCaseTitle
+	}
+	return nil
+}
+
+func normalizedOptional(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	normalized := strings.TrimSpace(*value)
+	if normalized == "" {
+		return nil
+	}
+	return &normalized
+}
+
+func cloneOptional(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
+func optionalHasText(value *string) bool {
+	return value != nil && strings.TrimSpace(*value) != ""
 }

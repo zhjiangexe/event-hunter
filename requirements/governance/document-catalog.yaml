@@ -48,6 +48,7 @@ documents:
   - {document_id: EH-DOC-DEL-001, path: requirements/delivery/implementation-plan.yaml, status: active, owner: engineering, source_of_truth: true, canonical_topic: implementation-task-dag}
   - {document_id: EH-DOC-DEL-002, path: requirements/delivery/phase-1-1-development-plan.md, status: in_progress, owner: product, source_of_truth: true, canonical_topic: phase-1-1-delivery}
   - {document_id: EH-DOC-DEL-003, path: requirements/delivery/phase-1-1-product-ux-remediation-plan.md, status: completed, owner: frontend, source_of_truth: false, canonical_topic: phase-1-1-ux-remediation}
+  - {document_id: EH-DOC-DEL-004, path: requirements/delivery/backend-ddd-clean-architecture-refactor-plan.md, status: completed, owner: backend, source_of_truth: false, canonical_topic: backend-ddd-clean-architecture-refactor}
   - {document_id: EH-DOC-HIST-001, path: requirements/delivery/archive/phase-1-delivery-plan.md, status: completed, owner: product, source_of_truth: false, canonical_topic: phase-1-delivery-history}
   - {document_id: EH-DOC-HIST-002, path: requirements/delivery/archive/phase-1-1-sign-off.md, status: completed, owner: quality, source_of_truth: false, canonical_topic: phase-1-1-local-sign-off}
 

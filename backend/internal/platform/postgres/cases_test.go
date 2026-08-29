@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -37,5 +38,22 @@ func TestScanCaseDecodesPostgresArraysReturnedAsJSON(t *testing.T) {
 	}
 	if !reflect.DeepEqual(result.Tags, []string{"payments", "vip"}) || !reflect.DeepEqual(result.RelatedCorrelationIDs, []string{"PAYMENT-1"}) {
 		t.Fatalf("scanCase() = %#v", result)
+	}
+}
+
+type invalidSeverityCaseRowStub struct{ caseRowStub }
+
+func (invalidSeverityCaseRowStub) Scan(dest ...any) error {
+	if err := (caseRowStub{}).Scan(dest...); err != nil {
+		return err
+	}
+	*(dest[3].(*domain.Severity)) = domain.Severity("URGENT")
+	return nil
+}
+
+func TestScanCaseRejectsPersistedStateOutsideDomainInvariant(t *testing.T) {
+	_, err := scanCase(invalidSeverityCaseRowStub{})
+	if !errors.Is(err, domain.ErrInvalidCaseSeverity) {
+		t.Fatalf("scanCase() error = %v, want %v", err, domain.ErrInvalidCaseSeverity)
 	}
 }

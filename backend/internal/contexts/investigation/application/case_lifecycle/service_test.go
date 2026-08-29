@@ -13,7 +13,7 @@ import (
 func TestUpdateAppliesStateTransitionAndRecordsAudit(t *testing.T) {
 	repository := &caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusOpen, Severity: domain.SeverityHigh, CorrelationID: "ORDER-1", LockVersion: 2}}
 	details := &detailsRepositoryFake{}
-	service := NewService(repository, details)
+	service := NewService(repository, details, directUnitOfWork{})
 	service.now = func() time.Time { return time.Date(2026, 8, 21, 6, 0, 0, 0, time.UTC) }
 	status := domain.StatusInvestigating
 	assignee := "operator-1"
@@ -33,7 +33,7 @@ func TestUpdateAppliesStateTransitionAndRecordsAudit(t *testing.T) {
 func TestCreatePreservesIncidentWindowInAggregateAndAudit(t *testing.T) {
 	repository := &caseRepositoryFake{}
 	details := &detailsRepositoryFake{}
-	service := NewService(repository, details)
+	service := NewService(repository, details, directUnitOfWork{})
 	now := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
 	window := domain.IncidentWindow{From: now.Add(-time.Hour), To: now, Source: domain.IncidentWindowTimelineSearch}
@@ -63,7 +63,7 @@ func TestUpdateRejectsInvalidAndIncompleteResolvedTransitions(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository := &caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: test.current, LockVersion: 1}}
-			service := NewService(repository, &detailsRepositoryFake{})
+			service := NewService(repository, &detailsRepositoryFake{}, directUnitOfWork{})
 			_, err := service.Update(t.Context(), "case-1", 1, CasePatch{Status: &test.target}, Actor{}, "")
 			if !errors.Is(err, test.want) {
 				t.Fatalf("Update() error = %v, want %v", err, test.want)
@@ -74,7 +74,7 @@ func TestUpdateRejectsInvalidAndIncompleteResolvedTransitions(t *testing.T) {
 
 func TestUpdateReturnsCurrentVersionOnOptimisticConflict(t *testing.T) {
 	repository := &caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusOpen, LockVersion: 4}, conflict: true}
-	service := NewService(repository, &detailsRepositoryFake{})
+	service := NewService(repository, &detailsRepositoryFake{}, directUnitOfWork{})
 	status := domain.StatusInvestigating
 
 	_, err := service.Update(t.Context(), "case-1", 3, CasePatch{Status: &status}, Actor{}, "")
@@ -87,7 +87,7 @@ func TestUpdateReturnsCurrentVersionOnOptimisticConflict(t *testing.T) {
 func TestCloseSetsResolutionAndClosedTimestamp(t *testing.T) {
 	repository := &caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusResolved, LockVersion: 7}}
 	details := &detailsRepositoryFake{}
-	service := NewService(repository, details)
+	service := NewService(repository, details, directUnitOfWork{})
 	closedAt := time.Date(2026, 8, 21, 7, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return closedAt }
 
@@ -106,7 +106,7 @@ func TestCloseSetsResolutionAndClosedTimestamp(t *testing.T) {
 func TestAddNoteAppendsWithOptimisticLockAndAudit(t *testing.T) {
 	repository := &caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusInvestigating, LockVersion: 5}}
 	details := &detailsRepositoryFake{}
-	service := NewService(repository, details)
+	service := NewService(repository, details, directUnitOfWork{})
 	now := time.Date(2026, 8, 21, 8, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
 
@@ -135,7 +135,7 @@ func TestGetDetailsAndSummaryFailWhenRequiredChildReadFails(t *testing.T) {
 		{name: "audit", details: &detailsRepositoryFake{auditErr: childFailure}, summary: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			service := NewService(&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1"}}, testCase.details)
+			service := NewService(&caseRepositoryFake{current: domain.InvestigationCase{ID: "case-1"}}, testCase.details, directUnitOfWork{})
 			var err error
 			if testCase.summary {
 				_, err = service.GetSummaryDetails(t.Context(), "case-1")
@@ -280,6 +280,12 @@ func (*detailsRepositoryFake) SaveEvidence(context.Context, string, string, stri
 
 type rollbackUnitOfWorkFake struct {
 	cases *caseRepositoryFake
+}
+
+type directUnitOfWork struct{}
+
+func (directUnitOfWork) WithinTransaction(ctx context.Context, operation func(context.Context) error) error {
+	return operation(ctx)
 }
 
 func (unit *rollbackUnitOfWorkFake) WithinTransaction(ctx context.Context, operation func(context.Context) error) error {

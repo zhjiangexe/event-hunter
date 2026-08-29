@@ -21,6 +21,9 @@ func NewCaseRepository(db *sql.DB) *CaseRepository {
 }
 
 func (repository *CaseRepository) Create(ctx context.Context, investigationCase domain.InvestigationCase) (domain.InvestigationCase, error) {
+	if err := investigationCase.Validate(); err != nil {
+		return domain.InvestigationCase{}, fmt.Errorf("validate investigation case for create: %w", err)
+	}
 	const query = `
 INSERT INTO investigation_cases
 	(id, case_no, title, severity, status, correlation_id, assignee, priority, tags,
@@ -62,6 +65,12 @@ FROM investigation_cases WHERE id = $1::uuid`
 }
 
 func (repository *CaseRepository) Update(ctx context.Context, investigationCase domain.InvestigationCase) (domain.InvestigationCase, error) {
+	if strings.TrimSpace(investigationCase.ID) == "" {
+		return domain.InvestigationCase{}, fmt.Errorf("validate investigation case for update: %w", domain.ErrInvalidCase)
+	}
+	if err := investigationCase.Validate(); err != nil {
+		return domain.InvestigationCase{}, fmt.Errorf("validate investigation case for update: %w", err)
+	}
 	const query = `
 UPDATE investigation_cases
 SET title = $2, severity = $3, status = $4, correlation_id = $5, assignee = $6,
@@ -278,24 +287,51 @@ type rowScanner interface {
 }
 
 func scanCase(row rowScanner) (domain.InvestigationCase, error) {
-	var result domain.InvestigationCase
+	type persistedCaseRow struct {
+		ID, CaseNo, Title, CorrelationID, LastUpdatedBy string
+		Severity                                        domain.Severity
+		Status                                          domain.CaseStatus
+		IncidentWindow                                  domain.IncidentWindow
+		Assignee                                        *string
+		Priority                                        domain.CasePriority
+		RootCause, ResolutionSummary, FixedVersion      *string
+		Notes, WorkflowID                               *string
+		LockVersion                                     int64
+		CreatedAt, UpdatedAt                            time.Time
+		ClosedAt                                        *time.Time
+	}
+	var persisted persistedCaseRow
 	var tagsJSON, relatedJSON []byte
 	err := row.Scan(
-		&result.ID, &result.CaseNo, &result.Title, &result.Severity, &result.Status,
-		&result.CorrelationID, &result.IncidentWindow.From, &result.IncidentWindow.To, &result.IncidentWindow.Source,
-		&result.Assignee, &result.Priority, &tagsJSON,
-		&relatedJSON, &result.LastUpdatedBy, &result.RootCause, &result.ResolutionSummary,
-		&result.FixedVersion, &result.Notes, &result.WorkflowID, &result.LockVersion,
-		&result.CreatedAt, &result.UpdatedAt, &result.ClosedAt,
+		&persisted.ID, &persisted.CaseNo, &persisted.Title, &persisted.Severity, &persisted.Status,
+		&persisted.CorrelationID, &persisted.IncidentWindow.From, &persisted.IncidentWindow.To, &persisted.IncidentWindow.Source,
+		&persisted.Assignee, &persisted.Priority, &tagsJSON,
+		&relatedJSON, &persisted.LastUpdatedBy, &persisted.RootCause, &persisted.ResolutionSummary,
+		&persisted.FixedVersion, &persisted.Notes, &persisted.WorkflowID, &persisted.LockVersion,
+		&persisted.CreatedAt, &persisted.UpdatedAt, &persisted.ClosedAt,
 	)
 	if err != nil {
 		return domain.InvestigationCase{}, fmt.Errorf("scan investigation case: %w", err)
 	}
-	if err := json.Unmarshal(tagsJSON, &result.Tags); err != nil {
+	var tags []string
+	if err := json.Unmarshal(tagsJSON, &tags); err != nil {
 		return domain.InvestigationCase{}, fmt.Errorf("scan investigation case tags: %w", err)
 	}
-	if err := json.Unmarshal(relatedJSON, &result.RelatedCorrelationIDs); err != nil {
+	var relatedCorrelationIDs []string
+	if err := json.Unmarshal(relatedJSON, &relatedCorrelationIDs); err != nil {
 		return domain.InvestigationCase{}, fmt.Errorf("scan related correlation ids: %w", err)
+	}
+	result, err := domain.RehydrateInvestigationCase(domain.InvestigationCase{
+		ID: persisted.ID, CaseNo: persisted.CaseNo, Title: persisted.Title,
+		Severity: persisted.Severity, Status: persisted.Status, CorrelationID: persisted.CorrelationID,
+		IncidentWindow: persisted.IncidentWindow, Assignee: persisted.Assignee, Priority: persisted.Priority,
+		Tags: tags, RelatedCorrelationIDs: relatedCorrelationIDs, LastUpdatedBy: persisted.LastUpdatedBy,
+		RootCause: persisted.RootCause, ResolutionSummary: persisted.ResolutionSummary, FixedVersion: persisted.FixedVersion,
+		Notes: persisted.Notes, WorkflowID: persisted.WorkflowID, LockVersion: persisted.LockVersion,
+		CreatedAt: persisted.CreatedAt, UpdatedAt: persisted.UpdatedAt, ClosedAt: persisted.ClosedAt,
+	})
+	if err != nil {
+		return domain.InvestigationCase{}, fmt.Errorf("rehydrate investigation case: %w", err)
 	}
 	return result, nil
 }

@@ -2,7 +2,6 @@ package businessjourney
 
 import (
 	"context"
-	"sort"
 	"time"
 
 	"event-hunter/backend/internal/contexts/investigation/application/forensics"
@@ -19,76 +18,30 @@ type Query struct {
 	To            time.Time
 }
 
-type Status string
+type Status = journeys.Status
 
 const (
-	StatusEmpty       Status = "EMPTY"
-	StatusInProgress  Status = "IN_PROGRESS"
-	StatusCompleted   Status = "COMPLETED"
-	StatusFailed      Status = "FAILED"
-	StatusCompensated Status = "COMPENSATED"
+	StatusEmpty       = journeys.StatusEmpty
+	StatusInProgress  = journeys.StatusInProgress
+	StatusCompleted   = journeys.StatusCompleted
+	StatusFailed      = journeys.StatusFailed
+	StatusCompensated = journeys.StatusCompensated
 )
 
-type MilestoneState string
+type MilestoneState = journeys.MilestoneState
 
 const (
-	MilestoneCompleted     MilestoneState = "COMPLETED"
-	MilestoneInProgress    MilestoneState = "IN_PROGRESS"
-	MilestoneFailed        MilestoneState = "FAILED"
-	MilestoneCompensated   MilestoneState = "COMPENSATED"
-	MilestoneNotApplicable MilestoneState = "NOT_APPLICABLE"
+	MilestoneCompleted     = journeys.MilestoneCompleted
+	MilestoneInProgress    = journeys.MilestoneInProgress
+	MilestoneFailed        = journeys.MilestoneFailed
+	MilestoneCompensated   = journeys.MilestoneCompensated
+	MilestoneNotApplicable = journeys.MilestoneNotApplicable
 )
 
-type EventReference struct {
-	EventID       string  `json:"event_id"`
-	EventType     string  `json:"event_type"`
-	OccurredAt    string  `json:"occurred_at"`
-	Producer      string  `json:"producer"`
-	AggregateType string  `json:"aggregate_type"`
-	AggregateID   string  `json:"aggregate_id"`
-	TraceID       *string `json:"trace_id"`
-}
-
-type Milestone struct {
-	ID                     string           `json:"id"`
-	Label                  string           `json:"label"`
-	State                  MilestoneState   `json:"state"`
-	ExpectedEventTypes     []string         `json:"expected_event_types"`
-	ActualEventTypes       []string         `json:"actual_event_types"`
-	FirstEventAt           *string          `json:"first_event_at"`
-	DurationFromPreviousMS *int64           `json:"duration_from_previous_ms"`
-	Events                 []EventReference `json:"events"`
-}
-
-type Anomaly struct {
-	Code     string   `json:"code"`
-	Severity string   `json:"severity"`
-	Message  string   `json:"message"`
-	EventIDs []string `json:"event_ids"`
-}
-
-type Journey struct {
-	CorrelationID           string      `json:"correlation_id"`
-	ProfileID               string      `json:"profile_id"`
-	ProfileVersion          int         `json:"profile_version"`
-	ProfileTitle            string      `json:"profile_title"`
-	From                    time.Time   `json:"from"`
-	To                      time.Time   `json:"to"`
-	Status                  Status      `json:"status"`
-	EventCount              int         `json:"event_count"`
-	CompletedMilestoneCount int         `json:"completed_milestone_count"`
-	TotalMilestoneCount     int         `json:"total_milestone_count"`
-	CurrentMilestoneID      *string     `json:"current_milestone_id"`
-	NextMilestoneID         *string     `json:"next_milestone_id"`
-	NextExpectedEventTypes  []string    `json:"next_expected_event_types"`
-	TraceIDs                []string    `json:"trace_ids"`
-	StartedAt               *string     `json:"started_at"`
-	EndedAt                 *string     `json:"ended_at"`
-	DurationMS              *int64      `json:"duration_ms"`
-	Milestones              []Milestone `json:"milestones"`
-	Anomalies               []Anomaly   `json:"anomalies"`
-	UnmappedEventCount      int         `json:"unmapped_event_count"`
-}
+type EventReference = journeys.EventReference
+type Milestone = journeys.EvaluatedMilestone
+type Anomaly = journeys.Anomaly
+type Journey = journeys.Evaluation
 
 type Service struct {
 	events  EventReader
@@ -114,234 +67,12 @@ func (service *Service) Get(ctx context.Context, query Query) (Journey, error) {
 	if err != nil {
 		return Journey{}, err
 	}
-	sort.SliceStable(events, func(left, right int) bool {
-		return events[left].OccurredAt < events[right].OccurredAt
-	})
-	return build(query, events, service.profile), nil
-}
-
-func build(query Query, events []forensics.ForensicsEvent, profile journeys.Profile) Journey {
-	journey := Journey{
-		CorrelationID: query.CorrelationID, ProfileID: profile.ID, ProfileVersion: profile.Version, ProfileTitle: profile.Title,
-		From: query.From, To: query.To,
-		Status: StatusEmpty, EventCount: len(events), Milestones: make([]Milestone, 0, len(profile.Milestones)),
-		TotalMilestoneCount: len(profile.Milestones), NextExpectedEventTypes: []string{}, TraceIDs: []string{},
-		Anomalies: []Anomaly{},
-	}
-	byType := make(map[string][]forensics.ForensicsEvent)
-	seenTraceIDs := make(map[string]bool)
+	observed := make([]journeys.Event, 0, len(events))
 	for _, event := range events {
-		byType[event.EventType] = append(byType[event.EventType], event)
-		if event.TraceID != nil && *event.TraceID != "" && !seenTraceIDs[*event.TraceID] {
-			seenTraceIDs[*event.TraceID] = true
-			journey.TraceIDs = append(journey.TraceIDs, *event.TraceID)
-		}
+		observed = append(observed, journeys.Event{
+			EventID: event.EventID, EventType: event.EventType, OccurredAt: event.OccurredAt,
+			Producer: event.Producer, AggregateType: event.AggregateType, AggregateID: event.AggregateID, TraceID: event.TraceID,
+		})
 	}
-
-	var previousAt *time.Time
-	for _, definition := range profile.Milestones {
-		milestone := Milestone{
-			ID: definition.ID, Label: definition.Label, State: MilestoneNotApplicable,
-			ExpectedEventTypes: append([]string(nil), definition.ExpectedEventTypes...), ActualEventTypes: []string{}, Events: []EventReference{},
-		}
-		var firstAt *time.Time
-		for _, event := range events {
-			if !contains(definition.ExpectedEventTypes, event.EventType) {
-				continue
-			}
-			milestone.ActualEventTypes = append(milestone.ActualEventTypes, event.EventType)
-			milestone.Events = append(milestone.Events, eventReference(event))
-			if occurredAt, parseErr := time.Parse(time.RFC3339Nano, event.OccurredAt); parseErr == nil && firstAt == nil {
-				copy := occurredAt
-				firstAt = &copy
-				value := occurredAt.Format(time.RFC3339Nano)
-				milestone.FirstEventAt = &value
-			}
-		}
-		milestone.State = milestoneState(definition.StateRules, byType)
-		if firstAt != nil && previousAt != nil {
-			duration := firstAt.Sub(*previousAt).Milliseconds()
-			milestone.DurationFromPreviousMS = &duration
-		}
-		if firstAt != nil {
-			copy := *firstAt
-			previousAt = &copy
-		}
-		journey.Milestones = append(journey.Milestones, milestone)
-	}
-
-	knownTypes := make(map[string]bool)
-	for _, definition := range profile.Milestones {
-		for _, eventType := range definition.ExpectedEventTypes {
-			knownTypes[eventType] = true
-		}
-	}
-	for _, event := range events {
-		if !knownTypes[event.EventType] {
-			journey.UnmappedEventCount++
-		}
-	}
-
-	if len(events) > 0 {
-		journey.StartedAt = stringPointer(events[0].OccurredAt)
-		journey.EndedAt = stringPointer(events[len(events)-1].OccurredAt)
-		if started, startErr := time.Parse(time.RFC3339Nano, events[0].OccurredAt); startErr == nil {
-			if ended, endErr := time.Parse(time.RFC3339Nano, events[len(events)-1].OccurredAt); endErr == nil {
-				duration := ended.Sub(started).Milliseconds()
-				journey.DurationMS = &duration
-			}
-		}
-	}
-
-	journey.Anomalies = detectAnomalies(query.To, events, byType, profile)
-	journey.Status = journeyStatus(events, byType, profile.JourneyStateRules)
-	deriveJourneyProgress(&journey)
-	return journey
-}
-
-// deriveJourneyProgress exposes the profile-derived progress as an API contract so
-// clients do not need to reinterpret milestone state rules independently.
-func deriveJourneyProgress(journey *Journey) {
-	currentIndex := -1
-	for index, milestone := range journey.Milestones {
-		if milestone.State == MilestoneCompleted {
-			journey.CompletedMilestoneCount++
-		}
-		if currentIndex == -1 && milestone.State == MilestoneInProgress {
-			currentIndex = index
-		}
-	}
-	if currentIndex == -1 && (journey.Status == StatusFailed || journey.Status == StatusCompensated) {
-		for index, milestone := range journey.Milestones {
-			if milestone.State == MilestoneFailed || milestone.State == MilestoneCompensated {
-				currentIndex = index
-				break
-			}
-		}
-	}
-	if currentIndex == -1 {
-		return
-	}
-	current := journey.Milestones[currentIndex]
-	journey.CurrentMilestoneID = stringPointer(current.ID)
-	journey.NextExpectedEventTypes = append([]string(nil), current.ExpectedEventTypes...)
-	if currentIndex+1 < len(journey.Milestones) {
-		journey.NextMilestoneID = stringPointer(journey.Milestones[currentIndex+1].ID)
-	}
-}
-
-func milestoneState(rules []journeys.StateRule, byType map[string][]forensics.ForensicsEvent) MilestoneState {
-	for _, rule := range rules {
-		if stateRuleMatches(rule, byType) {
-			return MilestoneState(rule.State)
-		}
-	}
-	return MilestoneNotApplicable
-}
-
-func journeyStatus(events []forensics.ForensicsEvent, byType map[string][]forensics.ForensicsEvent, rules []journeys.StateRule) Status {
-	if len(events) == 0 {
-		return StatusEmpty
-	}
-	for _, rule := range rules {
-		if stateRuleMatches(rule, byType) {
-			return Status(rule.State)
-		}
-	}
-	return StatusInProgress
-}
-
-func stateRuleMatches(rule journeys.StateRule, byType map[string][]forensics.ForensicsEvent) bool {
-	return hasAny(byType, rule.WhenAnyEventTypes) && !hasAny(byType, rule.UnlessAnyEventTypes)
-}
-
-func detectAnomalies(windowEnd time.Time, events []forensics.ForensicsEvent, byType map[string][]forensics.ForensicsEvent, profile journeys.Profile) []Anomaly {
-	anomalies := make([]Anomaly, 0)
-	for _, rule := range profile.AnomalyRules {
-		trigger, found := firstEventOfTypes(events, rule.TriggerEventTypes)
-		if !found || hasAny(byType, rule.RequiredAnyEventTypes) || !graceElapsed(trigger, windowEnd, rule.GracePeriodSeconds) {
-			continue
-		}
-		anomalies = append(anomalies, anomaly(
-			rule.Code,
-			rule.Severity,
-			rule.Message,
-			idsForTypes(events, rule.EvidenceEventTypes),
-		))
-	}
-	if profile.DataQuality.DetectDuplicateEventIDs {
-		seen := make(map[string]bool)
-		duplicates := make([]string, 0)
-		for _, event := range events {
-			if seen[event.EventID] {
-				duplicates = append(duplicates, event.EventID)
-			}
-			seen[event.EventID] = true
-		}
-		if len(duplicates) > 0 {
-			anomalies = append(anomalies, anomaly("DUPLICATE_EVENT_ID", "MEDIUM", "同一 event ID 在查詢結果中出現多次。", duplicates))
-		}
-	}
-	return anomalies
-}
-
-func graceElapsed(event forensics.ForensicsEvent, windowEnd time.Time, seconds int) bool {
-	occurredAt, err := time.Parse(time.RFC3339Nano, event.OccurredAt)
-	return err == nil && !windowEnd.Before(occurredAt.Add(time.Duration(seconds)*time.Second))
-}
-
-func firstEventOfTypes(events []forensics.ForensicsEvent, eventTypes []string) (forensics.ForensicsEvent, bool) {
-	for _, event := range events {
-		if contains(eventTypes, event.EventType) {
-			return event, true
-		}
-	}
-	return forensics.ForensicsEvent{}, false
-}
-
-func idsForTypes(events []forensics.ForensicsEvent, eventTypes []string) []string {
-	result := make([]string, 0)
-	for _, event := range events {
-		if contains(eventTypes, event.EventType) {
-			result = append(result, event.EventID)
-		}
-	}
-	return result
-}
-
-func eventReference(event forensics.ForensicsEvent) EventReference {
-	return EventReference{
-		EventID: event.EventID, EventType: event.EventType, OccurredAt: event.OccurredAt,
-		Producer: event.Producer, AggregateType: event.AggregateType, AggregateID: event.AggregateID, TraceID: event.TraceID,
-	}
-}
-
-func anomaly(code, severity, message string, eventIDs []string) Anomaly {
-	return Anomaly{Code: code, Severity: severity, Message: message, EventIDs: eventIDs}
-}
-
-func has(byType map[string][]forensics.ForensicsEvent, eventType string) bool {
-	return len(byType[eventType]) > 0
-}
-
-func hasAny(byType map[string][]forensics.ForensicsEvent, eventTypes []string) bool {
-	for _, eventType := range eventTypes {
-		if has(byType, eventType) {
-			return true
-		}
-	}
-	return false
-}
-
-func contains(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}
-
-func stringPointer(value string) *string {
-	return &value
+	return journeys.Evaluate(query.CorrelationID, query.From, query.To, observed, service.profile), nil
 }

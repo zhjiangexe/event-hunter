@@ -3,7 +3,7 @@ package get_check_snapshot
 import (
 	"context"
 
-	savechecksnapshot "event-hunter/backend/internal/contexts/eventcheck/application/save_check_snapshot"
+	"event-hunter/backend/internal/contexts/eventcheck/application/snapshotview"
 	"event-hunter/backend/internal/contexts/eventcheck/ports"
 )
 
@@ -15,19 +15,19 @@ func NewService(repository ports.SnapshotRepository) *Service {
 	return &Service{repository: repository}
 }
 
-func (service *Service) Get(ctx context.Context, id string) (savechecksnapshot.Snapshot, error) {
+func (service *Service) Get(ctx context.Context, id string) (snapshotview.Snapshot, error) {
 	persisted, err := service.repository.Get(ctx, id)
 	if err != nil {
-		return savechecksnapshot.Snapshot{}, err
+		return snapshotview.Snapshot{}, err
 	}
-	response, err := savechecksnapshot.ToResponse(persisted)
+	response, err := snapshotview.FromDomain(persisted)
 	if err != nil {
-		return savechecksnapshot.Snapshot{}, err
+		return snapshotview.Snapshot{}, err
 	}
 	feedback, err := service.repository.ListFeedback(ctx, id)
 	if err != nil {
-		return savechecksnapshot.Snapshot{}, err
+		return snapshotview.Snapshot{}, err
 	}
-	savechecksnapshot.ApplyFindingFeedback(&response, feedback)
+	snapshotview.ApplyFindingFeedback(&response, feedback)
 	return response, nil
 }

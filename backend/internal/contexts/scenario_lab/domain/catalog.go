@@ -1,11 +1,6 @@
-package scenariolab
+package domain
 
 import "fmt"
-
-const (
-	LiveServices = "LIVE_SERVICES"
-	LabInjection = "LAB_INJECTION"
-)
 
 var catalog = []ScenarioDefinition{
 	{ID: "S1", Name: "NORMAL_ORDER_FLOW", Title: "正常訂單出貨", Category: "RELIABILITY", Description: "呼叫真實 Order API，經 Outbox、Kafka、Payment 與 Shipping 完成跨服務流程。", ExecutionMode: LiveServices, Synthetic: false, ExpectedEventTypes: []string{"OrderCreated", "PaymentCompleted", "ShipmentCreated"}, ExpectedResults: []string{"Timeline 完整", "沒有 ingestion failure"}},
@@ -29,7 +24,6 @@ func Catalog() []ScenarioDefinition {
 	copy(result, catalog)
 	return result
 }
-
 func Scenario(id string) (ScenarioDefinition, error) {
 	for _, item := range catalog {
 		if item.ID == id {
@@ -37,4 +31,16 @@ func Scenario(id string) (ScenarioDefinition, error) {
 		}
 	}
 	return ScenarioDefinition{}, fmt.Errorf("unknown scenario %s", id)
+}
+func LiveProfile(id string) string {
+	switch id {
+	case "S12":
+		return "PAYMENT_FAILED"
+	case "S13":
+		return "SHIPMENT_DELIVERED"
+	case "S14":
+		return "RETURN_REFUND"
+	default:
+		return "NORMAL"
+	}
 }

@@ -7,14 +7,13 @@ import (
 	"strings"
 
 	"event-hunter/backend/internal/contexts/investigation/application/forensics"
-	"event-hunter/backend/internal/contexts/investigation/application/pattern_analysis"
 	domainpatterns "event-hunter/backend/internal/contexts/investigation/domain/patterns"
 )
 
 const MaxQualifiedCorrelations = 1000
 
 var (
-	ErrUnknownPattern          = patternanalysis.ErrUnknownPattern
+	ErrUnknownPattern          = errors.New("unknown or inactive pattern")
 	ErrInvalidSeverity         = errors.New("invalid minimum severity")
 	ErrSearchQualifierSource   = errors.New("event search qualifier source unavailable")
 	ErrQualifierResultTooLarge = errors.New("event search qualifier result exceeds limit")
@@ -23,7 +22,10 @@ var (
 type EventSearchFilter = forensics.EventSearchFilter
 type ForensicsEvent = forensics.ForensicsEvent
 type ProcessingSummary = forensics.ProcessingSummary
-type ForensicsReadModel = forensics.ReadModel
+
+type ForensicsReadModel interface {
+	Search(ctx context.Context, filter forensics.EventSearchFilter) ([]forensics.ForensicsEvent, error)
+}
 
 type EventSearchQualifierRepository interface {
 	CorrelationsByAlertFingerprint(ctx context.Context, fingerprint string) ([]string, error)
@@ -41,15 +43,11 @@ type AdvancedEventSearchFilter struct {
 // control plane and ClickHouse read model. Raw ClickHouse filters remain in
 // ForensicsService so timeline reads do not depend on PostgreSQL.
 type EventSearchService struct {
-	readModel  forensics.ReadModel
+	readModel  ForensicsReadModel
 	qualifiers EventSearchQualifierRepository
 }
 
-func NewEventSearchService(readModel forensics.ReadModel, qualifiers EventSearchQualifierRepository) *EventSearchService {
-	return &EventSearchService{readModel: readModel, qualifiers: qualifiers}
-}
-
-func NewEventSearchServiceFromForensics(readModel *forensics.ForensicsService, qualifiers EventSearchQualifierRepository) *EventSearchService {
+func NewEventSearchService(readModel ForensicsReadModel, qualifiers EventSearchQualifierRepository) *EventSearchService {
 	return &EventSearchService{readModel: readModel, qualifiers: qualifiers}
 }
 

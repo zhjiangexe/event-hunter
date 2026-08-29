@@ -29,6 +29,8 @@ import (
 	eventsearch "event-hunter/backend/internal/contexts/investigation/application/event_search"
 	evidenceattachment "event-hunter/backend/internal/contexts/investigation/application/evidence_attachment"
 	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	generateevidencemanifest "event-hunter/backend/internal/contexts/investigation/application/generate_evidence_manifest"
+	getinvestigationsummary "event-hunter/backend/internal/contexts/investigation/application/get_investigation_summary"
 	ingestionissues "event-hunter/backend/internal/contexts/investigation/application/ingestion_issues"
 	journeyprofiles "event-hunter/backend/internal/contexts/investigation/application/journey_profiles"
 	"event-hunter/backend/internal/contexts/investigation/application/overview"
@@ -217,7 +219,9 @@ func newServerWithDependencies(cfg config.Config, db *sql.DB, sessionSecret, gra
 		commands: caseLifecycle, queries: caseLifecycle, patterns: patternanalysis.NewPatternService(caseRepository, detailsRepository, forensics, clickHouseReadModel, unitOfWork),
 		feedback:    patternfeedback.NewService(detailsRepository, detailsRepository, unitOfWork),
 		attachments: evidenceattachment.NewService(caseRepository, forensics, detailsRepository, unitOfWork),
-		forensics:   forensics, sessions: sessions,
+		summaries:   getinvestigationsummary.NewService(caseLifecycle, forensics),
+		manifests:   generateevidencemanifest.NewService(caseLifecycle),
+		sessions:    sessions,
 	}
 	mux.HandleFunc("GET /api/v1/investigations", investigations.list)
 	mux.HandleFunc("POST /api/v1/investigations", investigations.create)
@@ -259,7 +263,7 @@ func newServeMuxWithReadiness(webhook http.Handler, sessions *sessionManager, fo
 		}
 		timeline := timelineAPI{
 			forensics: forensics,
-			searcher:  eventsearch.NewEventSearchServiceFromForensics(forensics, qualifiers),
+			searcher:  eventsearch.NewEventSearchService(forensics, qualifiers),
 			sessions:  sessions,
 		}
 		if sessions == nil {
@@ -461,7 +465,7 @@ func (api timelineAPI) search(writer http.ResponseWriter, request *http.Request)
 		MinimumSeverity:   strings.TrimSpace(request.URL.Query().Get("severity")),
 	})
 	if err != nil {
-		if errors.Is(err, patternanalysis.ErrUnknownPattern) {
+		if errors.Is(err, eventsearch.ErrUnknownPattern) {
 			writeTimelineError(writer, http.StatusUnprocessableEntity, "UNKNOWN_PATTERN")
 			return
 		}

@@ -21,6 +21,7 @@ supersedes: []
 | Phase 1.1 local release baseline | `completed` | [Phase 1.1 sign-off](delivery/archive/phase-1-1-sign-off.md) |
 | Phase 1.1 product hardening | `internal_pilot_completed`；production target pending | [產品化計畫](delivery/phase-1-1-development-plan.md) |
 | Phase 1.1 UX remediation | `completed` | [UX 修正計畫](delivery/phase-1-1-product-ux-remediation-plan.md) |
+| Backend DDD／Clean Architecture 重構 | `in_progress`；行為保持重構 | [Backend 重構計畫](delivery/backend-ddd-clean-architecture-refactor-plan.md) |
 | Event Check／Check Models 整合需求 | `canonical_cutover_completed`；EH-ECM-000～006 已完成 | [產品需求](product/event-check-and-check-models-requirements.md)／[Target Design](architecture/event-check-target-design.md) |
 | Phase 2 Projection Rebuild | `deferred` | 未列入目前開發入口 |
 | Phase 3 Sandbox Replay | `deferred` | 未列入目前開發入口 |
@@ -58,9 +59,10 @@ Check Models → Scenario Lab／Guide。`/timeline`、`/journey`、`/journey-pro
 ### 開發後端或前端
 
 1. [Implementation Plan](delivery/implementation-plan.yaml)：目前 task DAG 與完成條件。
-2. [Traceability](governance/traceability.yaml)：需求對應 API、store、route 與 E2E。
-3. [Repository Layout](governance/repository-layout-and-maintenance.md)：程式碼與測試應放的位置。
-4. 對應的 [Architecture](architecture/) 或 [Behavior Contract](contracts/) 文件。
+2. [Backend DDD／Clean Architecture 重構計畫](delivery/backend-ddd-clean-architecture-refactor-plan.md)：目前 backend 分層收斂順序、非目標與逐 task 驗收。
+3. [Traceability](governance/traceability.yaml)：需求對應 API、store、route 與 E2E。
+4. [Repository Layout](governance/repository-layout-and-maintenance.md)：程式碼與測試應放的位置。
+5. 對應的 [Architecture](architecture/) 或 [Behavior Contract](contracts/) 文件。
 
 開發 Event Check／Check Models 時，先讀 [Target Design](architecture/event-check-target-design.md) 與
 ADR-005～007；`EH-ECM-000`～`EH-ECM-006` 已完成。目前沒有未完成的必要 Event Check task；`EH-ECM-007` Evidence Archive 為預設關閉且不阻擋產品使用的選用後續。

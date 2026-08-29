@@ -42,6 +42,63 @@ func TestInvestigationCaseTransitionOwnsResolutionInvariant(t *testing.T) {
 	}
 }
 
+func TestInvestigationCaseRejectsInvalidMutableFields(t *testing.T) {
+	investigationCase := InvestigationCase{Status: StatusOpen, Title: "valid"}
+	if err := investigationCase.ChangeTitle("   "); !errors.Is(err, ErrInvalidCaseTitle) {
+		t.Fatalf("ChangeTitle() error = %v, want %v", err, ErrInvalidCaseTitle)
+	}
+	if err := investigationCase.ChangeSeverity(Severity("URGENT")); !errors.Is(err, ErrInvalidCaseSeverity) {
+		t.Fatalf("ChangeSeverity() error = %v, want %v", err, ErrInvalidCaseSeverity)
+	}
+	if err := investigationCase.TransitionTo(CaseStatus("PAUSED"), nil, nil); !errors.Is(err, ErrInvalidCaseStatus) {
+		t.Fatalf("TransitionTo() error = %v, want %v", err, ErrInvalidCaseStatus)
+	}
+	if investigationCase.Title != "valid" {
+		t.Fatalf("invalid title changed aggregate to %q", investigationCase.Title)
+	}
+}
+
+func TestResolvedInvestigationCaseCannotClearRequiredResolutionFields(t *testing.T) {
+	rootCause := "consumer stalled"
+	resolution := "consumer restarted"
+	investigationCase := InvestigationCase{Status: StatusResolved, RootCause: &rootCause, ResolutionSummary: &resolution}
+	empty := "  "
+	if err := investigationCase.SetRootCause(&empty); !errors.Is(err, ErrResolutionFields) {
+		t.Fatalf("SetRootCause() error = %v, want %v", err, ErrResolutionFields)
+	}
+	if err := investigationCase.SetResolutionSummary(nil); !errors.Is(err, ErrResolutionFields) {
+		t.Fatalf("SetResolutionSummary() error = %v, want %v", err, ErrResolutionFields)
+	}
+}
+
+func TestRehydrateInvestigationCaseValidatesPersistedState(t *testing.T) {
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	valid := InvestigationCase{
+		ID: "case-1", CaseNo: "EH-1", Title: "  valid case  ", Severity: SeverityHigh, Status: StatusOpen,
+		CorrelationID: "ORDER-1", IncidentWindow: IncidentWindow{From: now.Add(-time.Hour), To: now, Source: IncidentWindowManualDefault},
+		Priority: PriorityP1, Tags: []string{}, RelatedCorrelationIDs: []string{}, LastUpdatedBy: "tester",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	rehydrated, err := RehydrateInvestigationCase(valid)
+	if err != nil {
+		t.Fatalf("RehydrateInvestigationCase() error = %v", err)
+	}
+	if rehydrated.Title != "valid case" {
+		t.Fatalf("rehydrated title = %q", rehydrated.Title)
+	}
+
+	invalid := valid
+	invalid.Status = StatusResolved
+	if _, err := RehydrateInvestigationCase(invalid); !errors.Is(err, ErrResolutionFields) {
+		t.Fatalf("invalid persisted state error = %v, want %v", err, ErrResolutionFields)
+	}
+	invalid = valid
+	invalid.Severity = Severity("URGENT")
+	if _, err := RehydrateInvestigationCase(invalid); !errors.Is(err, ErrInvalidCaseSeverity) {
+		t.Fatalf("invalid persisted severity error = %v, want %v", err, ErrInvalidCaseSeverity)
+	}
+}
+
 func TestAllowedTransitionsIncludesDedicatedCloseAction(t *testing.T) {
 	tests := []struct {
 		status CaseStatus

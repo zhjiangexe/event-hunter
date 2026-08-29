@@ -1,6 +1,22 @@
-package scenariolab
+package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+const (
+	LiveServices = "LIVE_SERVICES"
+	LabInjection = "LAB_INJECTION"
+
+	RunAccepted = "ACCEPTED"
+	RunRunning  = "RUNNING"
+	RunPassed   = "PASSED"
+	RunFailed   = "FAILED"
+	RunTimedOut = "TIMED_OUT"
+)
+
+var ErrRunNotFound = errors.New("scenario run not found")
 
 type ScenarioDefinition struct {
 	ID                 string   `json:"id"`
@@ -27,10 +43,7 @@ type Actual struct {
 }
 
 func EmptyActual() Actual {
-	return Actual{
-		EventTypes: []string{}, DuplicateEventIDs: []string{}, ProcessingStatuses: []string{},
-		IngestionFailureTypes: []string{},
-	}
+	return Actual{EventTypes: []string{}, DuplicateEventIDs: []string{}, ProcessingStatuses: []string{}, IngestionFailureTypes: []string{}}
 }
 
 type Check struct {
@@ -40,7 +53,6 @@ type Check struct {
 	Actual   any    `json:"actual"`
 	Passed   bool   `json:"passed"`
 }
-
 type Links struct {
 	Timeline string  `json:"timeline"`
 	Grafana  string  `json:"grafana"`
@@ -71,7 +83,6 @@ type Run struct {
 type RunPage struct {
 	Items []Run `json:"items"`
 }
-
 type RunFilter struct {
 	ScenarioID    string
 	Status        string
@@ -90,4 +101,21 @@ type RunRecord struct {
 	Checks                                                                []Check
 	AcceptedAt                                                            time.Time
 	StartedAt, CompletedAt                                                *time.Time
+}
+
+func CurrentStep(status string) string {
+	switch status {
+	case RunAccepted:
+		return "等待執行"
+	case RunRunning:
+		return "等待事件管線結果"
+	case RunPassed:
+		return "驗收通過"
+	case RunTimedOut:
+		return "等待結果逾時"
+	case RunFailed:
+		return "執行失敗"
+	default:
+		return "狀態未知"
+	}
 }

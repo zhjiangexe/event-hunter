@@ -43,6 +43,132 @@ current_product_delivery:
 
 tasks:
   # depends_on 形成任務 DAG；前置任務未完成時，不應直接開始相依工作。
+  - id: EH-ARCH-000
+    title: Backend DDD and Clean Architecture baseline and executable plan
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-008, REQ-EH-017, REQ-EH-018]
+    depends_on: []
+    outputs:
+      - package import and responsibility audit across contexts platform demo and cmd
+      - behavior-preserving refactor plan with explicit non-goals rollback points and acceptance gates
+      - canonical delivery document catalog and requirements index registration
+    acceptance:
+      - no OpenAPI migration Kafka event or user-visible behavior change is included in the refactor scope
+      - every follow-on task is independently buildable testable and reversible
+
+  - id: EH-ARCH-001
+    title: Investigation aggregate invariants and persistence rehydration
+    status: completed
+    requirement_ids: [REQ-EH-002]
+    depends_on: [EH-ARCH-000]
+    outputs:
+      - shared title severity and resolved-state validation across construction mutation and rehydration
+      - validated persistence row mapping with no direct untrusted aggregate population
+      - invalid patch and persisted-state regression tests
+    acceptance:
+      - PATCH and repository loading cannot create a state rejected by the aggregate constructor or state machine
+      - existing optimistic locking audit and HTTP behavior remain unchanged
+    completed_progress:
+      - constructor mutation repository create and update and PostgreSQL row rehydration share domain validation
+      - invalid title severity status resolved-field clearing and persisted severity regression tests pass
+      - complete backend go test and go vet pass
+
+  - id: EH-ARCH-002
+    title: Application capability decoupling and mandatory transaction boundaries
+    status: completed
+    requirement_ids: [REQ-EH-002, REQ-EH-003, REQ-EH-004]
+    depends_on: [EH-ARCH-001]
+    outputs:
+      - shared Snapshot application contract without get-to-save package dependency
+      - narrow evaluator and forensics query ports
+      - explicit required UnitOfWork dependency for mutation use cases
+    acceptance:
+      - application capabilities are independently testable through narrow interfaces
+      - deterministic evaluation Snapshot idempotency evidence and audit behavior do not change
+    completed_progress:
+      - Snapshot view mapping is a neutral application contract and get-check no longer imports save-check
+      - save-check uses a narrow Evaluator interface while event search and Pattern analysis use minimal read ports
+      - case lifecycle evidence attachment and Pattern analysis require an explicit UnitOfWork at construction
+      - focused tests complete backend go test and go vet pass
+
+  - id: EH-ARCH-003
+    title: Investigation application orchestration and thin HTTP adapters
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-004]
+    depends_on: [EH-ARCH-002]
+    outputs:
+      - get investigation summary application capability
+      - generate evidence manifest application capability
+      - responsibility-based investigation HTTP adapter files
+      - minimal domain evaluator extraction for retained Journey compatibility
+    acceptance:
+      - HTTP responses and existing OpenAPI and Karate contracts remain unchanged
+      - handlers do not coordinate stores or own evidence checksum and partial-result policy
+    completed_progress:
+      - investigation summary orchestration partial source state and retention boundary live in a dedicated application capability
+      - evidence manifest allowlisting locator validation partial warnings and SHA-256 live in a dedicated application capability
+      - summary and evidence handlers are split by responsibility and retained Journey interpretation is a pure domain evaluator
+      - complete backend go test go vet and Karate 19 features 126 scenarios pass
+
+  - id: EH-ARCH-004
+    title: Scenario Lab bounded-context layering
+    status: completed
+    requirement_ids: [REQ-EH-018]
+    depends_on: [EH-ARCH-002]
+    outputs:
+      - Scenario Lab domain application ports and adapter packages
+      - PostgreSQL ClickHouse HTTP Kafka and link concerns outside domain and application
+      - composition-only event-lab executable
+    acceptance:
+      - S1 through S14 API persistence actual checks and immediate identifiers remain unchanged
+      - Scenario Lab domain and application import no SQL HTTP Kafka client or OTel SDK
+    completed_progress:
+      - scenario definitions run state actual checks and deterministic evaluation now live in a pure domain package
+      - application Runner owns start get list and asynchronous observation through narrow ports
+      - PostgreSQL ClickHouse Kafka Order HTTP links clock OTel and inbound HTTP are isolated in adapters
+      - event-lab main is a 131-line composition root with health signal and graceful shutdown only
+      - full Go tests and vet pass and focused Scenario Lab Karate passes 2 features and 29 scenarios
+
+  - id: EH-ARCH-005
+    title: Quality and technical DLQ worker boundary extraction
+    status: completed
+    requirement_ids: [REQ-EH-008, REQ-EH-017]
+    depends_on: [EH-ARCH-000]
+    outputs:
+      - quality scheduling use case and ClickHouse executor adapter
+      - technical failure summarizer and projection use case with Kafka and ClickHouse adapters
+      - composition-only worker executables
+    acceptance:
+      - successful-write-before-commit retry transport identity and safe metadata behavior remain unchanged
+      - core worker tests require neither Kafka nor ClickHouse
+    completed_progress:
+      - quality window and backfill rules live in domain scheduling and orchestration live in application and aggregation SQL lives in a ClickHouse adapter
+      - technical DLQ safe summarization is pure domain logic and projection retry ordering is owned by an application service through ports
+      - Kafka source ClickHouse repository logging and health concerns are isolated adapters while both worker commands retain process lifecycle only
+      - application tests prove insert retries complete before commit and commit retries stay in place
+      - focused Go tests and vet Quality Karate 2 scenarios and destructive ingestion recovery all pass
+
+  - id: EH-ARCH-006
+    title: Backend architecture guardrails regression and documentation sign-off
+    status: completed
+    requirement_ids: [REQ-EH-001, REQ-EH-002, REQ-EH-003, REQ-EH-004, REQ-EH-008, REQ-EH-017, REQ-EH-018]
+    depends_on: [EH-ARCH-003, EH-ARCH-004, EH-ARCH-005]
+    outputs:
+      - package import graph architecture tests for domain application adapters and cmd
+      - updated current and application architecture documentation
+      - dead-file duplicate-mapper and stale-helper cleanup
+      - complete backend regression evidence
+    acceptance:
+      - contract validation go vet go test and backend Karate pass
+      - architecture tests reject domain-to-technology and application-to-adapter dependencies
+    completed_progress:
+      - Go AST architecture tests reject outward domain application and ports imports flat context-root production sources and persistence queries in commands
+      - the last flat Scenario Lab fixture helper moved into its outbound emission adapter
+      - current architecture application screaming architecture repository layout and this delivery plan match the implemented boundaries
+      - contract validation Compose config formatting full Go tests and vet all pass
+      - Quality Karate passes 2 scenarios destructive ingestion recovery passes and complete Backend Karate passes 19 features and 126 scenarios
+      - non-canonical reports were cleaned and the API runtime profile was restored after E2E
+
   - id: EH-P1.1-022
     title: Canonical product documentation alignment after Event Check cutover
     status: completed

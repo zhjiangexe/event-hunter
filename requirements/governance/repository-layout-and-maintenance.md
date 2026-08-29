@@ -45,18 +45,24 @@ supersedes: []
 Backend 新增功能時採下列依賴方向：
 
 ```text
-cmd (composition / transport)
+cmd (composition / transport / process lifecycle)
+  -> contexts/<context>/adapters/inbound
   -> contexts/<context>/application
        -> contexts/<context>/domain
        -> contexts/<context>/ports
-  -> platform/<adapter> implements ports
+  -> contexts/<context>/adapters/outbound implements ports
+  -> platform/<shared-adapter> implements ports
 ```
 
 - Aggregate root、value object 與不變量放在 `domain`，不得依賴 database、HTTP 或 Kafka。
 - Application service 以 use case 命名，負責協調 aggregate、repository 與 unit of work。
-- Repository interface 屬於 context port；PostgreSQL／ClickHouse 實作放在 `platform` adapter。
+- Repository interface 屬於 context port；單一 context 專用的 PostgreSQL／ClickHouse／Kafka 實作優先放在
+  `contexts/<context>/adapters`，確實跨 context 共用的實作才放在 `platform`。
 - `cmd` 只保留 transport mapping、dependency wiring、readiness 與 graceful shutdown。大型 handler 應按 use case 逐步拆出，不再增加單檔責任。
 - `demo` 是受測的外部示範拓撲。Scenario Lab 會驅動它，但不能取代三個服務的 live outbox、Kafka 與 OpenTelemetry 路徑。
+- bounded context 根目錄不得放 flat production source；Scenario Lab、Quality 與 Ingestion 已完整使用
+  `domain/application/ports/adapters`。`internal/architecture/dependencies_test.go` 會檢查 inward dependencies、
+  技術 framework 隔離、flat source 與 `cmd` 內嵌 SQL。
 - Frontend 的 URL parsing、observability deep link 與 API mapping 應放在獨立 module；Event Check／Saved
   Results／Check Models 已位於 `event-check-workspace.tsx`，`main.tsx` 只保留 shell 與尚未拆出的頁面 composition。
 

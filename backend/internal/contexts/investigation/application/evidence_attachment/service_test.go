@@ -17,7 +17,7 @@ func TestAttachEventValidatesSourceAndPersistsReference(t *testing.T) {
 		ID: "case-1", Status: domain.StatusInvestigating, CorrelationID: "ORDER-1", LockVersion: 3,
 	}}
 	audit := &auditWriterFake{}
-	service := NewService(repository, eventLookupFake{events: []forensics.ForensicsEvent{{EventID: "event-1", CorrelationID: "SHIPMENT-1"}}}, audit)
+	service := NewService(repository, eventLookupFake{events: []forensics.ForensicsEvent{{EventID: "event-1", CorrelationID: "SHIPMENT-1"}}}, audit, directUnitOfWork{})
 	now := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return now }
 
@@ -43,7 +43,7 @@ func TestAttachEventValidatesSourceAndPersistsReference(t *testing.T) {
 func TestAttachEventRejectsMissingSourceAndStaleVersion(t *testing.T) {
 	now := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
 	repository := &attachmentRepositoryFake{current: domain.InvestigationCase{ID: "case-1", Status: domain.StatusOpen, CorrelationID: "ORDER-1", LockVersion: 4}}
-	service := NewService(repository, eventLookupFake{}, &auditWriterFake{})
+	service := NewService(repository, eventLookupFake{}, &auditWriterFake{}, directUnitOfWork{})
 	_, err := service.AttachEvent(t.Context(), AttachEventCommand{InvestigationID: "case-1", ExpectedVersion: 3, EventID: "event-1", From: now.Add(-time.Hour), To: now})
 	var conflict VersionConflictError
 	if !errors.As(err, &conflict) || conflict.CurrentVersion != 4 {
@@ -117,6 +117,12 @@ func (writer *auditWriterFake) RecordAudit(_ context.Context, _ ports.Actor, act
 
 type attachmentRollbackUnitOfWorkFake struct {
 	repository *attachmentRepositoryFake
+}
+
+type directUnitOfWork struct{}
+
+func (directUnitOfWork) WithinTransaction(ctx context.Context, operation func(context.Context) error) error {
+	return operation(ctx)
 }
 
 func (unit *attachmentRollbackUnitOfWorkFake) WithinTransaction(ctx context.Context, operation func(context.Context) error) error {

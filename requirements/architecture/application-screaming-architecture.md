@@ -27,6 +27,8 @@ Investigation Context
 └── application/
     ├── case_lifecycle/       list · create · get · update · close · collaborate · audit · evidence
     ├── evidence_attachment/  bounded event verification · case evidence attachment · idempotency
+    ├── get_investigation_summary/ cross-store summary orchestration · partial source state · retention boundary
+    ├── generate_evidence_manifest/ allowlist · locator validation · checksum · partial warnings
     ├── forensics/            bounded canonical event read model queries
     ├── ingestion_issues/     contract / admission / technical DLQ safe summaries
     ├── event_search/         legacy Pattern / Grafana fingerprint qualification
@@ -38,6 +40,28 @@ Investigation Context
     ├── pattern_effectiveness/ legacy finding outcome rollup
     ├── pattern_feedback/     legacy finding classification · note · audit
     └── alert_intake/         signed Grafana business-alert disposition and evidence
+```
+
+```text
+Scenario Lab Context
+├── domain/                    S1～S14 catalog · Run state · Actual · deterministic checks
+├── ports/                     run repository · publisher · observer · order starter · links · telemetry · clock
+├── application/               start · get · list · asynchronous observation
+└── adapters/
+    ├── inbound/httpapi/       Scenario Lab HTTP contract
+    └── outbound/              PostgreSQL · ClickHouse · Kafka · Order API · links · OTel · synthetic fixtures
+
+Quality Context
+├── domain/                    bounded quality window · 31-day invariant · eligible-window rule
+├── ports/                     quality aggregator
+├── application/               aggregate · backfill · recurring schedule
+└── adapters/outbound/clickhouse/ complete aggregation SQL and HTTP execution
+
+Ingestion Context
+├── domain/                    safe technical-DLQ summary and payload checksum
+├── ports/                     source · failure repository · reporter
+├── application/               persist-before-commit projection and in-place retry
+└── adapters/                  Kafka source · ClickHouse writer · health · logging
 ```
 
 ```text
@@ -96,7 +120,10 @@ HTTP / Grafana inbound adapters
   DLQ 的 allowlisted metadata；不取得 raw landing payload，也不把 ingestion failure 當成業務流程偏離。
 - Application package 不建立 database connection；所有外部存取均透過 constructor-injected port。
 - `application/` 根目錄不放 service 或 facade；正式 composition root 與 platform adapters 必須依賴上述 capability package。架構回歸測試會阻止重新引用 flat application package。
-- `demo/`、`platform/`、`scenario_lab/` 不是 Investigation application service 的替代品：它們分別代表示範 domain、跨 context 基礎設施與獨立 Scenario Lab context。
+- `demo/`、`platform/`、`contexts/scenario_lab` 不是 Investigation application service 的替代品：它們分別代表示範 domain、跨 context 基礎設施與獨立 Scenario Lab bounded context。
+- Scenario Lab 的 fixture envelope factory 位於 outbound adapter；domain／application 不依賴 demo event、Kafka、SQL、HTTP 或 OTel。
+- Quality 與 Ingestion worker 的 scheduling／projection 語意位於 application，SQL／Kafka record identity／health／logging 位於 adapters；`cmd` 只處理 CLI、wiring、signal 與 shutdown。
+- `internal/architecture/dependencies_test.go` 以 package import 與 source guardrail 阻止 domain／application 向外依賴、flat context source 與 `cmd` SQL 回流。
 - Event Check application 不接受前端提交 deterministic result；`save_check_snapshot` 必須依原 request、
   `as_of` 與 pinned Model 重算並核對 hashes。一般 evaluation 不寫 PostgreSQL。
 - Event Check Snapshot 只保存 event metadata、payload checksum 與 relation provenance，不複製 ClickHouse raw payload。
@@ -125,5 +152,10 @@ HTTP / Grafana inbound adapters
 | Snapshot 保存／讀取 | `save_check_snapshot`／`get_check_snapshot` | Snapshot repository、Unit of Work、Audit writer |
 | Finding 回饋 | `classify_check_finding` | feedback repository、Unit of Work、Audit writer |
 | Snapshot 加入案件 | `attach_check_snapshot` | Case link repository、Unit of Work、Audit writer |
+| 案件 Summary | `get_investigation_summary` | Case／detail repository、Forensics read model |
+| Evidence Manifest | `generate_evidence_manifest` | Case／detail repository、Forensics read model |
+| Scenario Lab 執行 | `scenario_lab/application` | Run repository、Publisher、Observer、Order starter、Link／Telemetry ports |
+| Quality aggregation | `quality/application` | Quality Aggregator |
+| Technical DLQ projection | `ingestion/application` | DLQ Source、Failure Repository、Reporter |
 
 這樣新增 use case 時，應新增或擴充相應的業務目錄，不再把所有方法塞進一個通用 `Service`。

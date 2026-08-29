@@ -1,9 +1,6 @@
-package scenariolab
+package emission
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -21,8 +18,11 @@ type PublishedRecord struct {
 	Offset    int64
 }
 
-type Publisher interface {
-	Publish(context.Context, string, string, []byte) (PublishedRecord, error)
+type AttemptEnvelope struct {
+	EventID       string
+	EventType     string
+	CorrelationID string
+	TraceID       *string
 }
 
 type Emission struct {
@@ -30,14 +30,6 @@ type Emission struct {
 	Key      string
 	Value    []byte
 	Envelope *event.Envelope
-}
-
-func TraceID() (string, error) {
-	value := make([]byte, 16)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(value), nil
 }
 
 func BuildEmissions(scenarioID, correlationID, traceID string, now time.Time) ([]Emission, error) {
@@ -235,4 +227,11 @@ func AttemptEmissions(envelope event.Envelope, record PublishedRecord, now time.
 		result = append(result, Emission{Topic: telemetry.Topic, Key: envelope.EventID + "\x00scenario-lab-consumer-v1", Value: value})
 	}
 	return result, nil
+}
+
+func BuildAttemptEmissions(envelope AttemptEnvelope, record PublishedRecord, now time.Time) ([]Emission, error) {
+	return AttemptEmissions(event.Envelope{
+		EventID: envelope.EventID, EventType: envelope.EventType,
+		CorrelationID: envelope.CorrelationID, TraceID: envelope.TraceID,
+	}, record, now)
 }

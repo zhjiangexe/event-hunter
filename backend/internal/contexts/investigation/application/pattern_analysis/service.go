@@ -32,6 +32,10 @@ type EventWindowSource interface {
 	CorrelationEventWindow(ctx context.Context, correlationID string) (time.Time, time.Time, int, error)
 }
 
+type EventReader interface {
+	Search(ctx context.Context, filter forensics.EventSearchFilter) ([]forensics.ForensicsEvent, error)
+}
+
 type EffectiveAnalysisWindow struct {
 	From             time.Time `json:"from"`
 	To               time.Time `json:"to"`
@@ -72,16 +76,15 @@ func (err PatternPersistenceError) Unwrap() error { return err.Err }
 type PatternService struct {
 	cases       CaseRepository
 	details     InvestigationDetailsRepository
-	forensics   *forensics.ForensicsService
+	forensics   EventReader
 	eventWindow EventWindowSource
 	unitOfWork  ports.UnitOfWork
 	now         func() time.Time
 }
 
-func NewPatternService(cases CaseRepository, details InvestigationDetailsRepository, readModel *forensics.ForensicsService, eventWindow EventWindowSource, unitsOfWork ...ports.UnitOfWork) *PatternService {
-	var unitOfWork ports.UnitOfWork
-	if len(unitsOfWork) > 0 {
-		unitOfWork = unitsOfWork[0]
+func NewPatternService(cases CaseRepository, details InvestigationDetailsRepository, readModel EventReader, eventWindow EventWindowSource, unitOfWork ports.UnitOfWork) *PatternService {
+	if unitOfWork == nil {
+		panic("pattern analysis requires a UnitOfWork")
 	}
 	return &PatternService{cases: cases, details: details, forensics: readModel, eventWindow: eventWindow, unitOfWork: unitOfWork, now: time.Now}
 }
@@ -229,9 +232,6 @@ func (service *PatternService) saveEvidence(ctx context.Context, investigationID
 }
 
 func (service *PatternService) withinTransaction(ctx context.Context, operation func(context.Context) error) error {
-	if service.unitOfWork == nil {
-		return operation(ctx)
-	}
 	return service.unitOfWork.WithinTransaction(ctx, operation)
 }
 

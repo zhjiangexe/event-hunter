@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"event-hunter/backend/internal/contexts/investigation/application/caseview"
 	"event-hunter/backend/internal/contexts/investigation/domain"
 	"event-hunter/backend/internal/contexts/investigation/ports"
 	"github.com/google/uuid"
@@ -53,10 +54,9 @@ type Service struct {
 	now        func() time.Time
 }
 
-func NewService(cases CaseRepository, details InvestigationDetailsRepository, unitsOfWork ...ports.UnitOfWork) *Service {
-	var unitOfWork ports.UnitOfWork
-	if len(unitsOfWork) > 0 {
-		unitOfWork = unitsOfWork[0]
+func NewService(cases CaseRepository, details InvestigationDetailsRepository, unitOfWork ports.UnitOfWork) *Service {
+	if unitOfWork == nil {
+		panic("case lifecycle requires a UnitOfWork")
 	}
 	return &Service{cases: cases, details: details, unitOfWork: unitOfWork, now: time.Now}
 }
@@ -94,17 +94,8 @@ func (service *Service) Get(ctx context.Context, id string) (domain.Investigatio
 	return service.cases.Get(ctx, id)
 }
 
-type CaseDetails struct {
-	Case     domain.InvestigationCase
-	Findings []PatternFinding
-	Evidence []Evidence
-	Notes    []domain.CaseNote
-}
-
-type CaseSummaryDetails struct {
-	CaseDetails
-	Audit []AuditEntry
-}
+type CaseDetails = caseview.Details
+type CaseSummaryDetails = caseview.SummaryDetails
 
 func (service *Service) GetDetails(ctx context.Context, id string) (CaseDetails, error) {
 	loadedCase, err := service.cases.Get(ctx, id)
@@ -282,9 +273,6 @@ func (service *Service) RecordAudit(ctx context.Context, actor Actor, action, re
 }
 
 func (service *Service) withinTransaction(ctx context.Context, operation func(context.Context) error) error {
-	if service.unitOfWork == nil {
-		return operation(ctx)
-	}
 	return service.unitOfWork.WithinTransaction(ctx, operation)
 }
 

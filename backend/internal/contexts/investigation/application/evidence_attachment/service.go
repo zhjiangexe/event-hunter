@@ -63,10 +63,9 @@ type Service struct {
 	now        func() time.Time
 }
 
-func NewService(cases domain.CaseEvidenceRepository, events EventLookup, audit AuditWriter, unitsOfWork ...ports.UnitOfWork) *Service {
-	var unitOfWork ports.UnitOfWork
-	if len(unitsOfWork) > 0 {
-		unitOfWork = unitsOfWork[0]
+func NewService(cases domain.CaseEvidenceRepository, events EventLookup, audit AuditWriter, unitOfWork ports.UnitOfWork) *Service {
+	if unitOfWork == nil {
+		panic("evidence attachment requires a UnitOfWork")
 	}
 	return &Service{cases: cases, events: events, audit: audit, unitOfWork: unitOfWork, now: time.Now}
 }
@@ -144,8 +143,5 @@ func (service *Service) AttachEvent(ctx context.Context, command AttachEventComm
 }
 
 func (service *Service) withinTransaction(ctx context.Context, operation func(context.Context) error) error {
-	if service.unitOfWork == nil {
-		return operation(ctx)
-	}
 	return service.unitOfWork.WithinTransaction(ctx, operation)
 }

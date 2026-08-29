@@ -294,13 +294,14 @@ Profiles 與 Pattern Library 的 bounded 舊網址保留為 compatibility adapte
 
 ```mermaid
 flowchart TB
-    HTTP[cmd/api: net/http adapters]
-    LabHTTP[cmd/event-lab: Scenario API]
-    Worker[cmd/quality-worker]
+    API[cmd/api<br/>composition + HTTP transport]
+    Lab[cmd/event-lab<br/>composition + lifecycle]
+    QualityWorker[cmd/quality-worker<br/>CLI + lifecycle]
+    DLQWorker[cmd/technical-dlq-projector<br/>composition + lifecycle]
 
     subgraph Investigation[contexts/investigation]
         App[application capabilities]
-        Domain[domain: InvestigationCase / SavedSearch / Check Snapshot<br/>legacy Pattern / Journey adapters]
+        Domain[domain: InvestigationCase / SavedSearch<br/>legacy Pattern / Journey evaluators]
         Ports[ports]
         App --> Domain
         App --> Ports
@@ -315,10 +316,36 @@ flowchart TB
     end
 
     subgraph Scenario[contexts/scenario_lab]
-        ScenarioDomain[Catalog / Runner / Evaluator / Run model]
+        ScenarioApp[application: start · get · list · observe]
+        ScenarioDomain[domain: catalog · run state · checks]
+        ScenarioPorts[ports]
+        ScenarioAdapters[adapters: HTTP · PostgreSQL · ClickHouse<br/>Kafka · Order API · links · OTel · fixtures]
+        ScenarioApp --> ScenarioDomain
+        ScenarioApp --> ScenarioPorts
+        ScenarioAdapters --> ScenarioPorts
     end
 
-    subgraph Platform[platform adapters]
+    subgraph Quality[contexts/quality]
+        QualityApp[application: aggregate · backfill · schedule]
+        QualityDomain[domain: bounded quality windows]
+        QualityPorts[ports]
+        QualityCH[ClickHouse aggregation adapter]
+        QualityApp --> QualityDomain
+        QualityApp --> QualityPorts
+        QualityCH --> QualityPorts
+    end
+
+    subgraph Ingestion[contexts/ingestion]
+        IngestionApp[application: technical failure projection + retry]
+        IngestionDomain[domain: safe DLQ summarization]
+        IngestionPorts[ports]
+        IngestionAdapters[adapters: Kafka · ClickHouse · health · logging]
+        IngestionApp --> IngestionDomain
+        IngestionApp --> IngestionPorts
+        IngestionAdapters --> IngestionPorts
+    end
+
+    subgraph Platform[shared platform adapters]
         PGAdapter[PostgreSQL repositories]
         CHAdapter[ClickHouse HTTP read model]
         GrafanaAdapter[Grafana webhook]
@@ -329,19 +356,27 @@ flowchart TB
         DemoEvent[Order / Payment / Shipping / Outbox / Event envelope]
     end
 
-    HTTP --> App
-    HTTP --> CheckApp
-    HTTP --> GrafanaAdapter
-    LabHTTP --> ScenarioDomain
-    Worker --> CHAdapter
+    API --> App
+    API --> CheckApp
+    API --> GrafanaAdapter
+    Lab --> ScenarioAdapters
+    Lab --> ScenarioApp
+    QualityWorker --> QualityApp
+    QualityWorker --> QualityCH
+    DLQWorker --> IngestionApp
+    DLQWorker --> IngestionAdapters
     Ports --> PGAdapter
     Ports --> CHAdapter
     CheckPorts --> PGAdapter
     CheckPorts --> CHAdapter
-    HTTP --> Obs
-    LabHTTP --> Obs
-    ScenarioDomain --> DemoEvent
+    API --> Obs
+    Lab --> Obs
+    ScenarioAdapters --> DemoEvent
 ```
+
+依賴方向由 `internal/architecture/dependencies_test.go` 自動保護：domain 不得引用 application、ports、adapter
+或技術 framework；application／ports 不得引用 adapter、shared platform、SQL、HTTP、Kafka client 或 OTel；
+bounded context 根目錄不得再出現 flat production source；`cmd` 不得內嵌 SQL／database operations。
 
 `contexts/investigation/application` 依使用者能力採 screaming architecture：
 

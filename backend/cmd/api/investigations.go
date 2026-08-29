@@ -1,22 +1,20 @@
 package main
 
 import (
-	"context"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	caselifecycle "event-hunter/backend/internal/contexts/investigation/application/case_lifecycle"
 	evidenceattachment "event-hunter/backend/internal/contexts/investigation/application/evidence_attachment"
-	"event-hunter/backend/internal/contexts/investigation/application/forensics"
+	generateevidencemanifest "event-hunter/backend/internal/contexts/investigation/application/generate_evidence_manifest"
+	getinvestigationsummary "event-hunter/backend/internal/contexts/investigation/application/get_investigation_summary"
 	patternanalysis "event-hunter/backend/internal/contexts/investigation/application/pattern_analysis"
 	patternfeedback "event-hunter/backend/internal/contexts/investigation/application/pattern_feedback"
 	"event-hunter/backend/internal/contexts/investigation/domain"
@@ -31,7 +29,8 @@ type investigationAPI struct {
 	patterns    *patternanalysis.PatternService
 	feedback    *patternfeedback.Service
 	attachments *evidenceattachment.Service
-	forensics   *forensics.ForensicsService
+	summaries   *getinvestigationsummary.Service
+	manifests   *generateevidencemanifest.Service
 	sessions    sessionManager
 }
 
@@ -213,6 +212,10 @@ func (api investigationAPI) create(writer http.ResponseWriter, request *http.Req
 	}
 	created, err := api.commands.Create(request.Context(), input.Title, domain.Severity(input.Severity), input.CorrelationID, incidentWindow, actorFromPrincipal(principal), request.Header.Get("X-Request-ID"))
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidCase) || errors.Is(err, domain.ErrInvalidCaseTitle) || errors.Is(err, domain.ErrInvalidCaseSeverity) {
+			writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_INVESTIGATION")
+			return
+		}
 		slog.ErrorContext(request.Context(), "create investigation", "error", err, "correlation_id", input.CorrelationID)
 		writeAPIError(writer, 500, "INVESTIGATION_CREATE_FAILED")
 		return
@@ -311,6 +314,10 @@ func (api investigationAPI) patch(writer http.ResponseWriter, request *http.Requ
 	}
 	if errors.Is(err, caselifecycle.ErrResolutionFields) {
 		writeAPIError(writer, http.StatusUnprocessableEntity, "RESOLUTION_FIELDS_REQUIRED")
+		return
+	}
+	if errors.Is(err, domain.ErrInvalidCase) || errors.Is(err, domain.ErrInvalidCaseTitle) || errors.Is(err, domain.ErrInvalidCaseSeverity) || errors.Is(err, domain.ErrInvalidCaseStatus) {
+		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_INVESTIGATION")
 		return
 	}
 	if errors.Is(err, domain.ErrInvalidOwner) || errors.Is(err, domain.ErrInvalidPriority) || errors.Is(err, domain.ErrInvalidTags) || errors.Is(err, domain.ErrInvalidRelatedIDs) {
@@ -576,104 +583,6 @@ func (api investigationAPI) analyze(writer http.ResponseWriter, request *http.Re
 	})
 }
 
-func (api investigationAPI) summary(writer http.ResponseWriter, request *http.Request) {
-	principal, ok := api.sessions.read(request)
-	if !ok {
-		writeAPIError(writer, http.StatusUnauthorized, "UNAUTHENTICATED")
-		return
-	}
-	if !canRead(principal.Role) {
-		writeAPIError(writer, http.StatusForbidden, "FORBIDDEN")
-		return
-	}
-	includePayload := request.URL.Query().Get("include_payload") == "true"
-	if includePayload && !canReadSensitivePayload(principal.Role) {
-		writeAPIError(writer, http.StatusForbidden, "FORBIDDEN")
-		return
-	}
-	details, err := api.queries.GetSummaryDetails(request.Context(), request.PathValue("id"))
-	if errors.Is(err, domain.ErrCaseNotFound) {
-		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
-		return
-	}
-	if err != nil {
-		writeAPIError(writer, http.StatusServiceUnavailable, "SUMMARY_UNAVAILABLE")
-		return
-	}
-	caseData := investigationResponseFromCase(details.Case)
-	from, to, err := queryWindow(request, details.Case.IncidentWindow)
-	if err != nil {
-		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
-		return
-	}
-	timeline, err := loadTimeline(request.Context(), api.forensics, caseData.CorrelationID, from, to, queryLimit(request), includePayload)
-	generatedAt := time.Now().UTC()
-	partial := false
-	warnings := []string{}
-	clickhouseStatus := "OK"
-	var clickhouseLastSuccessAt *time.Time
-	if err != nil {
-		partial = true
-		clickhouseStatus, warnings = clickHouseSummaryFailure(err)
-		timeline = unavailableTimeline(caseData.CorrelationID, from, to)
-	} else {
-		clickhouseLastSuccessAt = &generatedAt
-	}
-	findings := patternFindingResponses(details.Findings)
-	evidence := evidenceResponses(details.Evidence)
-	auditEntries := auditEntryResponses(details.Audit)
-	caseData.PatternFindings = findings
-	caseData.Evidence = evidence
-	caseData.CollaborationNotes = caseNoteResponses(details.Notes)
-	_ = json.NewEncoder(writer).Encode(map[string]any{
-		"investigation_id": caseData.ID, "generated_at": generatedAt,
-		"query_window": map[string]any{"from": from, "to": to}, "partial": partial, "warnings": warnings,
-		"event_retention_boundary": generatedAt.Add(-90 * 24 * time.Hour),
-		"source_status":            map[string]string{"postgres": "OK", "clickhouse": clickhouseStatus, "technical_observability": "NOT_REQUESTED"},
-		"source_last_success_at":   map[string]any{"postgres": generatedAt, "clickhouse": clickhouseLastSuccessAt, "technical_observability": nil},
-		"case":                     caseData, "timeline": timeline, "quality": map[string]any{}, "pattern_findings": findings,
-		"technical_observations": map[string]any{}, "evidence_references": evidence, "audit_entries": auditEntries,
-	})
-}
-
-func (api investigationAPI) evidenceBundle(writer http.ResponseWriter, request *http.Request) {
-	if _, ok := api.sessions.read(request); !ok {
-		writeAPIError(writer, http.StatusUnauthorized, "UNAUTHENTICATED")
-		return
-	}
-	loadedCase, err := api.queries.Get(request.Context(), request.PathValue("id"))
-	if errors.Is(err, domain.ErrCaseNotFound) {
-		writeAPIError(writer, http.StatusNotFound, "NOT_FOUND")
-		return
-	}
-	if err != nil {
-		writeAPIError(writer, http.StatusServiceUnavailable, "EVIDENCE_UNAVAILABLE")
-		return
-	}
-	caseData := investigationResponseFromCase(loadedCase)
-	from, to, err := queryWindow(request, loadedCase.IncidentWindow)
-	if err != nil {
-		writeAPIError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
-		return
-	}
-	items, err := api.loadEvidence(request.Context(), caseData.ID)
-	if err != nil {
-		writeAPIError(writer, http.StatusServiceUnavailable, "EVIDENCE_UNAVAILABLE")
-		return
-	}
-	partial, warnings := evidenceManifestState(items)
-	manifest := map[string]any{
-		"schema_version": 1, "investigation_id": caseData.ID, "generated_at": time.Now().UTC(),
-		"query_window": map[string]any{"from": from, "to": to}, "items": items,
-		"checksum_algorithm": "SHA-256", "partial": partial, "warnings": warnings,
-		"source_status": map[string]string{"postgres": "OK", "clickhouse": "NOT_REQUESTED", "technical_observability": "NOT_REQUESTED"},
-	}
-	canonical, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(canonical)
-	manifest["manifest_sha256"] = fmt.Sprintf("%x", digest[:])
-	_ = json.NewEncoder(writer).Encode(manifest)
-}
-
 func auditEntryResponses(entries []caselifecycle.AuditEntry) []auditEntry {
 	result := make([]auditEntry, 0, len(entries))
 	for _, item := range entries {
@@ -690,37 +599,11 @@ func patternFindingResponses(findings []caselifecycle.PatternFinding) []map[stri
 	return result
 }
 
-func (api investigationAPI) loadEvidence(ctx context.Context, id string) ([]map[string]any, error) {
-	evidence, err := api.queries.Evidence(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return evidenceResponses(evidence), nil
-}
-
 func evidenceResponses(evidence []caselifecycle.Evidence) []map[string]any {
-	result := make([]map[string]any, 0, len(evidence))
-	for _, evidenceItem := range evidence {
-		source, openAction := evidenceSource(evidenceItem.EvidenceType)
-		item := map[string]any{"id": evidenceItem.ID, "evidence_type": evidenceItem.EvidenceType, "reference": evidenceItem.Reference, "collected_at": evidenceItem.CollectedAt, "source": source, "open_action": openAction}
-		if evidenceItem.EvidenceType == "GRAFANA_ALERT" {
-			generatorURL := ""
-			if evidenceItem.GeneratorURL != nil {
-				generatorURL = *evidenceItem.GeneratorURL
-			}
-			if sourcePath, ok := grafanaAlertSourcePath(generatorURL); ok && evidenceItem.GrafanaOrgID != nil && *evidenceItem.GrafanaOrgID > 0 {
-				item["source_locator"] = sourcePath
-				item["source_org_id"] = *evidenceItem.GrafanaOrgID
-			} else {
-				item["open_action"] = "NONE"
-			}
-		}
-		if evidenceItem.Checksum != nil {
-			item["checksum"] = *evidenceItem.Checksum
-		} else {
-			item["checksum"] = nil
-		}
-		result = append(result, item)
+	items := generateevidencemanifest.ItemsFromEvidence(evidence)
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.Response())
 	}
 	return result
 }
@@ -733,96 +616,26 @@ func caseNoteResponses(notes []domain.CaseNote) []caseNoteResponse {
 	return result
 }
 
-func grafanaAlertSourcePath(value string) (string, bool) {
-	// Karate standalone serializes request strings with escaped slashes; normalize
-	// only that JSON-equivalent form before applying the strict path allowlist.
-	parsed, err := url.Parse(strings.ReplaceAll(value, `\/`, "/"))
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
-		return "", false
-	}
-	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	valid := len(parts) == 3 && parts[0] == "alerting" && validGrafanaPathToken(parts[1]) && (parts[2] == "view" || parts[2] == "edit")
-	if len(parts) == 4 {
-		valid = parts[0] == "alerting" && parts[1] == "grafana" && validGrafanaPathToken(parts[2]) && (parts[3] == "view" || parts[3] == "edit")
-	}
-	if !valid {
-		return "", false
-	}
-	return "/" + strings.Join(parts, "/"), true
-}
-
-func validGrafanaPathToken(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, character := range value {
-		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '-' && character != '_' {
-			return false
-		}
-	}
-	return true
-}
-
-func evidenceSource(evidenceType string) (string, string) {
-	switch evidenceType {
-	case "EVENT":
-		return "CLICKHOUSE", "GRAFANA_EVENT"
-	case "TRACE":
-		return "TEMPO", "GRAFANA_TEMPO"
-	case "LOG":
-		return "LOKI", "GRAFANA_LOKI"
-	case "METRIC", "QUALITY_VIOLATION":
-		return "GRAFANA", "GRAFANA_DASHBOARD"
-	case "GRAFANA_ALERT":
-		return "GRAFANA", "GRAFANA_ALERT"
-	case "PATTERN_FINDING":
-		return "PATTERN_ENGINE", "PATTERN_LIBRARY"
-	case "REPORT":
-		return "REPORT_STORE", "NONE"
-	default:
-		return "UNKNOWN", "NONE"
-	}
-}
-
-func evidenceManifestState(items []map[string]any) (bool, []string) {
-	warnings := make([]string, 0)
-	for _, item := range items {
-		if item["checksum"] == nil {
-			warnings = append(warnings, fmt.Sprintf("EVIDENCE_CHECKSUM_MISSING:%v", item["id"]))
-		}
-	}
-	return len(warnings) > 0, warnings
-}
-
-func queryWindow(request *http.Request, fallback ...domain.IncidentWindow) (time.Time, time.Time, error) {
+func optionalQueryWindow(request *http.Request) (*time.Time, *time.Time, error) {
 	fromValue := request.URL.Query().Get("from")
 	toValue := request.URL.Query().Get("to")
 	if (fromValue == "") != (toValue == "") {
-		return time.Time{}, time.Time{}, fmt.Errorf("from and to must be supplied together")
+		return nil, nil, fmt.Errorf("from and to must be supplied together")
 	}
 	if fromValue == "" {
-		if len(fallback) > 0 {
-			window, err := domain.NewIncidentWindow(fallback[0].From, fallback[0].To, fallback[0].Source)
-			if err != nil {
-				return time.Time{}, time.Time{}, err
-			}
-			return window.From, window.To, nil
-		}
-		to := time.Now().UTC()
-		return to.Add(-defaultInvestigationQueryWindow), to, nil
+		return nil, nil, nil
 	}
 	from, err := time.Parse(time.RFC3339, fromValue)
 	if err != nil {
-		return time.Time{}, time.Time{}, err
+		return nil, nil, err
 	}
 	to, err := time.Parse(time.RFC3339, toValue)
 	if err != nil {
-		return time.Time{}, time.Time{}, err
+		return nil, nil, err
 	}
-	if !to.After(from) || to.Sub(from) > 7*24*time.Hour {
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid query window")
-	}
-	return from.UTC(), to.UTC(), nil
+	from = from.UTC()
+	to = to.UTC()
+	return &from, &to, nil
 }
 
 func incidentWindowForManualCase(fromValue, toValue string, now time.Time) (domain.IncidentWindow, error) {
@@ -855,34 +668,6 @@ func queryLimit(request *http.Request) int {
 		return 10000
 	}
 	return value
-}
-
-func loadTimeline(ctx context.Context, service *forensics.ForensicsService, correlationID string, from, to time.Time, limit int, includePayload bool) (map[string]any, error) {
-	values, err := service.Search(ctx, forensics.EventSearchFilter{From: from, To: to, Limit: limit, CorrelationID: correlationID, IncludePayload: includePayload})
-	if err != nil {
-		return nil, err
-	}
-	events, err := timelineEventsFromForensics(values, includePayload)
-	if err != nil {
-		return nil, err
-	}
-	summaries, err := processingSummaries(ctx, service, events)
-	if err != nil {
-		return nil, err
-	}
-	for index := range events {
-		if summary, ok := summaries[events[index].EventID]; ok {
-			events[index].ProcessingSummary = summary
-		}
-	}
-	return map[string]any{"correlation_id": correlationID, "from": from, "to": to, "event_count": len(events), "truncated": len(events) == limit, "events": events}, nil
-}
-
-func clickHouseSummaryFailure(err error) (string, []string) {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return "TIMEOUT", []string{"CLICKHOUSE_TIMEOUT"}
-	}
-	return "UNAVAILABLE", []string{"CLICKHOUSE_UNAVAILABLE"}
 }
 
 func unavailableTimeline(correlationID string, from, to time.Time) map[string]any {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -21,19 +18,18 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
-	"event-hunter/backend/internal/contexts/scenario_lab"
+	"event-hunter/backend/internal/contexts/scenario_lab/adapters/inbound/httpapi"
+	scenarioclickhouse "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/clickhouse"
+	scenarioclock "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/clock"
+	scenarioemission "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/emission"
+	scenariokafka "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/kafka"
+	scenariolinks "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/links"
+	scenarioorderapi "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/orderapi"
+	scenariopostgres "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/postgres"
+	scenariotelemetry "event-hunter/backend/internal/contexts/scenario_lab/adapters/outbound/telemetry"
+	scenarioapplication "event-hunter/backend/internal/contexts/scenario_lab/application"
 	"event-hunter/backend/internal/platform/observability"
 )
-
-type kafkaPublisher struct{ client *kgo.Client }
-
-func (publisher kafkaPublisher) Publish(ctx context.Context, topic, key string, value []byte) (scenariolab.PublishedRecord, error) {
-	results := publisher.client.ProduceSync(ctx, &kgo.Record{Topic: topic, Key: []byte(key), Value: value})
-	if err := results.FirstErr(); err != nil {
-		return scenariolab.PublishedRecord{}, err
-	}
-	return scenariolab.PublishedRecord{Partition: results[0].Record.Partition, Offset: results[0].Record.Offset}, nil
-}
 
 func main() {
 	if err := run(); err != nil {
@@ -79,15 +75,17 @@ func run() error {
 		return fmt.Errorf("ping Kafka: %w", err)
 	}
 
-	runner := &scenariolab.Runner{
-		Repository: scenariolab.NewPostgresRepository(db), Publisher: kafkaPublisher{kafka},
-		Observer: &scenariolab.ClickHouseObserver{
+	scenarioTelemetry := &scenariotelemetry.Adapter{}
+	runner := &scenarioapplication.Runner{
+		Repository: scenariopostgres.New(db), Publisher: scenariokafka.Publisher{Client: kafka},
+		Observer: &scenarioclickhouse.Observer{
 			URL: getenv("CLICKHOUSE_URL", "http://localhost:28317"), Database: getenv("CLICKHOUSE_DB", "event_hunter"),
 			User: getenv("CLICKHOUSE_USER", "event_hunter"), Password: getenv("CLICKHOUSE_PASSWORD", "event_hunter_local_only"),
 		},
-		OrderStarter:   &scenariolab.HTTPOrderStarter{URL: getenv("DEMO_ORDER_API_URL", "http://localhost:28335")},
-		EventHunterURL: getenv("EVENT_HUNTER_UI_URL", "http://localhost:28334"), GrafanaURL: getenv("GRAFANA_URL", "http://localhost:28332"),
-		Timeout: 45 * time.Second,
+		OrderStarter: &scenarioorderapi.Starter{URL: getenv("DEMO_ORDER_API_URL", "http://localhost:28335")},
+		Emissions:    scenarioemission.Builder{},
+		Links:        scenariolinks.Builder{EventHunterURL: getenv("EVENT_HUNTER_UI_URL", "http://localhost:28334"), GrafanaURL: getenv("GRAFANA_URL", "http://localhost:28332")},
+		Traces:       scenarioTelemetry, Telemetry: scenarioTelemetry, Clock: scenarioclock.System{}, Timeout: 45 * time.Second,
 	}
 
 	mux := http.NewServeMux()
@@ -99,93 +97,7 @@ func run() error {
 		}
 		writer.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("GET /api/v1/scenarios", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSON(writer, http.StatusOK, map[string]any{"items": scenariolab.Catalog()})
-	})
-	mux.HandleFunc("GET /api/v1/scenario-runs", func(writer http.ResponseWriter, request *http.Request) {
-		pageSize := 20
-		if raw := request.URL.Query().Get("page_size"); raw != "" {
-			parsed, err := strconv.Atoi(raw)
-			if err != nil || parsed < 1 || parsed > 100 {
-				writeError(writer, http.StatusUnprocessableEntity, "INVALID_PAGE_SIZE")
-				return
-			}
-			pageSize = parsed
-		}
-		filter := scenariolab.RunFilter{
-			ScenarioID:    strings.TrimSpace(request.URL.Query().Get("scenario_id")),
-			Status:        strings.TrimSpace(request.URL.Query().Get("status")),
-			ExecutionMode: strings.TrimSpace(request.URL.Query().Get("execution_mode")),
-			PageSize:      pageSize,
-		}
-		if filter.ScenarioID != "" {
-			if _, err := scenariolab.Scenario(filter.ScenarioID); err != nil {
-				writeError(writer, http.StatusUnprocessableEntity, "INVALID_SCENARIO_ID")
-				return
-			}
-		}
-		if filter.Status != "" && !slices.Contains([]string{"ACCEPTED", "RUNNING", "PASSED", "FAILED", "TIMED_OUT"}, filter.Status) {
-			writeError(writer, http.StatusUnprocessableEntity, "INVALID_STATUS")
-			return
-		}
-		if filter.ExecutionMode != "" && !slices.Contains([]string{scenariolab.LiveServices, scenariolab.LabInjection}, filter.ExecutionMode) {
-			writeError(writer, http.StatusUnprocessableEntity, "INVALID_EXECUTION_MODE")
-			return
-		}
-		for name, target := range map[string]**time.Time{"from": &filter.From, "to": &filter.To} {
-			if raw := strings.TrimSpace(request.URL.Query().Get(name)); raw != "" {
-				parsed, err := time.Parse(time.RFC3339, raw)
-				if err != nil {
-					writeError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
-					return
-				}
-				*target = &parsed
-			}
-		}
-		if filter.From != nil && filter.To != nil && !filter.To.After(*filter.From) {
-			writeError(writer, http.StatusUnprocessableEntity, "INVALID_TIME_WINDOW")
-			return
-		}
-		result, err := runner.List(request.Context(), filter)
-		if err != nil {
-			writeError(writer, http.StatusServiceUnavailable, "SCENARIO_RUNS_UNAVAILABLE")
-			return
-		}
-		writeJSON(writer, http.StatusOK, result)
-	})
-	mux.HandleFunc("POST /api/v1/scenario-runs", func(writer http.ResponseWriter, request *http.Request) {
-		var input struct {
-			ScenarioID string `json:"scenario_id"`
-		}
-		decoder := json.NewDecoder(request.Body)
-		decoder.DisallowUnknownFields()
-		if decoder.Decode(&input) != nil || input.ScenarioID == "" {
-			writeError(writer, 422, "INVALID_SCENARIO_RUN")
-			return
-		}
-		result, err := runner.Start(request.Context(), input.ScenarioID)
-		if err != nil {
-			if strings.Contains(err.Error(), "unknown scenario") {
-				writeError(writer, 404, "SCENARIO_NOT_FOUND")
-				return
-			}
-			writeError(writer, 409, "SCENARIO_ENGINE_UNAVAILABLE")
-			return
-		}
-		writeJSON(writer, http.StatusAccepted, result)
-	})
-	mux.HandleFunc("GET /api/v1/scenario-runs/{runID}", func(writer http.ResponseWriter, request *http.Request) {
-		result, err := runner.Get(request.Context(), request.PathValue("runID"))
-		if errors.Is(err, scenariolab.ErrRunNotFound) {
-			writeError(writer, 404, "SCENARIO_RUN_NOT_FOUND")
-			return
-		}
-		if err != nil {
-			writeError(writer, 503, "SCENARIO_RUN_UNAVAILABLE")
-			return
-		}
-		writeJSON(writer, http.StatusOK, result)
-	})
+	httpapi.New(runner).Register(mux)
 
 	server := &http.Server{
 		Addr: ":" + getenv("EVENT_LAB_PORT", "28343"), Handler: otelhttp.NewHandler(mux, "event-lab.http"),
@@ -206,15 +118,6 @@ func run() error {
 		defer cancel()
 		return server.Shutdown(shutdownCtx)
 	}
-}
-
-func writeJSON(writer http.ResponseWriter, status int, value any) {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(value)
-}
-func writeError(writer http.ResponseWriter, status int, code string) {
-	writeJSON(writer, status, map[string]string{"code": code})
 }
 
 func postgresURL() string {
